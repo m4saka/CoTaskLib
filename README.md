@@ -10,7 +10,7 @@ C++20の`co_await`/`co_return`キーワードを利用して、複数フレー�
 
 ```cpp
 #include <Siv3D.hpp>
-#include "CoTask.hpp"
+#include <CoTask.hpp>
 
 CoTask<void> Greet(StringView name)
 {
@@ -45,7 +45,7 @@ co_returnで返却した戻り値はco_awaitで受け取ることができます
 
 ```cpp
 #include <Siv3D.hpp>
-#include "CoTask.hpp"
+#include <CoTask.hpp>
 
 CoTask<String> ShowQuestion(StringView question)
 {
@@ -75,7 +75,7 @@ CoTask<void> MainTask()
 	const int32 rand1 = Random(1, 10);
 	const int32 rand2 = Random(1, 10);
 	const String answer = co_await ShowQuestion(U"こんにちは、{}さん！{}+{}は何でしょう？"_fmt(name, rand1, rand2));
-	if (Parse<int32>(answer) == rand1 + rand2)
+	if (ParseOpt<int32>(answer) == rand1 + rand2)
 	{
 		Print << U"正解！";
 	}

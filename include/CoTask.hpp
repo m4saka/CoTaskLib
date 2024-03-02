@@ -789,20 +789,11 @@ namespace cotask
 		{
 		};
 
-		template <class T>
-		struct VoidReturnTraits
-		{
-			using type = T;
-		};
-
-		template <>
-		struct VoidReturnTraits<void>
-		{
-			using type = VoidReturn;
-		};
+		template <typename T>
+		using VoidReturnConvertedType = std::conditional_t<std::is_void_v<T>, VoidReturn, T>;
 
 		template <typename T>
-		auto ConvertVoidReturn(CoTask<T>& task) -> typename VoidReturnTraits<T>::type
+		auto ConvertVoidReturn(CoTask<T>& task) -> VoidReturnConvertedType<T>
 		{
 			if constexpr (std::is_void_v<T>)
 			{
@@ -815,7 +806,7 @@ namespace cotask
 		}
 
 		template <typename T>
-		auto ConvertOptionalVoidReturn(CoTask<T>& task) -> Optional<typename VoidReturnTraits<T>::type>
+		auto ConvertOptionalVoidReturn(CoTask<T>& task) -> Optional<VoidReturnConvertedType<T>>
 		{
 			if (!task.done())
 			{
@@ -834,7 +825,7 @@ namespace cotask
 	}
 
 	template <class... Args>
-	auto WhenAll(CoTask<Args>... args) -> CoTask<std::tuple<typename detail::VoidReturnTraits<Args>::type...>>
+	auto WhenAll(CoTask<Args>... args) -> CoTask<std::tuple<detail::VoidReturnConvertedType<Args>...>>
 	{
 		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{
@@ -862,7 +853,7 @@ namespace cotask
 	}
 
 	template <class... Args>
-	auto WhenAny(CoTask<Args>... args) -> CoTask<std::tuple<Optional<typename detail::VoidReturnTraits<Args>::type>...>>
+	auto WhenAny(CoTask<Args>... args) -> CoTask<std::tuple<Optional<detail::VoidReturnConvertedType<Args>>...>>
 	{
 		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{

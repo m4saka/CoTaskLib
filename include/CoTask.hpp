@@ -782,8 +782,59 @@ namespace cotask
 		}
 	}
 
+	namespace detail
+	{
+		// voidを含むタプルは使用できないため、voidの代わりに戻り値として返すための空の構造体を用意
+		struct VoidReturn
+		{
+		};
+
+		template <class T>
+		struct VoidReturnTraits
+		{
+			using type = T;
+		};
+
+		template <>
+		struct VoidReturnTraits<void>
+		{
+			using type = VoidReturn;
+		};
+
+		template <typename T>
+		auto ConvertVoidReturn(CoTask<T>& task) -> typename VoidReturnTraits<T>::type
+		{
+			if constexpr (std::is_void_v<T>)
+			{
+				return VoidReturn{};
+			}
+			else
+			{
+				return task.value();
+			}
+		}
+
+		template <typename T>
+		auto ConvertOptionalVoidReturn(CoTask<T>& task) -> Optional<typename VoidReturnTraits<T>::type>
+		{
+			if (!task.done())
+			{
+				return none;
+			}
+
+			if constexpr (std::is_void_v<T>)
+			{
+				return MakeOptional(VoidReturn{});
+			}
+			else
+			{
+				return MakeOptional(task.value());
+			}
+		}
+	}
+
 	template <class... Args>
-	CoTask<std::tuple<Args...>> WhenAll(CoTask<Args>... args)
+	auto WhenAll(CoTask<Args>... args) -> CoTask<std::tuple<typename detail::VoidReturnTraits<Args>::type...>>
 	{
 		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{
@@ -792,22 +843,26 @@ namespace cotask
 
 		if ((args.done() && ...))
 		{
-			co_return std::make_tuple(args.value()...);
+			co_return std::make_tuple(detail::ConvertVoidReturn(args)...);
 		}
 
 		while (true)
 		{
-			(args.resume(CoTaskBackend::CurrentFrameTiming()), ...);
+			(args.resume(detail::FrameTiming::Update), ...);
 			if ((args.done() && ...))
 			{
-				co_return std::make_tuple(args.value()...);
+				co_return std::make_tuple(detail::ConvertVoidReturn(args)...);
 			}
+			co_yield detail::FrameTiming::Draw;
+			(args.resume(detail::FrameTiming::Draw), ...);
+			co_yield detail::FrameTiming::PostPresent;
+			(args.resume(detail::FrameTiming::PostPresent), ...);
 			co_yield detail::FrameTiming::Update;
 		}
 	}
 
 	template <class... Args>
-	CoTask<void> WhenAny(CoTask<Args>... args)
+	auto WhenAny(CoTask<Args>... args) -> CoTask<std::tuple<Optional<typename detail::VoidReturnTraits<Args>::type>...>>
 	{
 		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{
@@ -816,16 +871,20 @@ namespace cotask
 
 		if ((args.done() || ...))
 		{
-			co_return;
+			co_return std::make_tuple(detail::ConvertOptionalVoidReturn(args)...);
 		}
 
 		while (true)
 		{
-			(args.resume(CoTaskBackend::CurrentFrameTiming()), ...);
+			(args.resume(detail::FrameTiming::Update), ...);
 			if ((args.done() || ...))
 			{
-				co_return;
+				co_return std::make_tuple(detail::ConvertOptionalVoidReturn(args)...);
 			}
+			co_yield detail::FrameTiming::Draw;
+			(args.resume(detail::FrameTiming::Draw), ...);
+			co_yield detail::FrameTiming::PostPresent;
+			(args.resume(detail::FrameTiming::PostPresent), ...);
 			co_yield detail::FrameTiming::Update;
 		}
 	}

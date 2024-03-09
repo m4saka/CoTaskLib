@@ -1029,7 +1029,7 @@ namespace CoTaskLib
 	}
 
 	template <typename TResult>
-	class CoSceneBase
+	class [[nodiscard]] CoSceneBase
 	{
 	public:
 		using result_type = TResult;
@@ -1057,55 +1057,91 @@ namespace CoTaskLib
 		return std::move(scene).toCoTask();
 	}
 
-	class FadeIn : public CoSceneBase<void>
+	namespace detail
+	{
+		inline bool s_isFading = false;
+		inline bool s_isFadingManual = false;
+	}
+
+	[[nodiscard]]
+	bool IsFading()
+	{
+		return detail::s_isFading || detail::s_isFadingManual;
+	}
+
+	void SetIsFading(bool isFading)
+	{
+		detail::s_isFadingManual = isFading;
+	}
+
+	class [[nodiscard]] FadeSceneBase : public CoSceneBase<void>
 	{
 	private:
 		Timer m_timer;
+
+	public:
+		explicit FadeSceneBase(const Duration& duration)
+			: m_timer(duration, StartImmediately::Yes)
+		{
+		}
+
+		virtual ~FadeSceneBase()
+		{
+			detail::s_isFading = false;
+		}
+
+		CoTask<void> start() override final
+		{
+			detail::s_isFading = true;
+			co_await WaitForTimer(&m_timer);
+		}
+
+		void draw() const override final
+		{
+			draw(m_timer.progress0_1());
+		}
+
+		// tには時間が0.0～1.0で渡される
+		virtual void draw(double t) const = 0;
+	};
+
+	class [[nodiscard]] FadeIn : public FadeSceneBase
+	{
+	private:
 		ColorF m_color;
 
 	public:
 		explicit FadeIn(const Duration& duration, const ColorF& color = Palette::Black)
-			: m_timer(duration, StartImmediately::Yes)
+			: FadeSceneBase(duration)
 			, m_color(color)
 		{
 		}
 
-		CoTask<void> start() override
-		{
-			co_await WaitForTimer(&m_timer);
-		}
-
-		void draw() const override
+		void draw(double t) const override
 		{
 			const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
 
-			Scene::Rect().draw(ColorF{ m_color, m_timer.progress1_0() });
+			Scene::Rect().draw(ColorF{ m_color, 1.0 - t });
 		}
 	};
 
-	class FadeOut : public CoSceneBase<void>
+	class [[nodiscard]] FadeOut : public FadeSceneBase
 	{
 	private:
-		Timer m_timer;
 		ColorF m_color;
 
 	public:
 		explicit FadeOut(const Duration& duration, const ColorF& color = Palette::Black)
-			: m_timer(duration, StartImmediately::Yes)
+			: FadeSceneBase(duration)
 			, m_color(color)
 		{
 		}
 
-		CoTask<void> start() override
-		{
-			co_await WaitForTimer(&m_timer);
-		}
-
-		void draw() const override
+		void draw(double t) const override
 		{
 			const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
 
-			Scene::Rect().draw(ColorF{ m_color, m_timer.progress0_1() });
+			Scene::Rect().draw(ColorF{ m_color, t });
 		}
 	};
 }

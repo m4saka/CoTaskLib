@@ -1031,7 +1031,7 @@ namespace CoTaskLib
 		ColorF m_color;
 
 	public:
-		FadeIn(const Duration& duration, const ColorF& color = Palette::Black)
+		explicit FadeIn(const Duration& duration, const ColorF& color = Palette::Black)
 			: m_timer(duration, StartImmediately::Yes)
 			, m_color(color)
 		{
@@ -1057,7 +1057,7 @@ namespace CoTaskLib
 		ColorF m_color;
 
 	public:
-		FadeOut(const Duration& duration, const ColorF& color = Palette::Black)
+		explicit FadeOut(const Duration& duration, const ColorF& color = Palette::Black)
 			: m_timer(duration, StartImmediately::Yes)
 			, m_color(color)
 		{

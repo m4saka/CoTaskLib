@@ -1082,6 +1082,7 @@ namespace CoTaskLib
 		{
 		private:
 			Timer m_timer;
+			double m_t = 0.0;
 
 		public:
 			explicit FadeSceneBase(const Duration& duration)
@@ -1091,18 +1092,29 @@ namespace CoTaskLib
 
 			virtual ~FadeSceneBase()
 			{
-				detail::s_isFading = false;
+				s_isFading = false;
 			}
 
 			CoTask<void> start() override final
 			{
-				detail::s_isFading = true;
-				co_await WaitForTimer(&m_timer);
+				s_isFading = true;
+
+				while (m_t < 1.0)
+				{
+					m_t = m_timer.progress0_1();
+					co_yield FrameTiming::Update;
+				}
+
+				// 最後に必ずt=1.0で描画されるように
+				m_t = 1.0;
+				co_yield FrameTiming::Update;
+
+				s_isFading = false;
 			}
 
 			void draw() const override final
 			{
-				drawFade(m_timer.progress0_1());
+				drawFade(m_t);
 			}
 
 			// tには時間が0.0～1.0で渡される

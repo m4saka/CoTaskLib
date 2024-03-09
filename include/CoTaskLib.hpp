@@ -62,9 +62,9 @@ namespace CoTaskLib
 	{
 		class CoTaskBackend
 		{
-		public:
+		private:
 			static constexpr StringView AddonName{ U"CoTaskBackendAddon" };
-
+			
 			// Note: draw関数がconstであることの対処用にアドオンと実体を分離し、実体はポインタで持つようにしている
 			class CoTaskBackendAddon : public IAddon
 			{
@@ -74,7 +74,7 @@ namespace CoTaskLib
 
 			public:
 				CoTaskBackendAddon()
-					: m_instance{ std::unique_ptr<CoTaskBackend>{ new CoTaskBackend{} } } // Note: コンストラクタがprivateなのでmake_unique不使用
+					: m_instance{ std::make_unique<CoTaskBackend>() }
 				{
 				}
 
@@ -112,7 +112,6 @@ namespace CoTaskLib
 				}
 			};
 
-		private:
 			detail::FrameTiming m_currentFrameTiming = detail::FrameTiming::Init;
 
 			detail::TaskID m_nextTaskID = 1;
@@ -120,8 +119,6 @@ namespace CoTaskLib
 			std::optional<detail::TaskID> m_currentRunningTaskID = none;
 
 			std::map<detail::TaskID, std::unique_ptr<detail::ICoTask>> m_tasks;
-
-			CoTaskBackend() = default;
 
 			[[nodiscard]]
 			static CoTaskBackend* Instance()
@@ -134,6 +131,8 @@ namespace CoTaskLib
 			}
 
 		public:
+			CoTaskBackend() = default;
+
 			void resume(detail::FrameTiming frameTiming)
 			{
 				m_currentFrameTiming = frameTiming;
@@ -152,6 +151,11 @@ namespace CoTaskLib
 					}
 				}
 				m_currentRunningTaskID = none;
+			}
+
+			static void Init()
+			{
+				Addon::Register(AddonName, std::make_unique<CoTaskBackendAddon>());
 			}
 
 			[[nodiscard]]
@@ -678,7 +682,7 @@ namespace CoTaskLib
 
 	inline void Init()
 	{
-		Addon::Register(detail::CoTaskBackend::AddonName, std::make_unique<detail::CoTaskBackend::CoTaskBackendAddon>());
+		detail::CoTaskBackend::Init();
 	}
 
 	inline CoTask<void> DelayFrame()

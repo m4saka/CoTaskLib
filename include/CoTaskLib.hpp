@@ -1061,19 +1061,26 @@ namespace CoTaskLib
 
 	namespace detail
 	{
-		inline bool s_isFading = false;
-		inline bool s_isFadingManual = false;
+		inline uint64 s_fadeCount = 0;
 	}
 
 	[[nodiscard]]
 	bool IsFading()
 	{
-		return detail::s_isFading || detail::s_isFadingManual;
+		return detail::s_fadeCount > 0;
 	}
 
-	void SetIsFading(bool isFading)
+	void PushIsFading()
 	{
-		detail::s_isFadingManual = isFading;
+		++detail::s_fadeCount;
+	}
+
+	void PopIsFading()
+	{
+		if (detail::s_fadeCount > 0)
+		{
+			--detail::s_fadeCount;
+		}
 	}
 
 	namespace detail
@@ -1083,22 +1090,28 @@ namespace CoTaskLib
 		private:
 			Timer m_timer;
 			double m_t = 0.0;
+			bool m_fadingStatePushed = false;
 
 		public:
 			explicit FadeSceneBase(const Duration& duration)
-				: m_timer(duration, StartImmediately::Yes)
+				: m_timer(duration, StartImmediately::No)
 			{
 			}
 
 			virtual ~FadeSceneBase()
 			{
-				s_isFading = false;
+				if (m_fadingStatePushed)
+				{
+					PopIsFading();
+				}
 			}
 
 			CoTask<void> start() override final
 			{
-				s_isFading = true;
+				PushIsFading();
+				m_fadingStatePushed = true;
 
+				m_timer.start();
 				while (m_t < 1.0)
 				{
 					m_t = m_timer.progress0_1();
@@ -1109,7 +1122,8 @@ namespace CoTaskLib
 				m_t = 1.0;
 				co_yield FrameTiming::Update;
 
-				s_isFading = false;
+				PopIsFading();
+				m_fadingStatePushed = false;
 			}
 
 			void draw() const override final

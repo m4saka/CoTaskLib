@@ -31,7 +31,7 @@ void Main()
 {
 	CoTaskLib::Init();
 
-	const ScopedCoTaskRun scopedCoTaskRun = ShowMessages().runScoped();
+	const auto scopedCoTaskRun = ShowMessages().runScoped();
 	while (System::Update())
 	{
 	}
@@ -89,7 +89,7 @@ void Main()
 {
 	CoTaskLib::Init();
 
-	const ScopedCoTaskRun scopedCoTaskRun = MainTask().runScoped();
+	const auto scopedCoTaskRun = MainTask().runScoped();
 	while (System::Update())
 	{
 	}

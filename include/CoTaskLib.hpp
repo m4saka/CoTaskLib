@@ -944,16 +944,23 @@ namespace CoTaskLib
 		concept CoSceneConcept = std::derived_from<TScene, CoSceneBase<typename TScene::result_type>>;
 
 		template <CoSceneConcept TScene>
-		CoTask<typename TScene::result_type> ToCoTask(TScene&& scene)
+		CoTask<typename TScene::result_type> ScenePtrToTask(std::unique_ptr<TScene> scene)
 		{
-			return std::move(scene).toCoTask();
+			const auto scopedRun = EveryFrameDraw([&scene]() { scene->draw(); }).runScoped();
+			co_return co_await scene->start();
 		}
+	}
 
-		template <typename TResult>
-		CoTask<TResult> ToCoTask(CoTask<TResult>&& task)
-		{
-			return task;
-		}
+	template <typename TResult>
+	CoTask<TResult> ToCoTask(CoTask<TResult>&& task)
+	{
+		return task;
+	}
+
+	template <detail::CoSceneConcept TScene>
+	CoTask<typename TScene::result_type> ToCoTask(TScene&& scene)
+	{
+		return detail::ScenePtrToTask(std::make_unique<TScene>(std::move(scene)));
 	}
 
 	template <class... TTasks>
@@ -962,7 +969,7 @@ namespace CoTaskLib
 		if constexpr ((!std::is_same_v<TTasks, CoTask<typename TTasks::result_type>> || ...))
 		{
 			// TTasksの中にCoTaskでないものが1つでも含まれる場合は、ToCoTaskで変換して呼び出し直す
-			co_return co_await WhenAll(detail::ToCoTask(std::forward<TTasks>(args))...);
+			co_return co_await WhenAll(ToCoTask(std::forward<TTasks>(args))...);
 		}
 		else
 		{
@@ -998,7 +1005,7 @@ namespace CoTaskLib
 		if constexpr ((!std::is_same_v<TTasks, CoTask<typename TTasks::result_type>> || ...))
 		{
 			// TTasksの中にCoTaskでないものが1つでも含まれる場合は、ToCoTaskで変換して呼び出し直す
-			co_return co_await WhenAny(detail::ToCoTask(std::forward<TTasks>(args))...);
+			co_return co_await WhenAny(ToCoTask(std::forward<TTasks>(args))...);
 		}
 		else
 		{
@@ -1041,21 +1048,16 @@ namespace CoTaskLib
 		virtual void draw() const
 		{
 		}
-
-		[[nodiscard]]
-		CoTask<TResult> toCoTask() &&
-		{
-			const auto scopedTaskRun = EveryFrameDraw([this]() { draw(); }).runScoped();
-			co_return co_await start();
-		}
 	};
 
-	template <class Scene>
-	auto operator co_await(Scene&& scene) -> CoTask<typename Scene::result_type>
-		requires std::derived_from<Scene, CoSceneBase<typename Scene::result_type>>
+	template <detail::CoSceneConcept TScene>
+	auto operator co_await(TScene&& scene)
 	{
-		return std::move(scene).toCoTask();
+		return detail::ScenePtrToTask(std::make_unique<TScene>(std::move(scene)));
 	}
+
+	template <detail::CoSceneConcept TScene>
+	auto operator co_await(TScene& scene) = delete;
 
 	namespace detail
 	{
@@ -1074,76 +1076,89 @@ namespace CoTaskLib
 		detail::s_isFadingManual = isFading;
 	}
 
-	class [[nodiscard]] FadeSceneBase : public CoSceneBase<void>
+	namespace detail
 	{
-	private:
-		Timer m_timer;
-
-	public:
-		explicit FadeSceneBase(const Duration& duration)
-			: m_timer(duration, StartImmediately::Yes)
+		class [[nodiscard]] FadeSceneBase : public CoSceneBase<void>
 		{
-		}
+		private:
+			Timer m_timer;
 
-		virtual ~FadeSceneBase()
+		public:
+			explicit FadeSceneBase(const Duration& duration)
+				: m_timer(duration, StartImmediately::Yes)
+			{
+			}
+
+			virtual ~FadeSceneBase()
+			{
+				detail::s_isFading = false;
+			}
+
+			CoTask<void> start() override final
+			{
+				detail::s_isFading = true;
+				co_await WaitForTimer(&m_timer);
+			}
+
+			void draw() const override final
+			{
+				drawFade(m_timer.progress0_1());
+			}
+
+			// tには時間が0.0～1.0で渡される
+			virtual void drawFade(double t) const = 0;
+		};
+
+		class [[nodiscard]] FadeInScene : public FadeSceneBase
 		{
-			detail::s_isFading = false;
-		}
+		private:
+			ColorF m_color;
 
-		CoTask<void> start() override final
+		public:
+			explicit FadeInScene(const Duration& duration, const ColorF& color)
+				: FadeSceneBase(duration)
+				, m_color(color)
+			{
+			}
+
+			void drawFade(double t) const override
+			{
+				const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
+
+				Scene::Rect().draw(ColorF{ m_color, 1.0 - t });
+			}
+		};
+
+		class [[nodiscard]] FadeOutScene : public FadeSceneBase
 		{
-			detail::s_isFading = true;
-			co_await WaitForTimer(&m_timer);
-		}
+		private:
+			ColorF m_color;
 
-		void draw() const override final
-		{
-			draw(m_timer.progress0_1());
-		}
+		public:
+			explicit FadeOutScene(const Duration& duration, const ColorF& color)
+				: FadeSceneBase(duration)
+				, m_color(color)
+			{
+			}
 
-		// tには時間が0.0～1.0で渡される
-		virtual void draw(double t) const = 0;
-	};
+			void drawFade(double t) const override
+			{
+				const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
 
-	class [[nodiscard]] FadeIn : public FadeSceneBase
+				Scene::Rect().draw(ColorF{ m_color, t });
+			}
+		};
+	}
+
+	inline CoTask<void> FadeIn(const Duration& duration, const ColorF& color = Palette::Black)
 	{
-	private:
-		ColorF m_color;
+		return detail::ScenePtrToTask(std::make_unique<detail::FadeInScene>(duration, color));
+	}
 
-	public:
-		explicit FadeIn(const Duration& duration, const ColorF& color = Palette::Black)
-			: FadeSceneBase(duration)
-			, m_color(color)
-		{
-		}
-
-		void draw(double t) const override
-		{
-			const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
-
-			Scene::Rect().draw(ColorF{ m_color, 1.0 - t });
-		}
-	};
-
-	class [[nodiscard]] FadeOut : public FadeSceneBase
+	inline CoTask<void> FadeOut(const Duration& duration, const ColorF& color = Palette::Black)
 	{
-	private:
-		ColorF m_color;
-
-	public:
-		explicit FadeOut(const Duration& duration, const ColorF& color = Palette::Black)
-			: FadeSceneBase(duration)
-			, m_color(color)
-		{
-		}
-
-		void draw(double t) const override
-		{
-			const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
-
-			Scene::Rect().draw(ColorF{ m_color, t });
-		}
-	};
+		return detail::ScenePtrToTask(std::make_unique<detail::FadeOutScene>(duration, color));
+	}
 }
 
 #ifndef NO_COTASK_USING

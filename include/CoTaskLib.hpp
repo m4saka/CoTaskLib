@@ -1187,7 +1187,7 @@ namespace CoTaskLib
 	}
 }
 
-#ifndef NO_COTASK_USING
+#ifndef NO_COTASKLIB_SHORTHAND
 using CoTaskLib::CoTask;
 using CoTaskLib::CoSceneBase;
 #endif

@@ -64,6 +64,8 @@ namespace CoTaskLib
 		{
 		private:
 			static constexpr StringView AddonName{ U"CoTaskBackendAddon" };
+
+			static inline CoTaskBackend* s_pInstance = nullptr;
 			
 			// Note: draw関数がconstであることの対処用にアドオンと実体を分離し、実体はポインタで持つようにしている
 			class CoTaskBackendAddon : public IAddon
@@ -76,6 +78,19 @@ namespace CoTaskLib
 				CoTaskBackendAddon()
 					: m_instance{ std::make_unique<CoTaskBackend>() }
 				{
+					if (s_pInstance)
+					{
+						throw Error{ U"CoTaskBackendAddon: Instance already exists" };
+					}
+					s_pInstance = m_instance.get();
+				}
+
+				virtual ~CoTaskBackendAddon()
+				{
+					if (s_pInstance == m_instance.get())
+					{
+						s_pInstance = nullptr;
+					}
 				}
 
 				virtual bool update() override
@@ -120,16 +135,6 @@ namespace CoTaskLib
 
 			std::map<detail::TaskID, std::unique_ptr<detail::ICoTask>> m_tasks;
 
-			[[nodiscard]]
-			static CoTaskBackend* Instance()
-			{
-				if (const auto* pAddon = Addon::GetAddon<CoTaskBackendAddon>(AddonName))
-				{
-					return pAddon->instance();
-				}
-				return nullptr;
-			}
-
 		public:
 			CoTaskBackend() = default;
 
@@ -166,58 +171,54 @@ namespace CoTaskLib
 					throw Error{ U"CoTask is nullptr" };
 				}
 
-				auto* pInstance = Instance();
-				if (!pInstance)
+				if (!s_pInstance)
 				{
 					throw Error{ U"CoTaskBackend is not initialized" };
 				}
-				const detail::TaskID id = pInstance->m_nextTaskID++;
-				pInstance->m_tasks.emplace(id, std::move(task));
+				const detail::TaskID id = s_pInstance->m_nextTaskID++;
+				s_pInstance->m_tasks.emplace(id, std::move(task));
 				return id;
 			}
 
 			static void UnregisterTask(detail::TaskID id)
 			{
-				auto* pInstance = Instance();
-				if (!pInstance)
+				if (!s_pInstance)
 				{
 					// Note: ユーザーがScopedCoTaskRunをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
 					return;
 				}
-				if (id == pInstance->m_currentRunningTaskID)
+				if (id == s_pInstance->m_currentRunningTaskID)
 				{
 					throw Error{ U"CoTaskBackend::UnregisterTask: Cannot unregister the currently running task" };
 				}
-				pInstance->m_tasks.erase(id);
+				s_pInstance->m_tasks.erase(id);
 			}
 
 			[[nodiscard]]
 			static bool IsTaskDone(detail::TaskID id)
 			{
-				auto* pInstance = Instance();
-				if (!pInstance)
+				if (!s_pInstance)
 				{
 					throw Error{ U"CoTaskBackend is not initialized" };
 				}
-				if (pInstance->m_tasks.contains(id))
+				if (s_pInstance->m_tasks.contains(id))
 				{
-					return pInstance->m_tasks.at(id)->done();
+					return s_pInstance->m_tasks.at(id)->done();
 				}
 				else
 				{
-					return id < pInstance->m_nextTaskID;
+					return id < s_pInstance->m_nextTaskID;
 				}
 			}
 
 			[[nodiscard]]
 			static detail::FrameTiming CurrentFrameTiming()
 			{
-				auto* pInstance = Instance();
-				if (!pInstance)
+				if (!s_pInstance)
 				{
 					throw Error{ U"CoTaskBackend is not initialized" };
 				}
-				return pInstance->m_currentFrameTiming;
+				return s_pInstance->m_currentFrameTiming;
 			}
 		};
 

@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include <Siv3D.hpp>
 #include <coroutine>
+#include <ranges>
 
 namespace cotask
 {
@@ -27,7 +28,7 @@ namespace cotask
 		using TaskID = uint64;
 	}
 
-	template <typename T>
+	template <typename TResult>
 	class CoTask;
 
 	class CoTaskBackend
@@ -161,16 +162,25 @@ namespace cotask
 			pInstance->m_tasks.erase(id);
 		}
 
-		static bool IsTaskRunning(detail::TaskID id)
+		[[nodiscard]]
+		static bool IsTaskDone(detail::TaskID id)
 		{
 			auto* pInstance = Instance();
 			if (!pInstance)
 			{
 				throw Error{ U"CoTaskBackend is not initialized" };
 			}
-			return pInstance->m_tasks.contains(id);
+			if (pInstance->m_tasks.contains(id))
+			{
+				return pInstance->m_tasks.at(id)->done();
+			}
+			else
+			{
+				return id < pInstance->m_nextTaskID;
+			}
 		}
 
+		[[nodiscard]]
 		static detail::FrameTiming CurrentFrameTiming()
 		{
 			auto* pInstance = Instance();
@@ -216,9 +226,9 @@ namespace cotask
 		~ScopedCoTaskRunLifetime();
 
 		[[nodiscard]]
-		bool isRunning() const
+		bool done() const
 		{
-			return m_id && CoTaskBackend::IsTaskRunning(m_id.value());
+			return !m_id || CoTaskBackend::IsTaskDone(m_id.value());
 		}
 	};
 
@@ -228,8 +238,8 @@ namespace cotask
 		ScopedCoTaskRunLifetime m_lifetime;
 
 	public:
-		template <typename T>
-		explicit ScopedCoTaskRun(CoTask<T>&& task);
+		template <typename TResult>
+		explicit ScopedCoTaskRun(CoTask<TResult>&& task);
 
 		ScopedCoTaskRun(ScopedCoTaskRun&&) = default;
 
@@ -238,9 +248,9 @@ namespace cotask
 		~ScopedCoTaskRun() = default;
 
 		[[nodiscard]]
-		bool isRunning() const
+		bool done() const
 		{
-			return m_lifetime.isRunning();
+			return m_lifetime.done();
 		}
 	};
 
@@ -254,8 +264,8 @@ namespace cotask
 
 	namespace detail
 	{
-		template <typename T>
-		std::optional<TaskID> UpdateTaskOnceAndRegisterIfNotDone(CoTask<T>&& task)
+		template <typename TResult>
+		std::optional<TaskID> UpdateTaskOnceAndRegisterIfNotDone(CoTask<TResult>&& task)
 		{
 			if (task.done())
 			{
@@ -269,32 +279,32 @@ namespace cotask
 				// フレーム待ちなしで終了した場合は登録不要
 				return none;
 			}
-			return CoTaskBackend::RegisterTask(std::make_unique<CoTask<T>>(std::move(task)));
+			return CoTaskBackend::RegisterTask(std::make_unique<CoTask<TResult>>(std::move(task)));
 		}
 	}
 
-	template <typename T>
-	ScopedCoTaskRun::ScopedCoTaskRun(CoTask<T>&& task)
+	template <typename TResult>
+	ScopedCoTaskRun::ScopedCoTaskRun(CoTask<TResult>&& task)
 		: m_lifetime(detail::UpdateTaskOnceAndRegisterIfNotDone(std::move(task)))
 	{
 	}
 
 	namespace detail
 	{
-		template <typename T>
+		template <typename TResult>
 		class Promise;
 
-		template <typename T>
+		template <typename TResult>
 		class CoroutineHandleWrapper
 		{
 		private:
-			using HandleType = std::coroutine_handle<Promise<T>>;
+			using handle_type = std::coroutine_handle<Promise<TResult>>;
 
-			HandleType m_handle;
+			handle_type m_handle;
 
 		public:
-			explicit CoroutineHandleWrapper(HandleType handle)
-				: m_handle(handle)
+			explicit CoroutineHandleWrapper(handle_type handle)
+				: m_handle(std::move(handle))
 			{
 			}
 
@@ -306,17 +316,17 @@ namespace cotask
 				}
 			}
 
-			CoroutineHandleWrapper(const CoroutineHandleWrapper<T>&) = delete;
+			CoroutineHandleWrapper(const CoroutineHandleWrapper<TResult>&) = delete;
 
-			CoroutineHandleWrapper& operator=(const CoroutineHandleWrapper<T>&) = delete;
+			CoroutineHandleWrapper& operator=(const CoroutineHandleWrapper<TResult>&) = delete;
 
-			CoroutineHandleWrapper(CoroutineHandleWrapper<T>&& rhs) noexcept
+			CoroutineHandleWrapper(CoroutineHandleWrapper<TResult>&& rhs) noexcept
 				: m_handle(rhs.m_handle)
 			{
 				rhs.m_handle = nullptr;
 			}
 
-			CoroutineHandleWrapper& operator=(CoroutineHandleWrapper<T>&& rhs) noexcept
+			CoroutineHandleWrapper& operator=(CoroutineHandleWrapper<TResult>&& rhs) noexcept
 			{
 				if (this != &rhs)
 				{
@@ -331,7 +341,7 @@ namespace cotask
 			}
 
 			[[nodiscard]]
-			T value() const
+			TResult value() const
 			{
 				return m_handle.promise().value();
 			}
@@ -381,28 +391,32 @@ namespace cotask
 		};
 	}
 
-	template <typename T>
+	template <typename TResult>
+	class CoSceneBase;
+
+	template <typename TResult>
 	class [[nodiscard]] CoTask : public detail::ICoTask
 	{
 	private:
-		detail::CoroutineHandleWrapper<T> m_handle;
+		detail::CoroutineHandleWrapper<TResult> m_handle;
 
 	public:
-		using promise_type = detail::Promise<T>;
-		using HandleType = std::coroutine_handle<promise_type>;
+		using promise_type = detail::Promise<TResult>;
+		using handle_type = std::coroutine_handle<promise_type>;
+		using result_type = TResult;
 
-		explicit CoTask(HandleType h)
-			: m_handle(h)
+		explicit CoTask(handle_type h)
+			: m_handle(std::move(h))
 		{
 		}
 
-		CoTask(const CoTask<T>&) = delete;
+		CoTask(const CoTask<TResult>&) = delete;
 
-		CoTask<T>& operator=(const CoTask<T>&) = delete;
+		CoTask<TResult>& operator=(const CoTask<TResult>&) = delete;
 
-		CoTask(CoTask<T>&& rhs) = default;
+		CoTask(CoTask<TResult>&& rhs) = default;
 
-		CoTask<T>& operator=(CoTask<T>&& rhs) = default;
+		CoTask<TResult>& operator=(CoTask<TResult>&& rhs) = default;
 
 		virtual void resume(detail::FrameTiming frameTiming) override
 		{
@@ -426,31 +440,31 @@ namespace cotask
 			return m_handle.done();
 		}
 
-		template <typename U>
-		void await_suspend(std::coroutine_handle<detail::Promise<U>> handle)
+		template <typename TResultOther>
+		void await_suspend(std::coroutine_handle<detail::Promise<TResultOther>> handle)
 		{
 			m_handle.setNestLevel(handle.promise().nestLevel() + 1);
 			handle.promise().setSubTask(this);
 		}
 
-		T await_resume() const
+		TResult await_resume() const
 		{
 			return m_handle.value();
 		}
 
 		[[nodiscard]]
-		T value() const
+		TResult value() const
 		{
 			return m_handle.value();
 		}
 
 		[[nodiscard]]
-		ScopedCoTaskRun runScoped()&&
+		ScopedCoTaskRun runScoped() &&
 		{
 			return ScopedCoTaskRun{ std::move(*this) };
 		}
 
-		void runForget()&&
+		void runForget() &&
 		{
 			resume(CoTaskBackend::CurrentFrameTiming());
 			if (m_handle.done())
@@ -458,15 +472,18 @@ namespace cotask
 				// フレーム待ちなしで終了した場合は登録不要
 				return;
 			}
-			(void)CoTaskBackend::RegisterTask(std::make_unique<CoTask<T>>(std::move(*this)));
+			(void)CoTaskBackend::RegisterTask(std::make_unique<CoTask<TResult>>(std::move(*this)));
 		}
 	};
 
-	template <typename T>
-	auto operator co_await(CoTask<T>&& rhs)
+	template <typename TResult>
+	auto operator co_await(CoTask<TResult>&& rhs)
 	{
 		return rhs;
 	}
+
+	template <typename TResult>
+	auto operator co_await(CoTask<TResult>& rhs) = delete;
 
 	namespace detail
 	{
@@ -574,31 +591,31 @@ namespace cotask
 
 		inline PromiseBase::~PromiseBase() = default;
 
-		template <typename T>
+		template <typename TResult>
 		class Promise : public PromiseBase
 		{
 		private:
-			std::optional<T> m_value;
+			std::optional<TResult> m_value;
 
 		public:
 			Promise() = default;
 
-			Promise(Promise<T>&&) = default;
+			Promise(Promise<TResult>&&) = default;
 
-			Promise& operator=(Promise<T>&&) = default;
+			Promise& operator=(Promise<TResult>&&) = default;
 
-			void return_value(const T& v)
+			void return_value(const TResult& v)
 			{
 				m_value = v;
 			}
 
-			void return_value(T&& v)
+			void return_value(TResult&& v)
 			{
 				m_value = std::move(v);
 			}
 
 			[[nodiscard]]
-			T value() const
+			TResult value() const
 			{
 				rethrowIfException();
 				if (!m_value)
@@ -609,9 +626,9 @@ namespace cotask
 			}
 
 			[[nodiscard]]
-			CoTask<T> get_return_object()
+			CoTask<TResult> get_return_object()
 			{
-				return CoTask<T>{ CoTask<T>::HandleType::from_promise(*this) };
+				return CoTask<TResult>{ CoTask<TResult>::handle_type::from_promise(*this) };
 			}
 		};
 
@@ -636,7 +653,7 @@ namespace cotask
 
 			CoTask<void> get_return_object()
 			{
-				return CoTask<void>{ CoTask<void>::HandleType::from_promise(*this) };
+				return CoTask<void>{ CoTask<void>::handle_type::from_promise(*this) };
 			}
 		};
 	}
@@ -654,7 +671,7 @@ namespace cotask
 		}
 	}
 
-	inline CoTask<void> Delay(const Duration& duration)
+	inline CoTask<void> Delay(const Duration duration)
 	{
 		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{
@@ -664,6 +681,21 @@ namespace cotask
 		const Timer timer{ duration, StartImmediately::Yes };
 		while (!timer.reachedZero())
 		{
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	inline CoTask<void> Delay(const Duration duration, std::function<void(const Timer&)> func)
+	{
+		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		const Timer timer{ duration, StartImmediately::Yes };
+		while (!timer.reachedZero())
+		{
+			func(timer);
 			co_yield detail::FrameTiming::Update;
 		}
 	}
@@ -681,48 +713,43 @@ namespace cotask
 		}
 	}
 
-	inline CoTask<Input> WaitForKeyDown(bool clearInput = true)
+	inline CoTask<void> WaitForTimer(const Timer* pTimer)
 	{
 		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{
 			co_yield detail::FrameTiming::Update;
 		}
 
-		while (true)
+		while (!pTimer->reachedZero())
 		{
-			const Array<Input> allInputs = Keyboard::GetAllInputs();
-			for (const auto& input : allInputs)
-			{
-				if (input.down())
-				{
-					if (clearInput)
-					{
-						input.clearInput();
-					}
-					co_return input;
-				}
-			}
 			co_yield detail::FrameTiming::Update;
 		}
 	}
 
-	inline CoTask<void> WaitForMouseLDown(bool clearInput = true)
+	template <class TInput>
+	CoTask<void> WaitForDown(const TInput input)
 	{
 		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{
 			co_yield detail::FrameTiming::Update;
 		}
 
-		while (true)
+		while (!input.down())
 		{
-			if (MouseL.down())
-			{
-				if (clearInput)
-				{
-					MouseL.clearInput();
-				}
-				co_return;
-			}
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TInput>
+	CoTask<void> WaitForUp(const TInput input)
+	{
+		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (!input.up())
+		{
 			co_yield detail::FrameTiming::Update;
 		}
 	}
@@ -735,6 +762,14 @@ namespace cotask
 		}
 
 		while (predicate())
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	inline CoTask<void> WaitForever()
+	{
+		while (true)
 		{
 			co_yield detail::FrameTiming::Update;
 		}
@@ -782,22 +817,76 @@ namespace cotask
 		}
 	}
 
+	template <class TInput>
+	inline CoTask<void> ExecOnDown(TInput input, std::function<void()> func)
+	{
+		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (true)
+		{
+			if (input.down())
+			{
+				func();
+			}
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TInput>
+	inline CoTask<void> ExecOnUp(TInput input, std::function<void()> func)
+	{
+		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (true)
+		{
+			if (input.up())
+			{
+				func();
+			}
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TInput>
+	inline CoTask<void> ExecOnPressed(const TInput input, std::function<void()> func)
+	{
+		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (true)
+		{
+			if (input.pressed())
+			{
+				func();
+			}
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
 	namespace detail
 	{
 		// voidを含むタプルは使用できないため、voidの代わりに戻り値として返すための空の構造体を用意
-		struct VoidReturn
+		struct VoidResult
 		{
 		};
 
-		template <typename T>
-		using VoidReturnConvertedType = std::conditional_t<std::is_void_v<T>, VoidReturn, T>;
+		template <typename TResult>
+		using VoidResultTypeReplace = std::conditional_t<std::is_void_v<TResult>, VoidResult, TResult>;
 
-		template <typename T>
-		auto ConvertVoidReturn(CoTask<T>& task) -> VoidReturnConvertedType<T>
+		template <typename TResult>
+		auto ConvertVoidResult(const CoTask<TResult>& task) -> VoidResultTypeReplace<TResult>
 		{
-			if constexpr (std::is_void_v<T>)
+			if constexpr (std::is_void_v<TResult>)
 			{
-				return VoidReturn{};
+				return VoidResult{};
 			}
 			else
 			{
@@ -805,149 +894,141 @@ namespace cotask
 			}
 		}
 
-		template <typename T>
-		auto ConvertOptionalVoidReturn(CoTask<T>& task) -> Optional<VoidReturnConvertedType<T>>
+		template <typename TResult>
+		auto ConvertOptionalVoidResult(const CoTask<TResult>& task) -> Optional<VoidResultTypeReplace<TResult>>
 		{
 			if (!task.done())
 			{
 				return none;
 			}
 
-			if constexpr (std::is_void_v<T>)
+			if constexpr (std::is_void_v<TResult>)
 			{
-				return MakeOptional(VoidReturn{});
+				return MakeOptional(VoidResult{});
 			}
 			else
 			{
 				return MakeOptional(task.value());
 			}
 		}
+
+		template <typename TScene>
+		concept CoSceneConcept = std::derived_from<TScene, CoSceneBase<typename TScene::result_type>>;
+
+		template <CoSceneConcept TScene>
+		CoTask<typename TScene::result_type> ToCoTask(TScene&& scene)
+		{
+			return std::move(scene).toCoTask();
+		}
+
+		template <typename TResult>
+		CoTask<TResult> ToCoTask(CoTask<TResult>&& task)
+		{
+			return task;
+		}
 	}
 
-	template <class... Args>
-	auto WhenAll(CoTask<Args>... args) -> CoTask<std::tuple<detail::VoidReturnConvertedType<Args>...>>
+	template <class... TTasks>
+	auto WhenAll(TTasks&&... args) -> CoTask<std::tuple<detail::VoidResultTypeReplace<typename TTasks::result_type>...>>
 	{
-		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		if constexpr ((!std::is_same_v<TTasks, CoTask<typename TTasks::result_type>> || ...))
 		{
-			co_yield detail::FrameTiming::Update;
+			// TTasksの中にCoTaskでないものが1つでも含まれる場合は、ToCoTaskで変換して呼び出し直す
+			co_return co_await WhenAll(detail::ToCoTask(std::forward<TTasks>(args))...);
 		}
-
-		if ((args.done() && ...))
+		else
 		{
-			co_return std::make_tuple(detail::ConvertVoidReturn(args)...);
-		}
+			if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			{
+				co_yield detail::FrameTiming::Update;
+			}
 
-		while (true)
-		{
-			(args.resume(detail::FrameTiming::Update), ...);
 			if ((args.done() && ...))
 			{
-				co_return std::make_tuple(detail::ConvertVoidReturn(args)...);
+				co_return std::make_tuple(detail::ConvertVoidResult(args)...);
 			}
-			co_yield detail::FrameTiming::Draw;
-			(args.resume(detail::FrameTiming::Draw), ...);
-			co_yield detail::FrameTiming::PostPresent;
-			(args.resume(detail::FrameTiming::PostPresent), ...);
-			co_yield detail::FrameTiming::Update;
+
+			while (true)
+			{
+				(args.resume(detail::FrameTiming::Update), ...);
+				if ((args.done() && ...))
+				{
+					co_return std::make_tuple(detail::ConvertVoidResult(args)...);
+				}
+				co_yield detail::FrameTiming::Draw;
+				(args.resume(detail::FrameTiming::Draw), ...);
+				co_yield detail::FrameTiming::PostPresent;
+				(args.resume(detail::FrameTiming::PostPresent), ...);
+				co_yield detail::FrameTiming::Update;
+			}
 		}
 	}
 
-	template <class... Args>
-	auto WhenAny(CoTask<Args>... args) -> CoTask<std::tuple<Optional<detail::VoidReturnConvertedType<Args>>...>>
+	template <class... TTasks>
+	auto WhenAny(TTasks&&... args) -> CoTask<std::tuple<Optional<detail::VoidResultTypeReplace<typename TTasks::result_type>>...>>
 	{
-		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		if constexpr ((!std::is_same_v<TTasks, CoTask<typename TTasks::result_type>> || ...))
 		{
-			co_yield detail::FrameTiming::Update;
+			// TTasksの中にCoTaskでないものが1つでも含まれる場合は、ToCoTaskで変換して呼び出し直す
+			co_return co_await WhenAny(detail::ToCoTask(std::forward<TTasks>(args))...);
 		}
-
-		if ((args.done() || ...))
+		else
 		{
-			co_return std::make_tuple(detail::ConvertOptionalVoidReturn(args)...);
-		}
+			if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			{
+				co_yield detail::FrameTiming::Update;
+			}
 
-		while (true)
-		{
-			(args.resume(detail::FrameTiming::Update), ...);
 			if ((args.done() || ...))
 			{
-				co_return std::make_tuple(detail::ConvertOptionalVoidReturn(args)...);
+				co_return std::make_tuple(detail::ConvertOptionalVoidResult(args)...);
 			}
-			co_yield detail::FrameTiming::Draw;
-			(args.resume(detail::FrameTiming::Draw), ...);
-			co_yield detail::FrameTiming::PostPresent;
-			(args.resume(detail::FrameTiming::PostPresent), ...);
-			co_yield detail::FrameTiming::Update;
+
+			while (true)
+			{
+				(args.resume(detail::FrameTiming::Update), ...);
+				if ((args.done() || ...))
+				{
+					co_return std::make_tuple(detail::ConvertOptionalVoidResult(args)...);
+				}
+				co_yield detail::FrameTiming::Draw;
+				(args.resume(detail::FrameTiming::Draw), ...);
+				co_yield detail::FrameTiming::PostPresent;
+				(args.resume(detail::FrameTiming::PostPresent), ...);
+				co_yield detail::FrameTiming::Update;
+			}
 		}
 	}
 
-	inline CoTask<void> CoLinear(const Duration& duration, std::function<void(double)> func)
-	{
-		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
-		{
-			co_yield detail::FrameTiming::Update;
-		}
+	using ClearInputYN = YesNo<struct ClearInputYN_tag>;
 
-		const Timer timer{ duration, StartImmediately::Yes };
-		while (!timer.reachedZero())
-		{
-			func(timer.progress0_1());
-			co_yield detail::FrameTiming::Update;
-		}
-		func(1.0);
-	}
-
-	inline CoTask<void> CoEase(const Duration& duration, std::function<double(double)> easingFunc, std::function<void(double)> func)
-	{
-		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
-		{
-			co_yield detail::FrameTiming::Update;
-		}
-
-		const Timer timer{ duration, StartImmediately::Yes };
-		while (!timer.reachedZero())
-		{
-			func(easingFunc(timer.progress0_1()));
-			co_yield detail::FrameTiming::Update;
-		}
-		func(easingFunc(1.0));
-	}
-
-	template <typename T>
+	template <typename TResult>
 	class CoSceneBase
 	{
 	public:
-		using RetType = T;
+		using result_type = TResult;
 
-		virtual ~CoSceneBase() = 0;
+		virtual ~CoSceneBase() = default;
 
-		virtual CoTask<T> start()
-		{
-			co_return T{};
-		}
+		virtual CoTask<TResult> start() = 0;
 
 		virtual void draw() const
 		{
 		}
+
+		[[nodiscard]]
+		CoTask<TResult> toCoTask() &&
+		{
+			const auto scopedTaskRun = EveryFrameDraw([this]() { draw(); }).runScoped();
+			co_return co_await start();
+		}
 	};
 
-	template <typename T>
-	CoSceneBase<T>::~CoSceneBase() = default;
-
-	template <typename Scene, typename... Args>
-	CoTask<typename Scene::RetType> CoSceneToTask(Args&&... args)
-		requires std::derived_from<Scene, CoSceneBase<typename Scene::RetType>>
+	template <class Scene>
+	auto operator co_await(Scene&& scene) -> CoTask<typename Scene::result_type>
+		requires std::derived_from<Scene, CoSceneBase<typename Scene::result_type>>
 	{
-		Scene scene{ std::forward<Args>(args)... };
-		const auto scopedTaskRun = EveryFrameDraw([&scene]() { scene.draw(); }).runScoped();
-		co_return co_await scene.start();
-	}
-
-	template <typename Scene>
-	CoTask<typename Scene::RetType> CoSceneToTask(Scene&& scene)
-		requires std::derived_from<Scene, CoSceneBase<typename Scene::RetType>>
-	{
-		const auto scopedTaskRun = EveryFrameDraw([&scene]() { scene.draw(); }).runScoped();
-		co_return co_await scene.start();
+		return std::move(scene).toCoTask();
 	}
 }
 

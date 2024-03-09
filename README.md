@@ -1,4 +1,4 @@
-# CoTask for Siv3D
+# CoTaskLib for Siv3D
 
 Siv3D用コルーチンライブラリ(試験的)。ヘッダオンリー。
 
@@ -10,14 +10,14 @@ C++20の`co_await`/`co_return`キーワードを利用して、複数フレー�
 
 ```cpp
 #include <Siv3D.hpp>
-#include <CoTask.hpp>
+#include <CoTaskLib.hpp>
 
-CoTask<void> Greet(StringView name)
+CoTask<void> Greet(const String name) // 注意: コルーチンには参照を渡さないこと
 {
 	Print << U"Hello, " << name << U"!";
-	co_await Delay(1s);
+	co_await CoTaskLib::Delay(1s);
 	Print << U"Nice to meet you!";
-	co_await Delay(1s);
+	co_await CoTaskLib::Delay(1s);
 }
 
 CoTask<void> ShowMessages()
@@ -29,7 +29,7 @@ CoTask<void> ShowMessages()
 
 void Main()
 {
-	CoTaskBackend::Init();
+	CoTaskLib::Init();
 
 	const ScopedCoTaskRun scopedCoTaskRun = ShowMessages().runScoped();
 	while (System::Update())
@@ -45,9 +45,9 @@ co_returnで返却した戻り値はco_awaitで受け取ることができます
 
 ```cpp
 #include <Siv3D.hpp>
-#include <CoTask.hpp>
+#include <CoTaskLib.hpp>
 
-CoTask<String> ShowQuestion(StringView question)
+CoTask<String> ShowQuestion(const String question) // 注意: コルーチンには参照を渡さないこと
 {
 	Font font(30);
 	TextEditState textEditState;
@@ -64,7 +64,7 @@ CoTask<String> ShowQuestion(StringView question)
 			co_return textEditState.text;
 		}
 
-		co_await DelayFrame();
+		co_await CoTaskLib::DelayFrame();
 	}
 }
 
@@ -87,7 +87,7 @@ CoTask<void> MainTask()
 
 void Main()
 {
-	CoTaskBackend::Init();
+	CoTaskLib::Init();
 
 	const ScopedCoTaskRun scopedCoTaskRun = MainTask().runScoped();
 	while (System::Update())

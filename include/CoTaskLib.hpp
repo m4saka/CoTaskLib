@@ -1,9 +1,8 @@
 ﻿#pragma once
 #include <Siv3D.hpp>
 #include <coroutine>
-#include <ranges>
 
-namespace cotask
+namespace CoTaskLib
 {
 	namespace detail
 	{
@@ -31,215 +30,241 @@ namespace cotask
 	template <typename TResult>
 	class CoTask;
 
-	class CoTaskBackend
+	namespace detail
 	{
-	private:
-		static constexpr StringView AddonName{ U"CoTaskBackendAddon" };
-
-		// Note: draw関数がconstであることの対処用にアドオンと実体を分離し、実体はポインタで持つようにしている
-		class CoTaskBackendAddon : public IAddon
+		class CoTaskBackend
 		{
+		public:
+			static constexpr StringView AddonName{ U"CoTaskBackendAddon" };
+
+			// Note: draw関数がconstであることの対処用にアドオンと実体を分離し、実体はポインタで持つようにしている
+			class CoTaskBackendAddon : public IAddon
+			{
+			private:
+				bool m_isFirstUpdated = false;
+				std::unique_ptr<CoTaskBackend> m_instance;
+
+			public:
+				CoTaskBackendAddon()
+					: m_instance{ std::unique_ptr<CoTaskBackend>{ new CoTaskBackend{} } } // Note: コンストラクタがprivateなのでmake_unique不使用
+				{
+				}
+
+				virtual bool update() override
+				{
+					m_isFirstUpdated = true;
+					m_instance->resume(detail::FrameTiming::Update);
+					return true;
+				}
+
+				virtual void draw() const override
+				{
+					if (!m_isFirstUpdated)
+					{
+						// Addonの初回drawがupdateより先に実行される挙動を回避
+						return;
+					}
+					m_instance->resume(detail::FrameTiming::Draw);
+				}
+
+				virtual void postPresent() override
+				{
+					if (!m_isFirstUpdated)
+					{
+						// Addonの初回postPresentがupdateより先に実行される挙動を回避
+						return;
+					}
+					m_instance->resume(detail::FrameTiming::PostPresent);
+				}
+
+				[[nodiscard]]
+				CoTaskBackend* instance() const
+				{
+					return m_instance.get();
+				}
+			};
+
 		private:
-			bool m_isFirstUpdated = false;
-			std::unique_ptr<CoTaskBackend> m_instance;
+			detail::FrameTiming m_currentFrameTiming = detail::FrameTiming::Init;
+
+			detail::TaskID m_nextTaskID = 1;
+
+			std::optional<detail::TaskID> m_currentRunningTaskID = none;
+
+			std::map<detail::TaskID, std::unique_ptr<detail::ICoTask>> m_tasks;
+
+			CoTaskBackend() = default;
+
+			[[nodiscard]]
+			static CoTaskBackend* Instance()
+			{
+				if (const auto* pAddon = Addon::GetAddon<CoTaskBackendAddon>(AddonName))
+				{
+					return pAddon->instance();
+				}
+				return nullptr;
+			}
 
 		public:
-			CoTaskBackendAddon()
-				: m_instance{ std::unique_ptr<CoTaskBackend>{ new CoTaskBackend{} } } // Note: コンストラクタがprivateなのでmake_unique不使用
+			void resume(detail::FrameTiming frameTiming)
 			{
-			}
-
-			virtual bool update() override
-			{
-				m_isFirstUpdated = true;
-				m_instance->resume(detail::FrameTiming::Update);
-				return true;
-			}
-
-			virtual void draw() const override
-			{
-				if (!m_isFirstUpdated)
+				m_currentFrameTiming = frameTiming;
+				for (auto it = m_tasks.begin(); it != m_tasks.end();)
 				{
-					// Addonの初回drawがupdateより先に実行される挙動を回避
-					return;
-				}
-				m_instance->resume(detail::FrameTiming::Draw);
-			}
+					m_currentRunningTaskID = it->first;
 
-			virtual void postPresent() override
-			{
-				if (!m_isFirstUpdated)
-				{
-					// Addonの初回postPresentがupdateより先に実行される挙動を回避
-					return;
+					it->second->resume(frameTiming);
+					if (it->second->done())
+					{
+						it = m_tasks.erase(it);
+					}
+					else
+					{
+						++it;
+					}
 				}
-				m_instance->resume(detail::FrameTiming::PostPresent);
+				m_currentRunningTaskID = none;
 			}
 
 			[[nodiscard]]
-			CoTaskBackend* instance() const
+			static detail::TaskID RegisterTask(std::unique_ptr<detail::ICoTask>&& task)
 			{
-				return m_instance.get();
-			}
-		};
-
-		detail::FrameTiming m_currentFrameTiming = detail::FrameTiming::Init;
-
-		detail::TaskID m_nextTaskID = 1;
-
-		std::optional<detail::TaskID> m_currentRunningTaskID = none;
-
-		std::map<detail::TaskID, std::unique_ptr<detail::ICoTask>> m_tasks;
-
-		CoTaskBackend() = default;
-
-		[[nodiscard]]
-		static CoTaskBackend* Instance()
-		{
-			if (const auto* pAddon = Addon::GetAddon<CoTaskBackendAddon>(AddonName))
-			{
-				return pAddon->instance();
-			}
-			return nullptr;
-		}
-
-	public:
-		void resume(detail::FrameTiming frameTiming)
-		{
-			m_currentFrameTiming = frameTiming;
-			for (auto it = m_tasks.begin(); it != m_tasks.end();)
-			{
-				m_currentRunningTaskID = it->first;
-
-				it->second->resume(frameTiming);
-				if (it->second->done())
+				if (!task)
 				{
-					it = m_tasks.erase(it);
+					throw Error{ U"CoTask is nullptr" };
+				}
+
+				auto* pInstance = Instance();
+				if (!pInstance)
+				{
+					throw Error{ U"CoTaskBackend is not initialized" };
+				}
+				const detail::TaskID id = pInstance->m_nextTaskID++;
+				pInstance->m_tasks.emplace(id, std::move(task));
+				return id;
+			}
+
+			static void UnregisterTask(detail::TaskID id)
+			{
+				auto* pInstance = Instance();
+				if (!pInstance)
+				{
+					// Note: ユーザーがScopedCoTaskRunをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
+					return;
+				}
+				if (id == pInstance->m_currentRunningTaskID)
+				{
+					throw Error{ U"CoTaskBackend::UnregisterTask: Cannot unregister the currently running task" };
+				}
+				pInstance->m_tasks.erase(id);
+			}
+
+			[[nodiscard]]
+			static bool IsTaskDone(detail::TaskID id)
+			{
+				auto* pInstance = Instance();
+				if (!pInstance)
+				{
+					throw Error{ U"CoTaskBackend is not initialized" };
+				}
+				if (pInstance->m_tasks.contains(id))
+				{
+					return pInstance->m_tasks.at(id)->done();
 				}
 				else
 				{
-					++it;
+					return id < pInstance->m_nextTaskID;
 				}
 			}
-			m_currentRunningTaskID = none;
-		}
 
-		static void Init()
-		{
-			Addon::Register(AddonName, std::make_unique<CoTaskBackendAddon>());
-		}
-
-		[[nodiscard]]
-		static detail::TaskID RegisterTask(std::unique_ptr<detail::ICoTask>&& task)
-		{
-			if (!task)
+			[[nodiscard]]
+			static detail::FrameTiming CurrentFrameTiming()
 			{
-				throw Error{ U"CoTask is nullptr" };
+				auto* pInstance = Instance();
+				if (!pInstance)
+				{
+					throw Error{ U"CoTaskBackend is not initialized" };
+				}
+				return pInstance->m_currentFrameTiming;
+			}
+		};
+
+		class ScopedCoTaskRunLifetime : Uncopyable
+		{
+		private:
+			std::optional<detail::TaskID> m_id;
+
+		public:
+			explicit ScopedCoTaskRunLifetime(const std::optional<detail::TaskID>& id)
+				: m_id(id)
+			{
 			}
 
-			auto* pInstance = Instance();
-			if (!pInstance)
+			ScopedCoTaskRunLifetime(ScopedCoTaskRunLifetime&& rhs) noexcept
+				: m_id(rhs.m_id)
 			{
-				throw Error{ U"CoTaskBackend is not initialized" };
+				rhs.m_id = none;
 			}
-			const detail::TaskID id = pInstance->m_nextTaskID++;
-			pInstance->m_tasks.emplace(id, std::move(task));
-			return id;
-		}
 
-		static void UnregisterTask(detail::TaskID id)
-		{
-			auto* pInstance = Instance();
-			if (!pInstance)
+			ScopedCoTaskRunLifetime& operator=(ScopedCoTaskRunLifetime&& rhs) noexcept
 			{
-				// Note: ユーザーがScopedCoTaskRunをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
-				return;
+				if (this != &rhs)
+				{
+					if (m_id)
+					{
+						CoTaskBackend::UnregisterTask(m_id.value());
+					}
+					m_id = rhs.m_id;
+					rhs.m_id = none;
+				}
+				return *this;
 			}
-			if (id == pInstance->m_currentRunningTaskID)
-			{
-				throw Error{ U"CoTaskBackend::UnregisterTask: Cannot unregister the currently running task" };
-			}
-			pInstance->m_tasks.erase(id);
-		}
 
-		[[nodiscard]]
-		static bool IsTaskDone(detail::TaskID id)
-		{
-			auto* pInstance = Instance();
-			if (!pInstance)
-			{
-				throw Error{ U"CoTaskBackend is not initialized" };
-			}
-			if (pInstance->m_tasks.contains(id))
-			{
-				return pInstance->m_tasks.at(id)->done();
-			}
-			else
-			{
-				return id < pInstance->m_nextTaskID;
-			}
-		}
-
-		[[nodiscard]]
-		static detail::FrameTiming CurrentFrameTiming()
-		{
-			auto* pInstance = Instance();
-			if (!pInstance)
-			{
-				throw Error{ U"CoTaskBackend is not initialized" };
-			}
-			return pInstance->m_currentFrameTiming;
-		}
-	};
-
-	class ScopedCoTaskRunLifetime : Uncopyable
-	{
-	private:
-		std::optional<detail::TaskID> m_id;
-
-	public:
-		explicit ScopedCoTaskRunLifetime(const std::optional<detail::TaskID>& id)
-			: m_id(id)
-		{
-		}
-
-		ScopedCoTaskRunLifetime(ScopedCoTaskRunLifetime&& rhs) noexcept
-			: m_id(rhs.m_id)
-		{
-			rhs.m_id = none;
-		}
-
-		ScopedCoTaskRunLifetime& operator=(ScopedCoTaskRunLifetime&& rhs) noexcept
-		{
-			if (this != &rhs)
+			~ScopedCoTaskRunLifetime()
 			{
 				if (m_id)
 				{
 					CoTaskBackend::UnregisterTask(m_id.value());
 				}
-				m_id = rhs.m_id;
-				rhs.m_id = none;
 			}
-			return *this;
-		}
 
-		~ScopedCoTaskRunLifetime();
+			[[nodiscard]]
+			bool done() const
+			{
+				return !m_id || CoTaskBackend::IsTaskDone(m_id.value());
+			}
+		};
 
-		[[nodiscard]]
-		bool done() const
+		template <typename TResult>
+		std::optional<TaskID> UpdateTaskOnceAndRegisterIfNotDone(CoTask<TResult>&& task)
 		{
-			return !m_id || CoTaskBackend::IsTaskDone(m_id.value());
+			if (task.done())
+			{
+				// 既に終了済み
+				return none;
+			}
+
+			task.resume(detail::CoTaskBackend::CurrentFrameTiming());
+			if (task.done())
+			{
+				// フレーム待ちなしで終了した場合は登録不要
+				return none;
+			}
+			return CoTaskBackend::RegisterTask(std::make_unique<CoTask<TResult>>(std::move(task)));
 		}
-	};
+	}
 
 	class ScopedCoTaskRun
 	{
 	private:
-		ScopedCoTaskRunLifetime m_lifetime;
+		detail::ScopedCoTaskRunLifetime m_lifetime;
 
 	public:
 		template <typename TResult>
-		explicit ScopedCoTaskRun(CoTask<TResult>&& task);
+		explicit ScopedCoTaskRun(CoTask<TResult>&& task)
+			: m_lifetime(detail::UpdateTaskOnceAndRegisterIfNotDone(std::move(task)))
+		{
+		}
 
 		ScopedCoTaskRun(ScopedCoTaskRun&&) = default;
 
@@ -253,41 +278,6 @@ namespace cotask
 			return m_lifetime.done();
 		}
 	};
-
-	inline ScopedCoTaskRunLifetime::~ScopedCoTaskRunLifetime()
-	{
-		if (m_id)
-		{
-			CoTaskBackend::UnregisterTask(m_id.value());
-		}
-	}
-
-	namespace detail
-	{
-		template <typename TResult>
-		std::optional<TaskID> UpdateTaskOnceAndRegisterIfNotDone(CoTask<TResult>&& task)
-		{
-			if (task.done())
-			{
-				// 既に終了済み
-				return none;
-			}
-
-			task.resume(CoTaskBackend::CurrentFrameTiming());
-			if (task.done())
-			{
-				// フレーム待ちなしで終了した場合は登録不要
-				return none;
-			}
-			return CoTaskBackend::RegisterTask(std::make_unique<CoTask<TResult>>(std::move(task)));
-		}
-	}
-
-	template <typename TResult>
-	ScopedCoTaskRun::ScopedCoTaskRun(CoTask<TResult>&& task)
-		: m_lifetime(detail::UpdateTaskOnceAndRegisterIfNotDone(std::move(task)))
-	{
-	}
 
 	namespace detail
 	{
@@ -436,7 +426,7 @@ namespace cotask
 		[[nodiscard]]
 		bool await_ready()
 		{
-			resume(CoTaskBackend::CurrentFrameTiming());
+			resume(detail::CoTaskBackend::CurrentFrameTiming());
 			return m_handle.done();
 		}
 
@@ -466,20 +456,20 @@ namespace cotask
 
 		void runForget() &&
 		{
-			resume(CoTaskBackend::CurrentFrameTiming());
+			resume(detail::CoTaskBackend::CurrentFrameTiming());
 			if (m_handle.done())
 			{
 				// フレーム待ちなしで終了した場合は登録不要
 				return;
 			}
-			(void)CoTaskBackend::RegisterTask(std::make_unique<CoTask<TResult>>(std::move(*this)));
+			(void)detail::CoTaskBackend::RegisterTask(std::make_unique<CoTask<TResult>>(std::move(*this)));
 		}
 	};
 
 	template <typename TResult>
 	auto operator co_await(CoTask<TResult>&& rhs)
 	{
-		return rhs;
+		return std::move(rhs);
 	}
 
 	template <typename TResult>
@@ -658,6 +648,11 @@ namespace cotask
 		};
 	}
 
+	inline void Init()
+	{
+		Addon::Register(detail::CoTaskBackend::AddonName, std::make_unique<detail::CoTaskBackend::CoTaskBackendAddon>());
+	}
+
 	inline CoTask<void> DelayFrame()
 	{
 		co_yield detail::FrameTiming::Update;
@@ -673,7 +668,7 @@ namespace cotask
 
 	inline CoTask<void> Delay(const Duration duration)
 	{
-		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{
 			co_yield detail::FrameTiming::Update;
 		}
@@ -687,7 +682,7 @@ namespace cotask
 
 	inline CoTask<void> Delay(const Duration duration, std::function<void(const Timer&)> func)
 	{
-		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{
 			co_yield detail::FrameTiming::Update;
 		}
@@ -702,7 +697,7 @@ namespace cotask
 
 	inline CoTask<void> WaitUntil(std::function<bool()> predicate)
 	{
-		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{
 			co_yield detail::FrameTiming::Update;
 		}
@@ -715,7 +710,7 @@ namespace cotask
 
 	inline CoTask<void> WaitForTimer(const Timer* pTimer)
 	{
-		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{
 			co_yield detail::FrameTiming::Update;
 		}
@@ -729,7 +724,7 @@ namespace cotask
 	template <class TInput>
 	CoTask<void> WaitForDown(const TInput input)
 	{
-		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{
 			co_yield detail::FrameTiming::Update;
 		}
@@ -743,7 +738,7 @@ namespace cotask
 	template <class TInput>
 	CoTask<void> WaitForUp(const TInput input)
 	{
-		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{
 			co_yield detail::FrameTiming::Update;
 		}
@@ -756,7 +751,7 @@ namespace cotask
 
 	inline CoTask<void> WaitWhile(std::function<bool()> predicate)
 	{
-		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{
 			co_yield detail::FrameTiming::Update;
 		}
@@ -777,7 +772,7 @@ namespace cotask
 
 	inline CoTask<void> EveryFrame(std::function<void()> func)
 	{
-		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{
 			co_yield detail::FrameTiming::Update;
 		}
@@ -791,7 +786,7 @@ namespace cotask
 
 	inline CoTask<void> EveryFrameDraw(std::function<void()> func)
 	{
-		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Draw)
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Draw)
 		{
 			co_yield detail::FrameTiming::Draw;
 		}
@@ -805,7 +800,7 @@ namespace cotask
 
 	inline CoTask<void> EveryFramePostPresent(std::function<void()> func)
 	{
-		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::PostPresent)
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::PostPresent)
 		{
 			co_yield detail::FrameTiming::PostPresent;
 		}
@@ -818,9 +813,9 @@ namespace cotask
 	}
 
 	template <class TInput>
-	inline CoTask<void> ExecOnDown(TInput input, std::function<void()> func)
+	inline CoTask<void> ExecOnDown(const TInput input, std::function<void()> func)
 	{
-		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{
 			co_yield detail::FrameTiming::Update;
 		}
@@ -836,9 +831,9 @@ namespace cotask
 	}
 
 	template <class TInput>
-	inline CoTask<void> ExecOnUp(TInput input, std::function<void()> func)
+	inline CoTask<void> ExecOnUp(const TInput input, std::function<void()> func)
 	{
-		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{
 			co_yield detail::FrameTiming::Update;
 		}
@@ -856,7 +851,7 @@ namespace cotask
 	template <class TInput>
 	inline CoTask<void> ExecOnPressed(const TInput input, std::function<void()> func)
 	{
-		if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 		{
 			co_yield detail::FrameTiming::Update;
 		}
@@ -938,7 +933,7 @@ namespace cotask
 		}
 		else
 		{
-			if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -974,7 +969,7 @@ namespace cotask
 		}
 		else
 		{
-			if (CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -999,8 +994,6 @@ namespace cotask
 			}
 		}
 	}
-
-	using ClearInputYN = YesNo<struct ClearInputYN_tag>;
 
 	template <typename TResult>
 	class CoSceneBase
@@ -1030,8 +1023,61 @@ namespace cotask
 	{
 		return std::move(scene).toCoTask();
 	}
+
+	class FadeIn : public CoSceneBase<void>
+	{
+	private:
+		Timer m_timer;
+		ColorF m_color;
+
+	public:
+		FadeIn(const Duration& duration, const ColorF& color = Palette::Black)
+			: m_timer(duration, StartImmediately::Yes)
+			, m_color(color)
+		{
+		}
+
+		CoTask<void> start() override
+		{
+			co_await WaitForTimer(&m_timer);
+		}
+
+		void draw() const override
+		{
+			const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
+
+			Scene::Rect().draw(ColorF{ m_color, m_timer.progress1_0() });
+		}
+	};
+
+	class FadeOut : public CoSceneBase<void>
+	{
+	private:
+		Timer m_timer;
+		ColorF m_color;
+
+	public:
+		FadeOut(const Duration& duration, const ColorF& color = Palette::Black)
+			: m_timer(duration, StartImmediately::Yes)
+			, m_color(color)
+		{
+		}
+
+		CoTask<void> start() override
+		{
+			co_await WaitForTimer(&m_timer);
+		}
+
+		void draw() const override
+		{
+			const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
+
+			Scene::Rect().draw(ColorF{ m_color, m_timer.progress0_1() });
+		}
+	};
 }
 
 #ifndef NO_COTASK_USING
-using namespace cotask;
+using CoTaskLib::CoTask;
+using CoTaskLib::CoSceneBase;
 #endif

@@ -66,7 +66,7 @@ namespace CoTaskLib
 			static constexpr StringView AddonName{ U"CoTaskBackendAddon" };
 
 			static inline CoTaskBackend* s_pInstance = nullptr;
-			
+
 			// Note: draw関数がconstであることの対処用にアドオンと実体を分離し、実体はポインタで持つようにしている
 			class CoTaskBackendAddon : public IAddon
 			{
@@ -482,12 +482,12 @@ namespace CoTaskLib
 		}
 
 		[[nodiscard]]
-		ScopedCoTaskRun runScoped() &&
+		ScopedCoTaskRun runScoped()&&
 		{
 			return ScopedCoTaskRun{ std::move(*this) };
 		}
 
-		void runForget() &&
+		void runForget()&&
 		{
 			resume(detail::CoTaskBackend::CurrentFrameTiming());
 			if (m_handle.done())
@@ -782,6 +782,122 @@ namespace CoTaskLib
 		}
 	}
 
+	template <class TArea>
+	CoTask<void> WaitForLeftClicked(const TArea area)
+	{
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (!area.leftClicked())
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TArea>
+	CoTask<void> WaitForLeftReleased(const TArea area)
+	{
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (!area.leftReleased())
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TArea>
+	CoTask<void> WaitForLeftClickedThenReleased(const TArea area)
+	{
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (true)
+		{
+			if (area.leftClicked())
+			{
+				Print << U"clickeda5";
+				const auto scopedTaskRun = EveryFrame([]() {Print << U"clicked"; }).runScoped();
+				const auto [releasedInArea, _] = co_await WhenAny(WaitForLeftReleased(area), WaitForUp(MouseL));
+				if (releasedInArea.has_value())
+				{
+					break;
+				}
+			}
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TArea>
+	CoTask<void> WaitForRightClicked(const TArea area)
+	{
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (!area.rightClicked())
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TArea>
+	CoTask<void> WaitForRightReleased(const TArea area)
+	{
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (!area.rightReleased())
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TArea>
+	CoTask<void> WaitForRightClickedThenReleased(const TArea area)
+	{
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (true)
+		{
+			if (area.rightClicked())
+			{
+				const auto [releasedInArea, _] = co_await WhenAny(WaitForRightReleased(area), WaitForUp(MouseR));
+				if (releasedInArea.has_value())
+				{
+					break;
+				}
+			}
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TArea>
+	CoTask<void> WaitForMouseOver(const TArea area)
+	{
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (!area.mouseOver())
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
 	inline CoTask<void> WaitWhile(std::function<bool()> predicate)
 	{
 		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -892,6 +1008,176 @@ namespace CoTaskLib
 		while (true)
 		{
 			if (input.pressed())
+			{
+				func();
+			}
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TArea>
+	inline CoTask<void> ExecOnLeftClicked(const TArea area, std::function<void()> func)
+	{
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (true)
+		{
+			if (area.leftClicked())
+			{
+				func();
+			}
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TArea>
+	inline CoTask<void> ExecOnLeftPressed(const TArea area, std::function<void()> func)
+	{
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (true)
+		{
+			if (area.leftPressed())
+			{
+				func();
+			}
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TArea>
+	inline CoTask<void> ExecOnLeftReleased(const TArea area, std::function<void()> func)
+	{
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (true)
+		{
+			if (area.leftReleased())
+			{
+				func();
+			}
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TArea>
+	inline CoTask<void> ExecOnLeftClickedThenReleased(const TArea area, std::function<void()> func)
+	{
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (true)
+		{
+			if (area.leftClicked())
+			{
+				const auto [releasedInArea, _] = co_await WhenAny(WaitForLeftReleased(area), WaitForUp(MouseL));
+				if (releasedInArea.has_value())
+				{
+					func();
+				}
+			}
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TArea>
+	inline CoTask<void> ExecOnRightClicked(const TArea area, std::function<void()> func)
+	{
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (true)
+		{
+			if (area.rightClicked())
+			{
+				func();
+			}
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TArea>
+	inline CoTask<void> ExecOnRightPressed(const TArea area, std::function<void()> func)
+	{
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (true)
+		{
+			if (area.rightPressed())
+			{
+				func();
+			}
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TArea>
+	inline CoTask<void> ExecOnRightReleased(const TArea area, std::function<void()> func)
+	{
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (true)
+		{
+			if (area.rightReleased())
+			{
+				func();
+			}
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TArea>
+	inline CoTask<void> ExecOnRightClickedThenReleased(const TArea area, std::function<void()> func)
+	{
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (true)
+		{
+			if (area.rightClicked())
+			{
+				const auto [releasedInArea, _] = co_await WhenAny(WaitForRightReleased(area), WaitForUp(MouseR));
+				if (releasedInArea.has_value())
+				{
+					func();
+				}
+			}
+			co_yield detail::FrameTiming::Update;
+		}
+	}
+
+	template <class TArea>
+	inline CoTask<void> ExecOnMouseOver(const TArea area, std::function<void()> func)
+	{
+		if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+		{
+			co_yield detail::FrameTiming::Update;
+		}
+
+		while (true)
+		{
+			if (area.mouseOver())
 			{
 				func();
 			}

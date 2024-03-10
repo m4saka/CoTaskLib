@@ -1070,18 +1070,26 @@ namespace CoTaskLib
 		return detail::s_fadeCount > 0;
 	}
 
-	void PushIsFading()
+	class ScopedSetIsFadingToTrue : Uncopyable
 	{
-		++detail::s_fadeCount;
-	}
-
-	void PopIsFading()
-	{
-		if (detail::s_fadeCount > 0)
+	public:
+		ScopedSetIsFadingToTrue()
 		{
-			--detail::s_fadeCount;
+			++detail::s_fadeCount;
 		}
-	}
+
+		~ScopedSetIsFadingToTrue()
+		{
+			if (detail::s_fadeCount > 0)
+			{
+				--detail::s_fadeCount;
+			}
+		}
+
+		ScopedSetIsFadingToTrue(ScopedSetIsFadingToTrue&&) = default;
+
+		ScopedSetIsFadingToTrue& operator=(ScopedSetIsFadingToTrue&&) = default;
+	};
 
 	namespace detail
 	{
@@ -1090,7 +1098,6 @@ namespace CoTaskLib
 		private:
 			Timer m_timer;
 			double m_t = 0.0;
-			bool m_fadingStatePushed = false;
 
 		public:
 			explicit FadeSceneBase(const Duration& duration)
@@ -1098,18 +1105,11 @@ namespace CoTaskLib
 			{
 			}
 
-			virtual ~FadeSceneBase()
-			{
-				if (m_fadingStatePushed)
-				{
-					PopIsFading();
-				}
-			}
+			virtual ~FadeSceneBase() = default;
 
 			CoTask<void> start() override final
 			{
-				PushIsFading();
-				m_fadingStatePushed = true;
+				const ScopedSetIsFadingToTrue scopedSetIsFadingToTrue;
 
 				m_timer.start();
 				while (true)
@@ -1125,9 +1125,6 @@ namespace CoTaskLib
 				// 最後に必ずt=1.0で描画されるように
 				m_t = 1.0;
 				co_yield FrameTiming::Update;
-
-				PopIsFading();
-				m_fadingStatePushed = false;
 			}
 
 			void draw() const override final

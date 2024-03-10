@@ -1112,9 +1112,13 @@ namespace CoTaskLib
 				m_fadingStatePushed = true;
 
 				m_timer.start();
-				while (m_t < 1.0)
+				while (true)
 				{
 					m_t = m_timer.progress0_1();
+					if (m_t >= 1.0)
+					{
+						break;
+					}
 					co_yield FrameTiming::Update;
 				}
 

@@ -42,17 +42,20 @@ namespace CoTaskLib
 			PostPresent,
 		};
 
-		class ICoTask
+		class IAwaiter
 		{
 		public:
-			virtual ~ICoTask() = default;
+			virtual ~IAwaiter() = default;
 
 			virtual void resume(FrameTiming) = 0;
 
 			virtual bool done() const = 0;
 		};
 
-		using TaskID = uint64;
+		using AwaiterID = uint64;
+
+		template <typename TResult>
+		class CoTaskAwaiter;
 	}
 
 	template <typename TResult>
@@ -96,7 +99,7 @@ namespace CoTaskLib
 				virtual bool update() override
 				{
 					m_isFirstUpdated = true;
-					m_instance->resume(detail::FrameTiming::Update);
+					m_instance->resume(FrameTiming::Update);
 					return true;
 				}
 
@@ -107,7 +110,7 @@ namespace CoTaskLib
 						// Addonの初回drawがupdateより先に実行される挙動を回避
 						return;
 					}
-					m_instance->resume(detail::FrameTiming::Draw);
+					m_instance->resume(FrameTiming::Draw);
 				}
 
 				virtual void postPresent() override
@@ -117,7 +120,7 @@ namespace CoTaskLib
 						// Addonの初回postPresentがupdateより先に実行される挙動を回避
 						return;
 					}
-					m_instance->resume(detail::FrameTiming::PostPresent);
+					m_instance->resume(FrameTiming::PostPresent);
 				}
 
 				[[nodiscard]]
@@ -127,35 +130,35 @@ namespace CoTaskLib
 				}
 			};
 
-			detail::FrameTiming m_currentFrameTiming = detail::FrameTiming::Init;
+			FrameTiming m_currentFrameTiming = FrameTiming::Init;
 
-			detail::TaskID m_nextTaskID = 1;
+			AwaiterID m_nextAwaiterID = 1;
 
-			std::optional<detail::TaskID> m_currentRunningTaskID = none;
+			std::optional<AwaiterID> m_currentAwaiterID = none;
 
-			std::map<detail::TaskID, std::unique_ptr<detail::ICoTask>> m_tasks;
+			std::map<AwaiterID, std::unique_ptr<IAwaiter>> m_awaiters;
 
 		public:
 			CoTaskBackend() = default;
 
-			void resume(detail::FrameTiming frameTiming)
+			void resume(FrameTiming frameTiming)
 			{
 				m_currentFrameTiming = frameTiming;
-				for (auto it = m_tasks.begin(); it != m_tasks.end();)
+				for (auto it = m_awaiters.begin(); it != m_awaiters.end();)
 				{
-					m_currentRunningTaskID = it->first;
+					m_currentAwaiterID = it->first;
 
 					it->second->resume(frameTiming);
 					if (it->second->done())
 					{
-						it = m_tasks.erase(it);
+						it = m_awaiters.erase(it);
 					}
 					else
 					{
 						++it;
 					}
 				}
-				m_currentRunningTaskID = none;
+				m_currentAwaiterID = none;
 			}
 
 			static void Init()
@@ -164,9 +167,9 @@ namespace CoTaskLib
 			}
 
 			[[nodiscard]]
-			static detail::TaskID RegisterTask(std::unique_ptr<detail::ICoTask>&& task)
+			static AwaiterID Add(std::unique_ptr<IAwaiter>&& awaiter)
 			{
-				if (!task)
+				if (!awaiter)
 				{
 					throw Error{ U"CoTask is nullptr" };
 				}
@@ -175,44 +178,44 @@ namespace CoTaskLib
 				{
 					throw Error{ U"CoTaskBackend is not initialized" };
 				}
-				const detail::TaskID id = s_pInstance->m_nextTaskID++;
-				s_pInstance->m_tasks.emplace(id, std::move(task));
+				const AwaiterID id = s_pInstance->m_nextAwaiterID++;
+				s_pInstance->m_awaiters.emplace(id, std::move(awaiter));
 				return id;
 			}
 
-			static void UnregisterTask(detail::TaskID id)
+			static void Remove(AwaiterID id)
 			{
 				if (!s_pInstance)
 				{
 					// Note: ユーザーがScopedCoTaskRunをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
 					return;
 				}
-				if (id == s_pInstance->m_currentRunningTaskID)
+				if (id == s_pInstance->m_currentAwaiterID)
 				{
 					throw Error{ U"CoTaskBackend::UnregisterTask: Cannot unregister the currently running task" };
 				}
-				s_pInstance->m_tasks.erase(id);
+				s_pInstance->m_awaiters.erase(id);
 			}
 
 			[[nodiscard]]
-			static bool IsTaskDone(detail::TaskID id)
+			static bool IsDone(AwaiterID id)
 			{
 				if (!s_pInstance)
 				{
 					throw Error{ U"CoTaskBackend is not initialized" };
 				}
-				if (s_pInstance->m_tasks.contains(id))
+				if (s_pInstance->m_awaiters.contains(id))
 				{
-					return s_pInstance->m_tasks.at(id)->done();
+					return s_pInstance->m_awaiters.at(id)->done();
 				}
 				else
 				{
-					return id < s_pInstance->m_nextTaskID;
+					return id < s_pInstance->m_nextAwaiterID;
 				}
 			}
 
 			[[nodiscard]]
-			static detail::FrameTiming CurrentFrameTiming()
+			static FrameTiming CurrentFrameTiming()
 			{
 				if (!s_pInstance)
 				{
@@ -222,16 +225,20 @@ namespace CoTaskLib
 			}
 		};
 
-		class ScopedCoTaskRunLifetime : Uncopyable
+		class ScopedCoTaskRunLifetime
 		{
 		private:
-			std::optional<detail::TaskID> m_id;
+			std::optional<AwaiterID> m_id;
 
 		public:
-			explicit ScopedCoTaskRunLifetime(const std::optional<detail::TaskID>& id)
+			explicit ScopedCoTaskRunLifetime(const std::optional<AwaiterID>& id)
 				: m_id(id)
 			{
 			}
+
+			ScopedCoTaskRunLifetime(const ScopedCoTaskRunLifetime&) = delete;
+
+			ScopedCoTaskRunLifetime& operator=(const ScopedCoTaskRunLifetime&) = delete;
 
 			ScopedCoTaskRunLifetime(ScopedCoTaskRunLifetime&& rhs) noexcept
 				: m_id(rhs.m_id)
@@ -245,7 +252,7 @@ namespace CoTaskLib
 				{
 					if (m_id)
 					{
-						CoTaskBackend::UnregisterTask(m_id.value());
+						CoTaskBackend::Remove(m_id.value());
 					}
 					m_id = rhs.m_id;
 					rhs.m_id = none;
@@ -257,34 +264,37 @@ namespace CoTaskLib
 			{
 				if (m_id)
 				{
-					CoTaskBackend::UnregisterTask(m_id.value());
+					CoTaskBackend::Remove(m_id.value());
 				}
 			}
 
 			[[nodiscard]]
 			bool done() const
 			{
-				return !m_id || CoTaskBackend::IsTaskDone(m_id.value());
+				return !m_id || CoTaskBackend::IsDone(m_id.value());
 			}
 		};
 
 		template <typename TResult>
-		std::optional<TaskID> UpdateTaskOnceAndRegisterIfNotDone(CoTask<TResult>&& task)
+		std::optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(CoTaskAwaiter<TResult>&& awaiter)
 		{
-			if (task.done())
+			if (awaiter.done())
 			{
 				// 既に終了済み
 				return none;
 			}
 
-			task.resume(detail::CoTaskBackend::CurrentFrameTiming());
-			if (task.done())
+			awaiter.resume(CoTaskBackend::CurrentFrameTiming());
+			if (awaiter.done())
 			{
 				// フレーム待ちなしで終了した場合は登録不要
 				return none;
 			}
-			return CoTaskBackend::RegisterTask(std::make_unique<CoTask<TResult>>(std::move(task)));
+			return CoTaskBackend::Add(std::make_unique<CoTaskAwaiter<TResult>>(std::move(awaiter)));
 		}
+
+		template <typename TResult>
+		std::optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(const CoTaskAwaiter<TResult>& awaiter) = delete;
 	}
 
 	class ScopedCoTaskRun
@@ -294,8 +304,8 @@ namespace CoTaskLib
 
 	public:
 		template <typename TResult>
-		explicit ScopedCoTaskRun(CoTask<TResult>&& task)
-			: m_lifetime(detail::UpdateTaskOnceAndRegisterIfNotDone(std::move(task)))
+		explicit ScopedCoTaskRun(detail::CoTaskAwaiter<TResult>&& awaiter)
+			: m_lifetime(detail::ResumeAwaiterOnceAndRegisterIfNotDone(std::move(awaiter)))
 		{
 		}
 
@@ -382,7 +392,7 @@ namespace CoTaskLib
 					return;
 				}
 
-				if (m_handle.promise().resumeSubTask(frameTiming))
+				if (m_handle.promise().resumeSubAwaiter(frameTiming))
 				{
 					return;
 				}
@@ -396,17 +406,6 @@ namespace CoTaskLib
 				m_handle.promise().rethrowIfException();
 			}
 
-			void setNestLevel(uint64 level)
-			{
-				m_handle.promise().setNestLevel(level);
-			}
-
-			[[nodiscard]]
-			uint64 nestLevel() const
-			{
-				return m_handle.promise().nestLevel();
-			}
-
 			FrameTiming nextResumeTiming() const
 			{
 				return m_handle.promise().nextResumeTiming();
@@ -418,7 +417,7 @@ namespace CoTaskLib
 	class CoSceneBase;
 
 	template <typename TResult>
-	class [[nodiscard]] CoTask : public detail::ICoTask
+	class [[nodiscard]] CoTask
 	{
 	private:
 		detail::CoroutineHandleWrapper<TResult> m_handle;
@@ -441,7 +440,7 @@ namespace CoTaskLib
 
 		CoTask<TResult>& operator=(CoTask<TResult>&& rhs) = default;
 
-		virtual void resume(detail::FrameTiming frameTiming) override
+		virtual void resume(detail::FrameTiming frameTiming)
 		{
 			if (m_handle.done())
 			{
@@ -451,28 +450,9 @@ namespace CoTaskLib
 		}
 
 		[[nodiscard]]
-		virtual bool done() const override
+		virtual bool done() const
 		{
 			return m_handle.done();
-		}
-
-		[[nodiscard]]
-		bool await_ready()
-		{
-			resume(detail::CoTaskBackend::CurrentFrameTiming());
-			return m_handle.done();
-		}
-
-		template <typename TResultOther>
-		void await_suspend(std::coroutine_handle<detail::Promise<TResultOther>> handle)
-		{
-			m_handle.setNestLevel(handle.promise().nestLevel() + 1);
-			handle.promise().setSubTask(this);
-		}
-
-		TResult await_resume() const
-		{
-			return m_handle.value();
 		}
 
 		[[nodiscard]]
@@ -484,7 +464,7 @@ namespace CoTaskLib
 		[[nodiscard]]
 		ScopedCoTaskRun runScoped()&&
 		{
-			return ScopedCoTaskRun{ std::move(*this) };
+			return ScopedCoTaskRun{ detail::CoTaskAwaiter<TResult>{ std::move(*this) } };
 		}
 
 		void runForget()&&
@@ -495,36 +475,96 @@ namespace CoTaskLib
 				// フレーム待ちなしで終了した場合は登録不要
 				return;
 			}
-			(void)detail::CoTaskBackend::RegisterTask(std::make_unique<CoTask<TResult>>(std::move(*this)));
+			(void)detail::CoTaskBackend::Add(std::make_unique<detail::CoTaskAwaiter<TResult>>(std::move(*this)));
 		}
 	};
+
+	namespace detail
+	{
+		template <typename TResult>
+		class [[nodiscard]] CoTaskAwaiter : public detail::IAwaiter
+		{
+		private:
+			CoTask<TResult> m_task;
+
+		public:
+			explicit CoTaskAwaiter(CoTask<TResult>&& task)
+				: m_task(std::move(task))
+			{
+			}
+
+			CoTaskAwaiter(const CoTaskAwaiter<TResult>&) = delete;
+
+			CoTaskAwaiter<TResult>& operator=(const CoTaskAwaiter<TResult>&) = delete;
+
+			CoTaskAwaiter(CoTaskAwaiter<TResult>&& rhs) = default;
+
+			CoTaskAwaiter<TResult>& operator=(CoTaskAwaiter<TResult>&& rhs) = default;
+
+			virtual void resume(detail::FrameTiming frameTiming) override
+			{
+				m_task.resume(frameTiming);
+			}
+
+			[[nodiscard]]
+			virtual bool done() const override
+			{
+				return m_task.done();
+			}
+
+			[[nodiscard]]
+			bool await_ready()
+			{
+				resume(detail::CoTaskBackend::CurrentFrameTiming());
+				return m_task.done();
+			}
+
+			template <typename TResultOther>
+			void await_suspend(std::coroutine_handle<detail::Promise<TResultOther>> handle)
+			{
+				handle.promise().setSubAwaiter(this);
+			}
+
+			TResult await_resume() const
+			{
+				return m_task.value();
+			}
+
+			[[nodiscard]]
+			TResult value() const
+			{
+				return m_task.value();
+			}
+		};
+	}
 
 	template <typename TResult>
 	auto operator co_await(CoTask<TResult>&& rhs)
 	{
-		return std::move(rhs);
+		return detail::CoTaskAwaiter<TResult>{ std::move(rhs) };
 	}
 
 	template <typename TResult>
-	auto operator co_await(CoTask<TResult>& rhs) = delete;
+	auto operator co_await(const CoTask<TResult>& rhs) = delete;
 
 	namespace detail
 	{
-		class PromiseBase : Uncopyable
+		class PromiseBase
 		{
 		protected:
-			detail::ICoTask* m_pSubTask = nullptr;
+			IAwaiter* m_pSubAwaiter = nullptr;
 			FrameTiming m_nextResumeTiming = FrameTiming::Update;
 
 			std::exception_ptr m_exception;
-			uint64 m_nestLevel = 0;
 
 		public:
-			static constexpr uint64 MaxNestLevel = 250; // Note: MSVCのDebugビルドだと300ネストあたりでアクセス違反が起きてクラッシュするので、一旦はそれより前に例外を吐くようにしている
-
 			virtual ~PromiseBase() = 0;
 
 			PromiseBase() = default;
+
+			PromiseBase(const PromiseBase&) = delete;
+
+			PromiseBase& operator=(const PromiseBase&) = delete;
 
 			PromiseBase(PromiseBase&&) = default;
 
@@ -567,42 +607,27 @@ namespace CoTaskLib
 			}
 
 			[[nodiscard]]
-			bool resumeSubTask(FrameTiming frameTiming)
+			bool resumeSubAwaiter(FrameTiming frameTiming)
 			{
-				if (!m_pSubTask)
+				if (!m_pSubAwaiter)
 				{
 					return false;
 				}
 
-				m_pSubTask->resume(frameTiming);
+				m_pSubAwaiter->resume(frameTiming);
 
-				if (m_pSubTask->done())
+				if (m_pSubAwaiter->done())
 				{
-					m_pSubTask = nullptr;
+					m_pSubAwaiter = nullptr;
 					return false;
 				}
 
 				return true;
 			}
 
-			void setSubTask(detail::ICoTask* pSubTask)
+			void setSubAwaiter(IAwaiter* pSubAwaiter)
 			{
-				m_pSubTask = pSubTask;
-			}
-
-			void setNestLevel(uint64 level)
-			{
-				if (level > MaxNestLevel)
-				{
-					throw Error{ U"CoTask is too deeply nested" };
-				}
-				m_nestLevel = level;
-			}
-
-			[[nodiscard]]
-			uint64 nestLevel() const
-			{
-				return m_nestLevel;
+				m_pSubAwaiter = pSubAwaiter;
 			}
 
 			[[nodiscard]]
@@ -674,6 +699,7 @@ namespace CoTaskLib
 				rethrowIfException();
 			}
 
+			[[nodiscard]]
 			CoTask<void> get_return_object()
 			{
 				return CoTask<void>{ CoTask<void>::handle_type::from_promise(*this) };
@@ -1327,6 +1353,16 @@ namespace CoTaskLib
 	public:
 		using result_type = TResult;
 
+		CoSceneBase() = default;
+
+		CoSceneBase(const CoSceneBase&) = delete;
+
+		CoSceneBase& operator=(const CoSceneBase&) = delete;
+
+		CoSceneBase(CoSceneBase&&) = default;
+
+		CoSceneBase& operator=(CoSceneBase&&) = default;
+
 		virtual ~CoSceneBase() = default;
 
 		virtual CoTask<TResult> start() = 0;
@@ -1339,7 +1375,7 @@ namespace CoTaskLib
 	template <detail::CoSceneConcept TScene>
 	auto operator co_await(TScene&& scene)
 	{
-		return detail::ScenePtrToTask(std::make_unique<TScene>(std::move(scene)));
+		return detail::CoTaskAwaiter<typename TScene::result_type>{ detail::ScenePtrToTask(std::make_unique<TScene>(std::move(scene))) };
 	}
 
 	template <detail::CoSceneConcept TScene>
@@ -1356,7 +1392,7 @@ namespace CoTaskLib
 		return detail::s_fadeCount > 0;
 	}
 
-	class ScopedSetIsFadingToTrue : Uncopyable
+	class ScopedSetIsFadingToTrue
 	{
 	public:
 		ScopedSetIsFadingToTrue()
@@ -1371,6 +1407,10 @@ namespace CoTaskLib
 				--detail::s_fadeCount;
 			}
 		}
+
+		ScopedSetIsFadingToTrue(const ScopedSetIsFadingToTrue&) = delete;
+
+		ScopedSetIsFadingToTrue& operator=(const ScopedSetIsFadingToTrue&) = delete;
 
 		ScopedSetIsFadingToTrue(ScopedSetIsFadingToTrue&&) = default;
 

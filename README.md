@@ -103,10 +103,10 @@ CoTask<void> ExampleTask()
 もしシーンクラスのコンストラクタに引数が必要な場合、`Co::MakeTask`関数の引数として渡すことができます。
 
 ```cpp
-const auto taskRun = MakeTask<ExampleScene>().runScoped();
+const auto taskRun = Co::MakeTask<ExampleScene>().runScoped();
 ```
 ```cpp
-MakeTask<ExampleScene>().runForget();
+Co::MakeTask<ExampleScene>().runForget();
 ```
 
 ### コルーチン内から実行する場合
@@ -115,7 +115,7 @@ MakeTask<ExampleScene>().runForget();
 ```cpp
 CoTask<void> ExampleTask()
 {
-	co_await MakeTask<ExampleScene>(); // ExampleSceneを実行し、完了まで待機します
+	co_await Co::MakeTask<ExampleScene>(); // ExampleSceneを実行し、完了まで待機します
 }
 ```
 

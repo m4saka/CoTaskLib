@@ -1264,15 +1264,21 @@ namespace CoTaskLib
 	}
 
 	template <typename TResult>
-	CoTask<TResult> ToCoTask(CoTask<TResult>&& task)
+	CoTask<TResult> ToTask(CoTask<TResult>&& task)
 	{
 		return task;
 	}
 
 	template <detail::CoSceneConcept TScene>
-	CoTask<typename TScene::result_type> ToCoTask(TScene&& scene)
+	CoTask<typename TScene::result_type> ToTask(TScene&& scene)
 	{
 		return detail::ScenePtrToTask(std::make_unique<TScene>(std::move(scene)));
+	}
+
+	template <detail::CoSceneConcept TScene, class... Args>
+	CoTask<typename TScene::result_type> MakeTask(Args&&... args)
+	{
+		return detail::ScenePtrToTask(std::make_unique<TScene>(std::forward<Args>(args)...));
 	}
 
 	template <class... TTasks>
@@ -1280,8 +1286,8 @@ namespace CoTaskLib
 	{
 		if constexpr ((!std::is_same_v<TTasks, CoTask<typename TTasks::result_type>> || ...))
 		{
-			// TTasksの中にCoTaskでないものが1つでも含まれる場合は、ToCoTaskで変換して呼び出し直す
-			co_return co_await WhenAll(ToCoTask(std::forward<TTasks>(args))...);
+			// TTasksの中にCoTaskでないものが1つでも含まれる場合は、ToTaskで変換して呼び出し直す
+			co_return co_await WhenAll(ToTask(std::forward<TTasks>(args))...);
 		}
 		else
 		{
@@ -1316,8 +1322,8 @@ namespace CoTaskLib
 	{
 		if constexpr ((!std::is_same_v<TTasks, CoTask<typename TTasks::result_type>> || ...))
 		{
-			// TTasksの中にCoTaskでないものが1つでも含まれる場合は、ToCoTaskで変換して呼び出し直す
-			co_return co_await WhenAny(ToCoTask(std::forward<TTasks>(args))...);
+			// TTasksの中にCoTaskでないものが1つでも含まれる場合は、ToTaskで変換して呼び出し直す
+			co_return co_await WhenAny(ToTask(std::forward<TTasks>(args))...);
 		}
 		else
 		{

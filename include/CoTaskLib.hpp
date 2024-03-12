@@ -1387,7 +1387,7 @@ namespace CoTaskLib
 	}
 
 	[[nodiscard]]
-	bool IsFading()
+	inline bool IsFading()
 	{
 		return detail::s_fadeCount > 0;
 	}

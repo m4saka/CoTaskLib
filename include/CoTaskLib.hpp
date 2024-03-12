@@ -1219,24 +1219,24 @@ inline namespace CoTaskLib
 				co_yield detail::FrameTiming::Update;
 			}
 		}
-	}
 
-	namespace detail
-	{
 		// voidを含むタプルは使用できないため、voidの代わりに戻り値として返すための空の構造体を用意
 		struct VoidResult
 		{
 		};
+	}
 
+	namespace detail
+	{
 		template <typename TResult>
-		using VoidResultTypeReplace = std::conditional_t<std::is_void_v<TResult>, VoidResult, TResult>;
+		using VoidResultTypeReplace = std::conditional_t<std::is_void_v<TResult>, Co::VoidResult, TResult>;
 
 		template <typename TResult>
 		auto ConvertVoidResult(const CoTask<TResult>& task) -> VoidResultTypeReplace<TResult>
 		{
 			if constexpr (std::is_void_v<TResult>)
 			{
-				return VoidResult{};
+				return Co::VoidResult{};
 			}
 			else
 			{
@@ -1254,7 +1254,7 @@ inline namespace CoTaskLib
 
 			if constexpr (std::is_void_v<TResult>)
 			{
-				return MakeOptional(VoidResult{});
+				return MakeOptional(Co::VoidResult{});
 			}
 			else
 			{

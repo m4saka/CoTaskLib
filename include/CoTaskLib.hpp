@@ -1394,6 +1394,8 @@ inline namespace CoTaskLib
 	template <detail::CoSceneConcept TScene>
 	auto operator co_await(TScene&& scene)
 	{
+		// CoSceneをCo::MakeTaskを使わずco_awaitに直接渡すには、ムーブ構築可能である必要がある
+		static_assert(std::is_move_constructible_v<TScene>, "To pass a CoScene directly to co_await, it must be move-constructible. Otherwise, use Co::MakeTask<TScene>() instead.");
 		return detail::CoTaskAwaiter<typename TScene::result_type>{ detail::ScenePtrToTask(std::make_unique<TScene>(std::move(scene))) };
 	}
 

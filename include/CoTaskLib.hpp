@@ -1226,6 +1226,15 @@ inline namespace cotasklib
 
 		namespace detail
 		{
+			struct BackToPrevScene_tag {};
+			struct SceneBreak_tag {};
+		}
+
+		using NextSceneFactory = std::function<std::unique_ptr<SceneBase>()>;
+		using NextScene = std::variant<NextSceneFactory, detail::BackToPrevScene_tag, detail::SceneBreak_tag>;
+
+		namespace detail
+		{
 			template <typename TResult>
 			using VoidResultTypeReplace = std::conditional_t<std::is_void_v<TResult>, Co::VoidResult, TResult>;
 
@@ -1277,19 +1286,31 @@ inline namespace cotasklib
 			Task<void> ScenePtrToTask(std::unique_ptr<TScene> scene)
 			{
 				std::unique_ptr<SceneBase> runningScene = std::move(scene);
+				std::stack<NextSceneFactory> sceneFactoryStack;
 
 				while (true)
 				{
 					const auto scopedRun = Co::EveryFrameDraw([&runningScene]() { runningScene->draw(); }).runScoped();
-					const auto sceneFactory = co_await runningScene->start();
-					runningScene.reset();
-					if (sceneFactory)
+					const auto nextScene = co_await runningScene->start();
+					if (const auto sceneFactory = std::get_if<NextSceneFactory>(&nextScene))
 					{
-						runningScene = sceneFactory();
+						runningScene.reset();
+						runningScene = (*sceneFactory)();
 						if (!runningScene)
 						{
 							break;
 						}
+						sceneFactoryStack.push(*sceneFactory);
+					}
+					else if (std::holds_alternative<BackToPrevScene_tag>(nextScene))
+					{
+						if (sceneFactoryStack.empty())
+						{
+							break;
+						}
+						runningScene.reset();
+						runningScene = sceneFactoryStack.top()();
+						sceneFactoryStack.pop();
 					}
 					else
 					{
@@ -1569,8 +1590,6 @@ inline namespace cotasklib
 			return detail::SequencePtrToTask(std::make_unique<detail::FadeOutSequence>(duration, color));
 		}
 
-		using NextScene = std::function<std::unique_ptr<SceneBase>()>;
-
 		template <detail::SceneConcept TScene, typename... Args>
 		[[nodiscard]]
 		NextScene MakeNextScene(Args... args)
@@ -1583,7 +1602,13 @@ inline namespace cotasklib
 		[[nodiscard]]
 		inline NextScene SceneBreak()
 		{
-			return nullptr;
+			return detail::SceneBreak_tag{};
+		}
+
+		[[nodiscard]]
+		inline NextScene BackToPrevScene()
+		{
+			return detail::BackToPrevScene_tag{};
 		}
 
 		class [[nodiscard]] SceneBase

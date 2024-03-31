@@ -422,6 +422,8 @@ inline namespace cotasklib
 		template <typename TResult>
 		class SequenceBase;
 
+		class SceneBase;
+
 		template <typename TResult>
 		class [[nodiscard]] Task
 		{
@@ -1267,6 +1269,34 @@ inline namespace cotasklib
 				const auto scopedRun = Co::EveryFrameDraw([&sequence]() { sequence->draw(); }).runScoped();
 				co_return co_await sequence->start();
 			}
+
+			template <typename TScene>
+			concept SceneConcept = std::derived_from<TScene, SceneBase>;
+
+			template <SceneConcept TScene>
+			Task<void> ScenePtrToTask(std::unique_ptr<TScene> scene)
+			{
+				std::unique_ptr<SceneBase> runningScene = std::move(scene);
+
+				while (true)
+				{
+					const auto scopedRun = Co::EveryFrameDraw([&runningScene]() { runningScene->draw(); }).runScoped();
+					const auto sceneFactory = co_await runningScene->start();
+					runningScene.reset();
+					if (sceneFactory)
+					{
+						runningScene = sceneFactory();
+						if (!runningScene)
+						{
+							break;
+						}
+					}
+					else
+					{
+						break;
+					}
+				}
+			}
 		}
 
 		template <typename TResult>
@@ -1281,10 +1311,22 @@ inline namespace cotasklib
 			return detail::SequencePtrToTask(std::make_unique<TSequence>(std::move(sequence)));
 		}
 
+		template <detail::SceneConcept TScene>
+		Task<void> ToTask(TScene&& scene)
+		{
+			return detail::ScenePtrToTask(std::make_unique<TScene>(std::move(scene)));
+		}
+
 		template <detail::SequenceConcept TSequence, class... Args>
 		Task<typename TSequence::result_type> MakeTask(Args&&... args)
 		{
 			return detail::SequencePtrToTask(std::make_unique<TSequence>(std::forward<Args>(args)...));
+		}
+
+		template <detail::SceneConcept TScene, class... Args>
+		Task<void> MakeTask(Args&&... args)
+		{
+			return detail::ScenePtrToTask(std::make_unique<TScene>(std::forward<Args>(args)...));
 		}
 
 		template <class... TTasks>
@@ -1387,7 +1429,7 @@ inline namespace cotasklib
 		template <detail::SequenceConcept TSequence>
 		auto operator co_await(TSequence&& sequence)
 		{
-			// Co::SequenceをCo::MakeTaskを使わずco_awaitに直接渡すには、ムーブ構築可能である必要がある
+			// SequenceをCo::MakeTaskを使わずco_awaitに直接渡すには、ムーブ構築可能である必要がある
 			static_assert(std::is_move_constructible_v<TSequence>, "To pass a Sequence directly to co_await, it must be move-constructible. Otherwise, use Co::MakeTask<TSequence>() instead.");
 			return detail::TaskAwaiter<typename TSequence::result_type>{ detail::SequencePtrToTask(std::make_unique<TSequence>(std::move(sequence))) };
 		}
@@ -1526,5 +1568,57 @@ inline namespace cotasklib
 		{
 			return detail::SequencePtrToTask(std::make_unique<detail::FadeOutSequence>(duration, color));
 		}
+
+		using NextScene = std::function<std::unique_ptr<SceneBase>()>;
+
+		template <detail::SceneConcept TScene, typename... Args>
+		[[nodiscard]]
+		NextScene MakeNextScene(Args... args)
+		{
+			// Args...はコピー構築可能である必要がある
+			static_assert((std::is_copy_constructible_v<Args> && ...), "Scene constructor arguments must be copy-constructible.");
+			return [&] { return std::make_unique<TScene>(args...); };
+		}
+
+		[[nodiscard]]
+		inline NextScene SceneBreak()
+		{
+			return nullptr;
+		}
+
+		class [[nodiscard]] SceneBase
+		{
+		public:
+			SceneBase() = default;
+
+			SceneBase(const SceneBase&) = delete;
+
+			SceneBase& operator=(const SceneBase&) = delete;
+
+			SceneBase(SceneBase&&) = default;
+
+			SceneBase& operator=(SceneBase&&) = default;
+
+			virtual ~SceneBase() = default;
+
+			// 戻り値は次のシーン。nullptrを返すとシーン遷移を終了する
+			[[nodiscard]]
+			virtual Task<NextScene> start() = 0;
+
+			virtual void draw() const
+			{
+			}
+		};
+
+		template <detail::SceneConcept TScene>
+		auto operator co_await(TScene&& sequence)
+		{
+			// SceneをCo::MakeTaskを使わずco_awaitに直接渡すには、ムーブ構築可能である必要がある
+			static_assert(std::is_move_constructible_v<TScene>, "To pass a Scene directly to co_await, it must be move-constructible. Otherwise, use Co::MakeTask<TScene>() instead.");
+			return detail::TaskAwaiter<typename TScene::result_type>{ detail::SequencePtrToTask(std::make_unique<TScene>(std::move(sequence))) };
+		}
+
+		template <detail::SceneConcept TScene>
+		auto operator co_await(TScene& sequence) = delete;
 	}
 }

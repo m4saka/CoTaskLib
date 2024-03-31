@@ -31,278 +31,278 @@
 #include <coroutine>
 
 #ifdef NO_COTASKLIB_USING
-namespace CoTaskLib
+namespace cotasklib
 #else
-inline namespace CoTaskLib
+inline namespace cotasklib
 #endif
 {
-	namespace detail
+	namespace Co
 	{
-		enum class FrameTiming
+		namespace detail
 		{
-			Init,
-			Update,
-			Draw,
-			PostPresent,
-		};
-
-		class IAwaiter
-		{
-		public:
-			virtual ~IAwaiter() = default;
-
-			virtual void resume(FrameTiming) = 0;
-
-			virtual bool done() const = 0;
-		};
-
-		using AwaiterID = uint64;
-
-		template <typename TResult>
-		class CoTaskAwaiter;
-	}
-
-	template <typename TResult>
-	class CoTask;
-
-	namespace detail
-	{
-		class CoTaskBackend
-		{
-		private:
-			static constexpr StringView AddonName{ U"CoTaskBackendAddon" };
-
-			static inline CoTaskBackend* s_pInstance = nullptr;
-
-			// Note: draw関数がconstであることの対処用にアドオンと実体を分離し、実体はポインタで持つようにしている
-			class CoTaskBackendAddon : public IAddon
+			enum class FrameTiming
 			{
-			private:
-				bool m_isFirstUpdated = false;
-				std::unique_ptr<CoTaskBackend> m_instance;
-
-			public:
-				CoTaskBackendAddon()
-					: m_instance{ std::make_unique<CoTaskBackend>() }
-				{
-					if (s_pInstance)
-					{
-						throw Error{ U"CoTaskBackendAddon: Instance already exists" };
-					}
-					s_pInstance = m_instance.get();
-				}
-
-				virtual ~CoTaskBackendAddon()
-				{
-					if (s_pInstance == m_instance.get())
-					{
-						s_pInstance = nullptr;
-					}
-				}
-
-				virtual bool update() override
-				{
-					m_isFirstUpdated = true;
-					m_instance->resume(FrameTiming::Update);
-					return true;
-				}
-
-				virtual void draw() const override
-				{
-					if (!m_isFirstUpdated)
-					{
-						// Addonの初回drawがupdateより先に実行される挙動を回避
-						return;
-					}
-					m_instance->resume(FrameTiming::Draw);
-				}
-
-				virtual void postPresent() override
-				{
-					if (!m_isFirstUpdated)
-					{
-						// Addonの初回postPresentがupdateより先に実行される挙動を回避
-						return;
-					}
-					m_instance->resume(FrameTiming::PostPresent);
-				}
-
-				[[nodiscard]]
-				CoTaskBackend* instance() const
-				{
-					return m_instance.get();
-				}
+				Init,
+				Update,
+				Draw,
+				PostPresent,
 			};
 
-			FrameTiming m_currentFrameTiming = FrameTiming::Init;
-
-			AwaiterID m_nextAwaiterID = 1;
-
-			std::optional<AwaiterID> m_currentAwaiterID = none;
-
-			std::map<AwaiterID, std::unique_ptr<IAwaiter>> m_awaiters;
-
-		public:
-			CoTaskBackend() = default;
-
-			void resume(FrameTiming frameTiming)
+			class IAwaiter
 			{
-				m_currentFrameTiming = frameTiming;
-				for (auto it = m_awaiters.begin(); it != m_awaiters.end();)
-				{
-					m_currentAwaiterID = it->first;
+			public:
+				virtual ~IAwaiter() = default;
 
-					it->second->resume(frameTiming);
-					if (it->second->done())
-					{
-						it = m_awaiters.erase(it);
-					}
-					else
-					{
-						++it;
-					}
-				}
-				m_currentAwaiterID = none;
-			}
+				virtual void resume(FrameTiming) = 0;
 
-			static void Init()
-			{
-				Addon::Register(AddonName, std::make_unique<CoTaskBackendAddon>());
-			}
+				virtual bool done() const = 0;
+			};
 
-			[[nodiscard]]
-			static AwaiterID Add(std::unique_ptr<IAwaiter>&& awaiter)
-			{
-				if (!awaiter)
-				{
-					throw Error{ U"CoTask is nullptr" };
-				}
+			using AwaiterID = uint64;
 
-				if (!s_pInstance)
-				{
-					throw Error{ U"CoTaskBackend is not initialized" };
-				}
-				const AwaiterID id = s_pInstance->m_nextAwaiterID++;
-				s_pInstance->m_awaiters.emplace(id, std::move(awaiter));
-				return id;
-			}
-
-			static void Remove(AwaiterID id)
-			{
-				if (!s_pInstance)
-				{
-					// Note: ユーザーがScopedTaskRunをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
-					return;
-				}
-				if (id == s_pInstance->m_currentAwaiterID)
-				{
-					throw Error{ U"CoTaskBackend::UnregisterTask: Cannot unregister the currently running task" };
-				}
-				s_pInstance->m_awaiters.erase(id);
-			}
-
-			[[nodiscard]]
-			static bool IsDone(AwaiterID id)
-			{
-				if (!s_pInstance)
-				{
-					throw Error{ U"CoTaskBackend is not initialized" };
-				}
-				if (s_pInstance->m_awaiters.contains(id))
-				{
-					return s_pInstance->m_awaiters.at(id)->done();
-				}
-				else
-				{
-					return id < s_pInstance->m_nextAwaiterID;
-				}
-			}
-
-			[[nodiscard]]
-			static FrameTiming CurrentFrameTiming()
-			{
-				if (!s_pInstance)
-				{
-					throw Error{ U"CoTaskBackend is not initialized" };
-				}
-				return s_pInstance->m_currentFrameTiming;
-			}
-		};
-
-		class ScopedTaskRunLifetime
-		{
-		private:
-			std::optional<AwaiterID> m_id;
-
-		public:
-			explicit ScopedTaskRunLifetime(const std::optional<AwaiterID>& id)
-				: m_id(id)
-			{
-			}
-
-			ScopedTaskRunLifetime(const ScopedTaskRunLifetime&) = delete;
-
-			ScopedTaskRunLifetime& operator=(const ScopedTaskRunLifetime&) = delete;
-
-			ScopedTaskRunLifetime(ScopedTaskRunLifetime&& rhs) noexcept
-				: m_id(rhs.m_id)
-			{
-				rhs.m_id = none;
-			}
-
-			ScopedTaskRunLifetime& operator=(ScopedTaskRunLifetime&& rhs) noexcept
-			{
-				if (this != &rhs)
-				{
-					if (m_id)
-					{
-						CoTaskBackend::Remove(m_id.value());
-					}
-					m_id = rhs.m_id;
-					rhs.m_id = none;
-				}
-				return *this;
-			}
-
-			~ScopedTaskRunLifetime()
-			{
-				if (m_id)
-				{
-					CoTaskBackend::Remove(m_id.value());
-				}
-			}
-
-			[[nodiscard]]
-			bool done() const
-			{
-				return !m_id || CoTaskBackend::IsDone(m_id.value());
-			}
-		};
-
-		template <typename TResult>
-		std::optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(CoTaskAwaiter<TResult>&& awaiter)
-		{
-			if (awaiter.done())
-			{
-				// 既に終了済み
-				return none;
-			}
-
-			awaiter.resume(CoTaskBackend::CurrentFrameTiming());
-			if (awaiter.done())
-			{
-				// フレーム待ちなしで終了した場合は登録不要
-				return none;
-			}
-			return CoTaskBackend::Add(std::make_unique<CoTaskAwaiter<TResult>>(std::move(awaiter)));
+			template <typename TResult>
+			class TaskAwaiter;
 		}
 
 		template <typename TResult>
-		std::optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(const CoTaskAwaiter<TResult>& awaiter) = delete;
-	}
+		class Task;
 
-	namespace Co
-	{
+		namespace detail
+		{
+			class Backend
+			{
+			private:
+				static constexpr StringView AddonName{ U"Co::BackendAddon" };
+
+				static inline Backend* s_pInstance = nullptr;
+
+				// Note: draw関数がconstであることの対処用にアドオンと実体を分離し、実体はポインタで持つようにしている
+				class BackendAddon : public IAddon
+				{
+				private:
+					bool m_isFirstUpdated = false;
+					std::unique_ptr<Backend> m_instance;
+
+				public:
+					BackendAddon()
+						: m_instance{ std::make_unique<Backend>() }
+					{
+						if (s_pInstance)
+						{
+							throw Error{ U"Co::BackendAddon: Instance already exists" };
+						}
+						s_pInstance = m_instance.get();
+					}
+
+					virtual ~BackendAddon()
+					{
+						if (s_pInstance == m_instance.get())
+						{
+							s_pInstance = nullptr;
+						}
+					}
+
+					virtual bool update() override
+					{
+						m_isFirstUpdated = true;
+						m_instance->resume(FrameTiming::Update);
+						return true;
+					}
+
+					virtual void draw() const override
+					{
+						if (!m_isFirstUpdated)
+						{
+							// Addonの初回drawがupdateより先に実行される挙動を回避
+							return;
+						}
+						m_instance->resume(FrameTiming::Draw);
+					}
+
+					virtual void postPresent() override
+					{
+						if (!m_isFirstUpdated)
+						{
+							// Addonの初回postPresentがupdateより先に実行される挙動を回避
+							return;
+						}
+						m_instance->resume(FrameTiming::PostPresent);
+					}
+
+					[[nodiscard]]
+					Backend* instance() const
+					{
+						return m_instance.get();
+					}
+				};
+
+				FrameTiming m_currentFrameTiming = FrameTiming::Init;
+
+				AwaiterID m_nextAwaiterID = 1;
+
+				std::optional<AwaiterID> m_currentAwaiterID = none;
+
+				std::map<AwaiterID, std::unique_ptr<IAwaiter>> m_awaiters;
+
+			public:
+				Backend() = default;
+
+				void resume(FrameTiming frameTiming)
+				{
+					m_currentFrameTiming = frameTiming;
+					for (auto it = m_awaiters.begin(); it != m_awaiters.end();)
+					{
+						m_currentAwaiterID = it->first;
+
+						it->second->resume(frameTiming);
+						if (it->second->done())
+						{
+							it = m_awaiters.erase(it);
+						}
+						else
+						{
+							++it;
+						}
+					}
+					m_currentAwaiterID = none;
+				}
+
+				static void Init()
+				{
+					Addon::Register(AddonName, std::make_unique<BackendAddon>());
+				}
+
+				[[nodiscard]]
+				static AwaiterID Add(std::unique_ptr<IAwaiter>&& awaiter)
+				{
+					if (!awaiter)
+					{
+						throw Error{ U"awaiter must not be nullptr" };
+					}
+
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+					const AwaiterID id = s_pInstance->m_nextAwaiterID++;
+					s_pInstance->m_awaiters.emplace(id, std::move(awaiter));
+					return id;
+				}
+
+				static void Remove(AwaiterID id)
+				{
+					if (!s_pInstance)
+					{
+						// Note: ユーザーがScopedTaskRunをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
+						return;
+					}
+					if (id == s_pInstance->m_currentAwaiterID)
+					{
+						throw Error{ U"Backend::UnregisterTask: Cannot unregister the currently running task" };
+					}
+					s_pInstance->m_awaiters.erase(id);
+				}
+
+				[[nodiscard]]
+				static bool IsDone(AwaiterID id)
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+					if (s_pInstance->m_awaiters.contains(id))
+					{
+						return s_pInstance->m_awaiters.at(id)->done();
+					}
+					else
+					{
+						return id < s_pInstance->m_nextAwaiterID;
+					}
+				}
+
+				[[nodiscard]]
+				static FrameTiming CurrentFrameTiming()
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+					return s_pInstance->m_currentFrameTiming;
+				}
+			};
+
+			class ScopedTaskRunLifetime
+			{
+			private:
+				std::optional<AwaiterID> m_id;
+
+			public:
+				explicit ScopedTaskRunLifetime(const std::optional<AwaiterID>& id)
+					: m_id(id)
+				{
+				}
+
+				ScopedTaskRunLifetime(const ScopedTaskRunLifetime&) = delete;
+
+				ScopedTaskRunLifetime& operator=(const ScopedTaskRunLifetime&) = delete;
+
+				ScopedTaskRunLifetime(ScopedTaskRunLifetime&& rhs) noexcept
+					: m_id(rhs.m_id)
+				{
+					rhs.m_id = none;
+				}
+
+				ScopedTaskRunLifetime& operator=(ScopedTaskRunLifetime&& rhs) noexcept
+				{
+					if (this != &rhs)
+					{
+						if (m_id)
+						{
+							Backend::Remove(m_id.value());
+						}
+						m_id = rhs.m_id;
+						rhs.m_id = none;
+					}
+					return *this;
+				}
+
+				~ScopedTaskRunLifetime()
+				{
+					if (m_id)
+					{
+						Backend::Remove(m_id.value());
+					}
+				}
+
+				[[nodiscard]]
+				bool done() const
+				{
+					return !m_id || Backend::IsDone(m_id.value());
+				}
+			};
+
+			template <typename TResult>
+			std::optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(TaskAwaiter<TResult>&& awaiter)
+			{
+				if (awaiter.done())
+				{
+					// 既に終了済み
+					return none;
+				}
+
+				awaiter.resume(Backend::CurrentFrameTiming());
+				if (awaiter.done())
+				{
+					// フレーム待ちなしで終了した場合は登録不要
+					return none;
+				}
+				return Backend::Add(std::make_unique<TaskAwaiter<TResult>>(std::move(awaiter)));
+			}
+
+			template <typename TResult>
+			std::optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(const TaskAwaiter<TResult>& awaiter) = delete;
+		}
+
 		class ScopedTaskRun
 		{
 		private:
@@ -310,7 +310,7 @@ inline namespace CoTaskLib
 
 		public:
 			template <typename TResult>
-			explicit ScopedTaskRun(detail::CoTaskAwaiter<TResult>&& awaiter)
+			explicit ScopedTaskRun(detail::TaskAwaiter<TResult>&& awaiter)
 				: m_lifetime(detail::ResumeAwaiterOnceAndRegisterIfNotDone(std::move(awaiter)))
 			{
 			}
@@ -327,406 +327,403 @@ inline namespace CoTaskLib
 				return m_lifetime.done();
 			}
 		};
-	}
 
-	namespace detail
-	{
-		template <typename TResult>
-		class Promise;
-
-		template <typename TResult>
-		class CoroutineHandleWrapper
+		namespace detail
 		{
-		private:
-			using handle_type = std::coroutine_handle<Promise<TResult>>;
+			template <typename TResult>
+			class Promise;
 
-			handle_type m_handle;
-
-		public:
-			explicit CoroutineHandleWrapper(handle_type handle)
-				: m_handle(std::move(handle))
+			template <typename TResult>
+			class CoroutineHandleWrapper
 			{
-			}
+			private:
+				using handle_type = std::coroutine_handle<Promise<TResult>>;
 
-			~CoroutineHandleWrapper()
-			{
-				if (m_handle)
+				handle_type m_handle;
+
+			public:
+				explicit CoroutineHandleWrapper(handle_type handle)
+					: m_handle(std::move(handle))
 				{
-					m_handle.destroy();
 				}
-			}
 
-			CoroutineHandleWrapper(const CoroutineHandleWrapper<TResult>&) = delete;
-
-			CoroutineHandleWrapper& operator=(const CoroutineHandleWrapper<TResult>&) = delete;
-
-			CoroutineHandleWrapper(CoroutineHandleWrapper<TResult>&& rhs) noexcept
-				: m_handle(rhs.m_handle)
-			{
-				rhs.m_handle = nullptr;
-			}
-
-			CoroutineHandleWrapper& operator=(CoroutineHandleWrapper<TResult>&& rhs) noexcept
-			{
-				if (this != &rhs)
+				~CoroutineHandleWrapper()
 				{
 					if (m_handle)
 					{
 						m_handle.destroy();
 					}
-					m_handle = rhs.m_handle;
+				}
+
+				CoroutineHandleWrapper(const CoroutineHandleWrapper<TResult>&) = delete;
+
+				CoroutineHandleWrapper& operator=(const CoroutineHandleWrapper<TResult>&) = delete;
+
+				CoroutineHandleWrapper(CoroutineHandleWrapper<TResult>&& rhs) noexcept
+					: m_handle(rhs.m_handle)
+				{
 					rhs.m_handle = nullptr;
 				}
-				return *this;
-			}
 
-			[[nodiscard]]
-			TResult value() const
-			{
-				return m_handle.promise().value();
-			}
-
-			[[nodiscard]]
-			bool done() const
-			{
-				return !m_handle || m_handle.done();
-			}
-
-			void resume(FrameTiming frameTiming) const
-			{
-				if (done())
+				CoroutineHandleWrapper& operator=(CoroutineHandleWrapper<TResult>&& rhs) noexcept
 				{
-					return;
+					if (this != &rhs)
+					{
+						if (m_handle)
+						{
+							m_handle.destroy();
+						}
+						m_handle = rhs.m_handle;
+						rhs.m_handle = nullptr;
+					}
+					return *this;
 				}
 
-				if (m_handle.promise().resumeSubAwaiter(frameTiming))
+				[[nodiscard]]
+				TResult value() const
 				{
-					return;
+					return m_handle.promise().value();
 				}
 
-				if (m_handle.promise().nextResumeTiming() != frameTiming)
+				[[nodiscard]]
+				bool done() const
 				{
-					return;
+					return !m_handle || m_handle.done();
 				}
 
-				m_handle.resume();
-				m_handle.promise().rethrowIfException();
-			}
+				void resume(FrameTiming frameTiming) const
+				{
+					if (done())
+					{
+						return;
+					}
 
-			FrameTiming nextResumeTiming() const
-			{
-				return m_handle.promise().nextResumeTiming();
-			}
-		};
-	}
+					if (m_handle.promise().resumeSubAwaiter(frameTiming))
+					{
+						return;
+					}
 
-	template <typename TResult>
-	class CoSceneBase;
+					if (m_handle.promise().nextResumeTiming() != frameTiming)
+					{
+						return;
+					}
 
-	template <typename TResult>
-	class [[nodiscard]] CoTask
-	{
-	private:
-		detail::CoroutineHandleWrapper<TResult> m_handle;
+					m_handle.resume();
+					m_handle.promise().rethrowIfException();
+				}
 
-	public:
-		using promise_type = detail::Promise<TResult>;
-		using handle_type = std::coroutine_handle<promise_type>;
-		using result_type = TResult;
-
-		explicit CoTask(handle_type h)
-			: m_handle(std::move(h))
-		{
+				FrameTiming nextResumeTiming() const
+				{
+					return m_handle.promise().nextResumeTiming();
+				}
+			};
 		}
-
-		CoTask(const CoTask<TResult>&) = delete;
-
-		CoTask<TResult>& operator=(const CoTask<TResult>&) = delete;
-
-		CoTask(CoTask<TResult>&& rhs) = default;
-
-		CoTask<TResult>& operator=(CoTask<TResult>&& rhs) = default;
-
-		virtual void resume(detail::FrameTiming frameTiming)
-		{
-			if (m_handle.done())
-			{
-				return;
-			}
-			m_handle.resume(frameTiming);
-		}
-
-		[[nodiscard]]
-		virtual bool done() const
-		{
-			return m_handle.done();
-		}
-
-		[[nodiscard]]
-		TResult value() const
-		{
-			return m_handle.value();
-		}
-
-		[[nodiscard]]
-		Co::ScopedTaskRun runScoped()&&
-		{
-			return Co::ScopedTaskRun{ detail::CoTaskAwaiter<TResult>{ std::move(*this) } };
-		}
-
-		void runForget()&&
-		{
-			resume(detail::CoTaskBackend::CurrentFrameTiming());
-			if (m_handle.done())
-			{
-				// フレーム待ちなしで終了した場合は登録不要
-				return;
-			}
-			(void)detail::CoTaskBackend::Add(std::make_unique<detail::CoTaskAwaiter<TResult>>(std::move(*this)));
-		}
-	};
-
-	namespace detail
-	{
-		template <typename TResult>
-		class [[nodiscard]] CoTaskAwaiter : public detail::IAwaiter
-		{
-		private:
-			CoTask<TResult> m_task;
-
-		public:
-			explicit CoTaskAwaiter(CoTask<TResult>&& task)
-				: m_task(std::move(task))
-			{
-			}
-
-			CoTaskAwaiter(const CoTaskAwaiter<TResult>&) = delete;
-
-			CoTaskAwaiter<TResult>& operator=(const CoTaskAwaiter<TResult>&) = delete;
-
-			CoTaskAwaiter(CoTaskAwaiter<TResult>&& rhs) = default;
-
-			CoTaskAwaiter<TResult>& operator=(CoTaskAwaiter<TResult>&& rhs) = default;
-
-			virtual void resume(detail::FrameTiming frameTiming) override
-			{
-				m_task.resume(frameTiming);
-			}
-
-			[[nodiscard]]
-			virtual bool done() const override
-			{
-				return m_task.done();
-			}
-
-			[[nodiscard]]
-			bool await_ready()
-			{
-				resume(detail::CoTaskBackend::CurrentFrameTiming());
-				return m_task.done();
-			}
-
-			template <typename TResultOther>
-			void await_suspend(std::coroutine_handle<detail::Promise<TResultOther>> handle)
-			{
-				handle.promise().setSubAwaiter(this);
-			}
-
-			TResult await_resume() const
-			{
-				return m_task.value();
-			}
-
-			[[nodiscard]]
-			TResult value() const
-			{
-				return m_task.value();
-			}
-		};
-	}
-
-	template <typename TResult>
-	auto operator co_await(CoTask<TResult>&& rhs)
-	{
-		return detail::CoTaskAwaiter<TResult>{ std::move(rhs) };
-	}
-
-	template <typename TResult>
-	auto operator co_await(const CoTask<TResult>& rhs) = delete;
-
-	namespace detail
-	{
-		class PromiseBase
-		{
-		protected:
-			IAwaiter* m_pSubAwaiter = nullptr;
-			FrameTiming m_nextResumeTiming = FrameTiming::Update;
-
-			std::exception_ptr m_exception;
-
-		public:
-			virtual ~PromiseBase() = 0;
-
-			PromiseBase() = default;
-
-			PromiseBase(const PromiseBase&) = delete;
-
-			PromiseBase& operator=(const PromiseBase&) = delete;
-
-			PromiseBase(PromiseBase&&) = default;
-
-			PromiseBase& operator=(PromiseBase&&) = default;
-
-			[[nodiscard]]
-			auto initial_suspend()
-			{
-				return std::suspend_always{};
-			}
-
-			[[nodiscard]]
-			auto final_suspend() noexcept
-			{
-				return std::suspend_always{};
-			}
-
-			[[nodiscard]]
-			auto yield_value(FrameTiming frameTiming)
-			{
-				if (frameTiming == FrameTiming::Init)
-				{
-					throw Error{ U"CoTask: FrameTiming::Init is not allowed in co_yield" };
-				}
-				m_nextResumeTiming = frameTiming;
-				return std::suspend_always{};
-			}
-
-			void unhandled_exception()
-			{
-				m_exception = std::current_exception();
-			}
-
-			void rethrowIfException() const
-			{
-				if (m_exception)
-				{
-					std::rethrow_exception(m_exception);
-				}
-			}
-
-			[[nodiscard]]
-			bool resumeSubAwaiter(FrameTiming frameTiming)
-			{
-				if (!m_pSubAwaiter)
-				{
-					return false;
-				}
-
-				m_pSubAwaiter->resume(frameTiming);
-
-				if (m_pSubAwaiter->done())
-				{
-					m_pSubAwaiter = nullptr;
-					return false;
-				}
-
-				return true;
-			}
-
-			void setSubAwaiter(IAwaiter* pSubAwaiter)
-			{
-				m_pSubAwaiter = pSubAwaiter;
-			}
-
-			[[nodiscard]]
-			FrameTiming nextResumeTiming() const
-			{
-				return m_nextResumeTiming;
-			}
-		};
-
-		inline PromiseBase::~PromiseBase() = default;
 
 		template <typename TResult>
-		class Promise : public PromiseBase
+		class SequenceBase;
+
+		template <typename TResult>
+		class [[nodiscard]] Task
 		{
 		private:
-			std::optional<TResult> m_value;
+			detail::CoroutineHandleWrapper<TResult> m_handle;
 
 		public:
-			Promise() = default;
+			using promise_type = detail::Promise<TResult>;
+			using handle_type = std::coroutine_handle<promise_type>;
+			using result_type = TResult;
 
-			Promise(Promise<TResult>&&) = default;
-
-			Promise& operator=(Promise<TResult>&&) = default;
-
-			void return_value(const TResult& v)
+			explicit Task(handle_type h)
+				: m_handle(std::move(h))
 			{
-				m_value = v;
 			}
 
-			void return_value(TResult&& v)
+			Task(const Task<TResult>&) = delete;
+
+			Task<TResult>& operator=(const Task<TResult>&) = delete;
+
+			Task(Task<TResult>&& rhs) = default;
+
+			Task<TResult>& operator=(Task<TResult>&& rhs) = default;
+
+			virtual void resume(detail::FrameTiming frameTiming)
 			{
-				m_value = std::move(v);
+				if (m_handle.done())
+				{
+					return;
+				}
+				m_handle.resume(frameTiming);
+			}
+
+			[[nodiscard]]
+			virtual bool done() const
+			{
+				return m_handle.done();
 			}
 
 			[[nodiscard]]
 			TResult value() const
 			{
-				rethrowIfException();
-				if (!m_value)
+				return m_handle.value();
+			}
+
+			[[nodiscard]]
+			Co::ScopedTaskRun runScoped()&&
+			{
+				return Co::ScopedTaskRun{ detail::TaskAwaiter<TResult>{ std::move(*this) } };
+			}
+
+			void runForget()&&
+			{
+				resume(detail::Backend::CurrentFrameTiming());
+				if (m_handle.done())
 				{
-					throw Error{ U"CoTask is not completed. Make sure that all paths in the coroutine return a value." };
+					// フレーム待ちなしで終了した場合は登録不要
+					return;
 				}
-				return m_value.value();
-			}
-
-			[[nodiscard]]
-			CoTask<TResult> get_return_object()
-			{
-				return CoTask<TResult>{ CoTask<TResult>::handle_type::from_promise(*this) };
+				(void)detail::Backend::Add(std::make_unique<detail::TaskAwaiter<TResult>>(std::move(*this)));
 			}
 		};
 
-		template <>
-		class Promise<void> : public PromiseBase
+		namespace detail
 		{
-		public:
-			Promise() = default;
-
-			Promise(Promise<void>&&) = default;
-
-			Promise<void>& operator=(Promise<void>&&) = default;
-
-			void return_void() const
+			template <typename TResult>
+			class [[nodiscard]] TaskAwaiter : public detail::IAwaiter
 			{
-			}
+			private:
+				Task<TResult> m_task;
 
-			void value() const
+			public:
+				explicit TaskAwaiter(Task<TResult>&& task)
+					: m_task(std::move(task))
+				{
+				}
+
+				TaskAwaiter(const TaskAwaiter<TResult>&) = delete;
+
+				TaskAwaiter<TResult>& operator=(const TaskAwaiter<TResult>&) = delete;
+
+				TaskAwaiter(TaskAwaiter<TResult>&& rhs) = default;
+
+				TaskAwaiter<TResult>& operator=(TaskAwaiter<TResult>&& rhs) = default;
+
+				virtual void resume(detail::FrameTiming frameTiming) override
+				{
+					m_task.resume(frameTiming);
+				}
+
+				[[nodiscard]]
+				virtual bool done() const override
+				{
+					return m_task.done();
+				}
+
+				[[nodiscard]]
+				bool await_ready()
+				{
+					resume(detail::Backend::CurrentFrameTiming());
+					return m_task.done();
+				}
+
+				template <typename TResultOther>
+				void await_suspend(std::coroutine_handle<detail::Promise<TResultOther>> handle)
+				{
+					handle.promise().setSubAwaiter(this);
+				}
+
+				TResult await_resume() const
+				{
+					return m_task.value();
+				}
+
+				[[nodiscard]]
+				TResult value() const
+				{
+					return m_task.value();
+				}
+			};
+		}
+
+		template <typename TResult>
+		auto operator co_await(Task<TResult>&& rhs)
+		{
+			return detail::TaskAwaiter<TResult>{ std::move(rhs) };
+		}
+
+		template <typename TResult>
+		auto operator co_await(const Task<TResult>& rhs) = delete;
+
+		namespace detail
+		{
+			class PromiseBase
 			{
-				rethrowIfException();
-			}
+			protected:
+				IAwaiter* m_pSubAwaiter = nullptr;
+				FrameTiming m_nextResumeTiming = FrameTiming::Update;
 
-			[[nodiscard]]
-			CoTask<void> get_return_object()
+				std::exception_ptr m_exception;
+
+			public:
+				virtual ~PromiseBase() = 0;
+
+				PromiseBase() = default;
+
+				PromiseBase(const PromiseBase&) = delete;
+
+				PromiseBase& operator=(const PromiseBase&) = delete;
+
+				PromiseBase(PromiseBase&&) = default;
+
+				PromiseBase& operator=(PromiseBase&&) = default;
+
+				[[nodiscard]]
+				auto initial_suspend()
+				{
+					return std::suspend_always{};
+				}
+
+				[[nodiscard]]
+				auto final_suspend() noexcept
+				{
+					return std::suspend_always{};
+				}
+
+				[[nodiscard]]
+				auto yield_value(FrameTiming frameTiming)
+				{
+					if (frameTiming == FrameTiming::Init)
+					{
+						throw Error{ U"Task: FrameTiming::Init is not allowed in co_yield" };
+					}
+					m_nextResumeTiming = frameTiming;
+					return std::suspend_always{};
+				}
+
+				void unhandled_exception()
+				{
+					m_exception = std::current_exception();
+				}
+
+				void rethrowIfException() const
+				{
+					if (m_exception)
+					{
+						std::rethrow_exception(m_exception);
+					}
+				}
+
+				[[nodiscard]]
+				bool resumeSubAwaiter(FrameTiming frameTiming)
+				{
+					if (!m_pSubAwaiter)
+					{
+						return false;
+					}
+
+					m_pSubAwaiter->resume(frameTiming);
+
+					if (m_pSubAwaiter->done())
+					{
+						m_pSubAwaiter = nullptr;
+						return false;
+					}
+
+					return true;
+				}
+
+				void setSubAwaiter(IAwaiter* pSubAwaiter)
+				{
+					m_pSubAwaiter = pSubAwaiter;
+				}
+
+				[[nodiscard]]
+				FrameTiming nextResumeTiming() const
+				{
+					return m_nextResumeTiming;
+				}
+			};
+
+			inline PromiseBase::~PromiseBase() = default;
+
+			template <typename TResult>
+			class Promise : public PromiseBase
 			{
-				return CoTask<void>{ CoTask<void>::handle_type::from_promise(*this) };
-			}
-		};
-	}
+			private:
+				std::optional<TResult> m_value;
 
-	namespace Co
-	{
+			public:
+				Promise() = default;
+
+				Promise(Promise<TResult>&&) = default;
+
+				Promise& operator=(Promise<TResult>&&) = default;
+
+				void return_value(const TResult& v)
+				{
+					m_value = v;
+				}
+
+				void return_value(TResult&& v)
+				{
+					m_value = std::move(v);
+				}
+
+				[[nodiscard]]
+				TResult value() const
+				{
+					rethrowIfException();
+					if (!m_value)
+					{
+						throw Error{ U"Task is not completed. Make sure that all paths in the coroutine return a value." };
+					}
+					return m_value.value();
+				}
+
+				[[nodiscard]]
+				Task<TResult> get_return_object()
+				{
+					return Task<TResult>{ Task<TResult>::handle_type::from_promise(*this) };
+				}
+			};
+
+			template <>
+			class Promise<void> : public PromiseBase
+			{
+			public:
+				Promise() = default;
+
+				Promise(Promise<void>&&) = default;
+
+				Promise<void>& operator=(Promise<void>&&) = default;
+
+				void return_void() const
+				{
+				}
+
+				void value() const
+				{
+					rethrowIfException();
+				}
+
+				[[nodiscard]]
+				Task<void> get_return_object()
+				{
+					return Task<void>{ Task<void>::handle_type::from_promise(*this) };
+				}
+			};
+		}
+
 		inline void Init()
 		{
-			detail::CoTaskBackend::Init();
+			detail::Backend::Init();
 		}
 
-		inline CoTask<void> DelayFrame()
+		inline Task<void> DelayFrame()
 		{
 			co_yield detail::FrameTiming::Update;
 		}
 
-		inline CoTask<void> DelayFrame(int32 frames)
+		inline Task<void> DelayFrame(int32 frames)
 		{
 			for (int32 i = 0; i < frames; ++i)
 			{
@@ -734,9 +731,9 @@ inline namespace CoTaskLib
 			}
 		}
 
-		inline CoTask<void> Delay(const Duration duration)
+		inline Task<void> Delay(const Duration duration)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -748,9 +745,9 @@ inline namespace CoTaskLib
 			}
 		}
 
-		inline CoTask<void> Delay(const Duration duration, std::function<void(const Timer&)> func)
+		inline Task<void> Delay(const Duration duration, std::function<void(const Timer&)> func)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -763,9 +760,9 @@ inline namespace CoTaskLib
 			}
 		}
 
-		inline CoTask<void> WaitUntil(std::function<bool()> predicate)
+		inline Task<void> WaitUntil(std::function<bool()> predicate)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -776,9 +773,9 @@ inline namespace CoTaskLib
 			}
 		}
 
-		inline CoTask<void> WaitForTimer(const Timer* pTimer)
+		inline Task<void> WaitForTimer(const Timer* pTimer)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -790,9 +787,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TInput>
-		CoTask<void> WaitForDown(const TInput input)
+		Task<void> WaitForDown(const TInput input)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -804,9 +801,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TInput>
-		CoTask<void> WaitForUp(const TInput input)
+		Task<void> WaitForUp(const TInput input)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -818,9 +815,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TArea>
-		CoTask<void> WaitForLeftClicked(const TArea area)
+		Task<void> WaitForLeftClicked(const TArea area)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -832,9 +829,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TArea>
-		CoTask<void> WaitForLeftReleased(const TArea area)
+		Task<void> WaitForLeftReleased(const TArea area)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -846,9 +843,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TArea>
-		CoTask<void> WaitForLeftClickedThenReleased(const TArea area)
+		Task<void> WaitForLeftClickedThenReleased(const TArea area)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -870,9 +867,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TArea>
-		CoTask<void> WaitForRightClicked(const TArea area)
+		Task<void> WaitForRightClicked(const TArea area)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -884,9 +881,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TArea>
-		CoTask<void> WaitForRightReleased(const TArea area)
+		Task<void> WaitForRightReleased(const TArea area)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -898,9 +895,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TArea>
-		CoTask<void> WaitForRightClickedThenReleased(const TArea area)
+		Task<void> WaitForRightClickedThenReleased(const TArea area)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -920,9 +917,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TArea>
-		CoTask<void> WaitForMouseOver(const TArea area)
+		Task<void> WaitForMouseOver(const TArea area)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -933,9 +930,9 @@ inline namespace CoTaskLib
 			}
 		}
 
-		inline CoTask<void> WaitWhile(std::function<bool()> predicate)
+		inline Task<void> WaitWhile(std::function<bool()> predicate)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -946,7 +943,7 @@ inline namespace CoTaskLib
 			}
 		}
 
-		inline CoTask<void> WaitForever()
+		inline Task<void> WaitForever()
 		{
 			while (true)
 			{
@@ -954,9 +951,9 @@ inline namespace CoTaskLib
 			}
 		}
 
-		inline CoTask<void> EveryFrame(std::function<void()> func)
+		inline Task<void> EveryFrame(std::function<void()> func)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -968,9 +965,9 @@ inline namespace CoTaskLib
 			}
 		}
 
-		inline CoTask<void> EveryFrameDraw(std::function<void()> func)
+		inline Task<void> EveryFrameDraw(std::function<void()> func)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Draw)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Draw)
 			{
 				co_yield detail::FrameTiming::Draw;
 			}
@@ -982,9 +979,9 @@ inline namespace CoTaskLib
 			}
 		}
 
-		inline CoTask<void> EveryFramePostPresent(std::function<void()> func)
+		inline Task<void> EveryFramePostPresent(std::function<void()> func)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::PostPresent)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::PostPresent)
 			{
 				co_yield detail::FrameTiming::PostPresent;
 			}
@@ -997,9 +994,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TInput>
-		inline CoTask<void> ExecOnDown(const TInput input, std::function<void()> func)
+		inline Task<void> ExecOnDown(const TInput input, std::function<void()> func)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -1015,9 +1012,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TInput>
-		inline CoTask<void> ExecOnUp(const TInput input, std::function<void()> func)
+		inline Task<void> ExecOnUp(const TInput input, std::function<void()> func)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -1033,9 +1030,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TInput>
-		inline CoTask<void> ExecOnPressed(const TInput input, std::function<void()> func)
+		inline Task<void> ExecOnPressed(const TInput input, std::function<void()> func)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -1051,9 +1048,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TArea>
-		inline CoTask<void> ExecOnLeftClicked(const TArea area, std::function<void()> func)
+		inline Task<void> ExecOnLeftClicked(const TArea area, std::function<void()> func)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -1069,9 +1066,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TArea>
-		inline CoTask<void> ExecOnLeftPressed(const TArea area, std::function<void()> func)
+		inline Task<void> ExecOnLeftPressed(const TArea area, std::function<void()> func)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -1087,9 +1084,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TArea>
-		inline CoTask<void> ExecOnLeftReleased(const TArea area, std::function<void()> func)
+		inline Task<void> ExecOnLeftReleased(const TArea area, std::function<void()> func)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -1105,9 +1102,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TArea>
-		inline CoTask<void> ExecOnLeftClickedThenReleased(const TArea area, std::function<void()> func)
+		inline Task<void> ExecOnLeftClickedThenReleased(const TArea area, std::function<void()> func)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -1127,9 +1124,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TArea>
-		inline CoTask<void> ExecOnRightClicked(const TArea area, std::function<void()> func)
+		inline Task<void> ExecOnRightClicked(const TArea area, std::function<void()> func)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -1145,9 +1142,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TArea>
-		inline CoTask<void> ExecOnRightPressed(const TArea area, std::function<void()> func)
+		inline Task<void> ExecOnRightPressed(const TArea area, std::function<void()> func)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -1163,9 +1160,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TArea>
-		inline CoTask<void> ExecOnRightReleased(const TArea area, std::function<void()> func)
+		inline Task<void> ExecOnRightReleased(const TArea area, std::function<void()> func)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -1181,9 +1178,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TArea>
-		inline CoTask<void> ExecOnRightClickedThenReleased(const TArea area, std::function<void()> func)
+		inline Task<void> ExecOnRightClickedThenReleased(const TArea area, std::function<void()> func)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -1203,9 +1200,9 @@ inline namespace CoTaskLib
 		}
 
 		template <class TArea>
-		inline CoTask<void> ExecOnMouseOver(const TArea area, std::function<void()> func)
+		inline Task<void> ExecOnMouseOver(const TArea area, std::function<void()> func)
 		{
-			if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 			{
 				co_yield detail::FrameTiming::Update;
 			}
@@ -1224,86 +1221,83 @@ inline namespace CoTaskLib
 		struct VoidResult
 		{
 		};
-	}
 
-	namespace detail
-	{
-		template <typename TResult>
-		using VoidResultTypeReplace = std::conditional_t<std::is_void_v<TResult>, Co::VoidResult, TResult>;
-
-		template <typename TResult>
-		auto ConvertVoidResult(const CoTask<TResult>& task) -> VoidResultTypeReplace<TResult>
+		namespace detail
 		{
-			if constexpr (std::is_void_v<TResult>)
+			template <typename TResult>
+			using VoidResultTypeReplace = std::conditional_t<std::is_void_v<TResult>, Co::VoidResult, TResult>;
+
+			template <typename TResult>
+			auto ConvertVoidResult(const Task<TResult>& task) -> VoidResultTypeReplace<TResult>
 			{
-				return Co::VoidResult{};
+				if constexpr (std::is_void_v<TResult>)
+				{
+					return Co::VoidResult{};
+				}
+				else
+				{
+					return task.value();
+				}
 			}
-			else
+
+			template <typename TResult>
+			auto ConvertOptionalVoidResult(const Task<TResult>& task) -> Optional<VoidResultTypeReplace<TResult>>
 			{
-				return task.value();
+				if (!task.done())
+				{
+					return none;
+				}
+
+				if constexpr (std::is_void_v<TResult>)
+				{
+					return MakeOptional(Co::VoidResult{});
+				}
+				else
+				{
+					return MakeOptional(task.value());
+				}
+			}
+
+			template <typename TSequence>
+			concept SequenceConcept = std::derived_from<TSequence, SequenceBase<typename TSequence::result_type>>;
+
+			template <SequenceConcept TSequence>
+			Task<typename TSequence::result_type> SequencePtrToTask(std::unique_ptr<TSequence> sequence)
+			{
+				const auto scopedRun = Co::EveryFrameDraw([&sequence]() { sequence->draw(); }).runScoped();
+				co_return co_await sequence->start();
 			}
 		}
 
 		template <typename TResult>
-		auto ConvertOptionalVoidResult(const CoTask<TResult>& task) -> Optional<VoidResultTypeReplace<TResult>>
-		{
-			if (!task.done())
-			{
-				return none;
-			}
-
-			if constexpr (std::is_void_v<TResult>)
-			{
-				return MakeOptional(Co::VoidResult{});
-			}
-			else
-			{
-				return MakeOptional(task.value());
-			}
-		}
-
-		template <typename TScene>
-		concept CoSceneConcept = std::derived_from<TScene, CoSceneBase<typename TScene::result_type>>;
-
-		template <CoSceneConcept TScene>
-		CoTask<typename TScene::result_type> ScenePtrToTask(std::unique_ptr<TScene> scene)
-		{
-			const auto scopedRun = Co::EveryFrameDraw([&scene]() { scene->draw(); }).runScoped();
-			co_return co_await scene->start();
-		}
-	}
-
-	namespace Co
-	{
-		template <typename TResult>
-		CoTask<TResult> ToTask(CoTask<TResult>&& task)
+		Task<TResult> ToTask(Task<TResult>&& task)
 		{
 			return task;
 		}
 
-		template <detail::CoSceneConcept TScene>
-		CoTask<typename TScene::result_type> ToTask(TScene&& scene)
+		template <detail::SequenceConcept TSequence>
+		Task<typename TSequence::result_type> ToTask(TSequence&& sequence)
 		{
-			return detail::ScenePtrToTask(std::make_unique<TScene>(std::move(scene)));
+			return detail::SequencePtrToTask(std::make_unique<TSequence>(std::move(sequence)));
 		}
 
-		template <detail::CoSceneConcept TScene, class... Args>
-		CoTask<typename TScene::result_type> MakeTask(Args&&... args)
+		template <detail::SequenceConcept TSequence, class... Args>
+		Task<typename TSequence::result_type> MakeTask(Args&&... args)
 		{
-			return detail::ScenePtrToTask(std::make_unique<TScene>(std::forward<Args>(args)...));
+			return detail::SequencePtrToTask(std::make_unique<TSequence>(std::forward<Args>(args)...));
 		}
 
 		template <class... TTasks>
-		auto WhenAll(TTasks&&... args) -> CoTask<std::tuple<detail::VoidResultTypeReplace<typename TTasks::result_type>...>>
+		auto WhenAll(TTasks&&... args) -> Task<std::tuple<detail::VoidResultTypeReplace<typename TTasks::result_type>...>>
 		{
-			if constexpr ((!std::is_same_v<TTasks, CoTask<typename TTasks::result_type>> || ...))
+			if constexpr ((!std::is_same_v<TTasks, Task<typename TTasks::result_type>> || ...))
 			{
-				// TTasksの中にCoTaskでないものが1つでも含まれる場合は、ToTaskで変換して呼び出し直す
+				// TTasksの中にTaskでないものが1つでも含まれる場合は、ToTaskで変換して呼び出し直す
 				co_return co_await WhenAll(ToTask(std::forward<TTasks>(args))...);
 			}
 			else
 			{
-				if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+				if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 				{
 					co_yield detail::FrameTiming::Update;
 				}
@@ -1330,16 +1324,16 @@ inline namespace CoTaskLib
 		}
 
 		template <class... TTasks>
-		auto WhenAny(TTasks&&... args) -> CoTask<std::tuple<Optional<detail::VoidResultTypeReplace<typename TTasks::result_type>>...>>
+		auto WhenAny(TTasks&&... args) -> Task<std::tuple<Optional<detail::VoidResultTypeReplace<typename TTasks::result_type>>...>>
 		{
-			if constexpr ((!std::is_same_v<TTasks, CoTask<typename TTasks::result_type>> || ...))
+			if constexpr ((!std::is_same_v<TTasks, Task<typename TTasks::result_type>> || ...))
 			{
-				// TTasksの中にCoTaskでないものが1つでも含まれる場合は、ToTaskで変換して呼び出し直す
+				// TTasksの中にTaskでないものが1つでも含まれる場合は、ToTaskで変換して呼び出し直す
 				co_return co_await WhenAny(ToTask(std::forward<TTasks>(args))...);
 			}
 			else
 			{
-				if (detail::CoTaskBackend::CurrentFrameTiming() != detail::FrameTiming::Update)
+				if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
 				{
 					co_yield detail::FrameTiming::Update;
 				}
@@ -1364,51 +1358,48 @@ inline namespace CoTaskLib
 				}
 			}
 		}
-	}
 
-	template <typename TResult>
-	class [[nodiscard]] CoSceneBase
-	{
-	public:
-		using result_type = TResult;
-
-		CoSceneBase() = default;
-
-		CoSceneBase(const CoSceneBase&) = delete;
-
-		CoSceneBase& operator=(const CoSceneBase&) = delete;
-
-		CoSceneBase(CoSceneBase&&) = default;
-
-		CoSceneBase& operator=(CoSceneBase&&) = default;
-
-		virtual ~CoSceneBase() = default;
-
-		virtual CoTask<TResult> start() = 0;
-
-		virtual void draw() const
+		template <typename TResult>
+		class [[nodiscard]] SequenceBase
 		{
+		public:
+			using result_type = TResult;
+
+			SequenceBase() = default;
+
+			SequenceBase(const SequenceBase&) = delete;
+
+			SequenceBase& operator=(const SequenceBase&) = delete;
+
+			SequenceBase(SequenceBase&&) = default;
+
+			SequenceBase& operator=(SequenceBase&&) = default;
+
+			virtual ~SequenceBase() = default;
+
+			virtual Task<TResult> start() = 0;
+
+			virtual void draw() const
+			{
+			}
+		};
+
+		template <detail::SequenceConcept TSequence>
+		auto operator co_await(TSequence&& sequence)
+		{
+			// Co::SequenceをCo::MakeTaskを使わずco_awaitに直接渡すには、ムーブ構築可能である必要がある
+			static_assert(std::is_move_constructible_v<TSequence>, "To pass a Sequence directly to co_await, it must be move-constructible. Otherwise, use Co::MakeTask<TSequence>() instead.");
+			return detail::TaskAwaiter<typename TSequence::result_type>{ detail::SequencePtrToTask(std::make_unique<TSequence>(std::move(sequence))) };
 		}
-	};
 
-	template <detail::CoSceneConcept TScene>
-	auto operator co_await(TScene&& scene)
-	{
-		// CoSceneをCo::MakeTaskを使わずco_awaitに直接渡すには、ムーブ構築可能である必要がある
-		static_assert(std::is_move_constructible_v<TScene>, "To pass a CoScene directly to co_await, it must be move-constructible. Otherwise, use Co::MakeTask<TScene>() instead.");
-		return detail::CoTaskAwaiter<typename TScene::result_type>{ detail::ScenePtrToTask(std::make_unique<TScene>(std::move(scene))) };
-	}
+		template <detail::SequenceConcept TSequence>
+		auto operator co_await(TSequence& sequence) = delete;
 
-	template <detail::CoSceneConcept TScene>
-	auto operator co_await(TScene& scene) = delete;
+		namespace detail
+		{
+			inline uint64 s_fadeCount = 0;
+		}
 
-	namespace detail
-	{
-		inline uint64 s_fadeCount = 0;
-	}
-
-	namespace Co
-	{
 		[[nodiscard]]
 		inline bool IsFading()
 		{
@@ -1439,104 +1430,101 @@ inline namespace CoTaskLib
 
 			ScopedSetIsFadingToTrue& operator=(ScopedSetIsFadingToTrue&&) = default;
 		};
-	}
 
-	namespace detail
-	{
-		class [[nodiscard]] FadeSceneBase : public CoSceneBase<void>
+		namespace detail
 		{
-		private:
-			Timer m_timer;
-			double m_t = 0.0;
-
-		public:
-			explicit FadeSceneBase(const Duration& duration)
-				: m_timer(duration, StartImmediately::No)
+			class [[nodiscard]] FadeSequenceBase : public SequenceBase<void>
 			{
-			}
+			private:
+				Timer m_timer;
+				double m_t = 0.0;
 
-			virtual ~FadeSceneBase() = default;
-
-			CoTask<void> start() override final
-			{
-				const Co::ScopedSetIsFadingToTrue scopedSetIsFadingToTrue;
-
-				m_timer.start();
-				while (true)
+			public:
+				explicit FadeSequenceBase(const Duration& duration)
+					: m_timer(duration, StartImmediately::No)
 				{
-					m_t = m_timer.progress0_1();
-					if (m_t >= 1.0)
+				}
+
+				virtual ~FadeSequenceBase() = default;
+
+				Task<void> start() override final
+				{
+					const Co::ScopedSetIsFadingToTrue scopedSetIsFadingToTrue;
+
+					m_timer.start();
+					while (true)
 					{
-						break;
+						m_t = m_timer.progress0_1();
+						if (m_t >= 1.0)
+						{
+							break;
+						}
+						co_yield FrameTiming::Update;
 					}
+
+					// 最後に必ずt=1.0で描画されるように
+					m_t = 1.0;
 					co_yield FrameTiming::Update;
 				}
 
-				// 最後に必ずt=1.0で描画されるように
-				m_t = 1.0;
-				co_yield FrameTiming::Update;
-			}
+				void draw() const override final
+				{
+					drawFade(m_t);
+				}
 
-			void draw() const override final
+				// tには時間が0.0～1.0で渡される
+				virtual void drawFade(double t) const = 0;
+			};
+
+			class [[nodiscard]] FadeInSequence : public FadeSequenceBase
 			{
-				drawFade(m_t);
-			}
+			private:
+				ColorF m_color;
 
-			// tには時間が0.0～1.0で渡される
-			virtual void drawFade(double t) const = 0;
-		};
+			public:
+				explicit FadeInSequence(const Duration& duration, const ColorF& color)
+					: FadeSequenceBase(duration)
+					, m_color(color)
+				{
+				}
 
-		class [[nodiscard]] FadeInScene : public FadeSceneBase
-		{
-		private:
-			ColorF m_color;
+				void drawFade(double t) const override
+				{
+					const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
 
-		public:
-			explicit FadeInScene(const Duration& duration, const ColorF& color)
-				: FadeSceneBase(duration)
-				, m_color(color)
+					Scene::Rect().draw(ColorF{ m_color, 1.0 - t });
+				}
+			};
+
+			class [[nodiscard]] FadeOutSequence : public FadeSequenceBase
 			{
-			}
+			private:
+				ColorF m_color;
 
-			void drawFade(double t) const override
-			{
-				const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
+			public:
+				explicit FadeOutSequence(const Duration& duration, const ColorF& color)
+					: FadeSequenceBase(duration)
+					, m_color(color)
+				{
+				}
 
-				Scene::Rect().draw(ColorF{ m_color, 1.0 - t });
-			}
-		};
+				void drawFade(double t) const override
+				{
+					const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
 
-		class [[nodiscard]] FadeOutScene : public FadeSceneBase
-		{
-		private:
-			ColorF m_color;
-
-		public:
-			explicit FadeOutScene(const Duration& duration, const ColorF& color)
-				: FadeSceneBase(duration)
-				, m_color(color)
-			{
-			}
-
-			void drawFade(double t) const override
-			{
-				const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
-
-				Scene::Rect().draw(ColorF{ m_color, t });
-			}
-		};
-	}
-
-	namespace Co
-	{
-		inline CoTask<void> FadeIn(const Duration& duration, const ColorF& color = Palette::Black)
-		{
-			return detail::ScenePtrToTask(std::make_unique<detail::FadeInScene>(duration, color));
+					Scene::Rect().draw(ColorF{ m_color, t });
+				}
+			};
 		}
 
-		inline CoTask<void> FadeOut(const Duration& duration, const ColorF& color = Palette::Black)
+		inline Task<void> FadeIn(const Duration& duration, const ColorF& color = Palette::Black)
 		{
-			return detail::ScenePtrToTask(std::make_unique<detail::FadeOutScene>(duration, color));
+			return detail::SequencePtrToTask(std::make_unique<detail::FadeInSequence>(duration, color));
+		}
+
+		inline Task<void> FadeOut(const Duration& duration, const ColorF& color = Palette::Black)
+		{
+			return detail::SequencePtrToTask(std::make_unique<detail::FadeOutSequence>(duration, color));
 		}
 	}
 }

@@ -67,6 +67,10 @@ inline namespace cotasklib
 		template <typename TResult>
 		class Task;
 
+		class SceneBase;
+
+		using SceneFactory = std::function<std::unique_ptr<SceneBase>()>;
+
 		namespace detail
 		{
 			class Backend
@@ -143,6 +147,8 @@ inline namespace cotasklib
 				std::optional<AwaiterID> m_currentAwaiterID = none;
 
 				std::map<AwaiterID, std::unique_ptr<IAwaiter>> m_awaiters;
+
+				SceneFactory m_currentSceneFactory;
 
 			public:
 				Backend() = default;
@@ -228,6 +234,26 @@ inline namespace cotasklib
 						throw Error{ U"Backend is not initialized" };
 					}
 					return s_pInstance->m_currentFrameTiming;
+				}
+
+				[[nodiscard]]
+				static void SetCurrentSceneFactory(SceneFactory factory)
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+					s_pInstance->m_currentSceneFactory = std::move(factory);
+				}
+
+				[[nodiscard]]
+				static SceneFactory CurrentSceneFactory()
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+					return s_pInstance->m_currentSceneFactory;
 				}
 			};
 
@@ -421,8 +447,6 @@ inline namespace cotasklib
 
 		template <typename TResult>
 		class SequenceBase;
-
-		class SceneBase;
 
 		template <typename TResult>
 		class [[nodiscard]] Task
@@ -1226,15 +1250,6 @@ inline namespace cotasklib
 
 		namespace detail
 		{
-			struct BackToPrevScene_tag {};
-			struct SceneBreak_tag {};
-		}
-
-		using NextSceneFactory = std::function<std::unique_ptr<SceneBase>()>;
-		using NextScene = std::variant<NextSceneFactory, detail::BackToPrevScene_tag, detail::SceneBreak_tag>;
-
-		namespace detail
-		{
 			template <typename TResult>
 			using VoidResultTypeReplace = std::conditional_t<std::is_void_v<TResult>, Co::VoidResult, TResult>;
 
@@ -1285,35 +1300,30 @@ inline namespace cotasklib
 			template <SceneConcept TScene>
 			Task<void> ScenePtrToTask(std::unique_ptr<TScene> scene)
 			{
-				std::unique_ptr<SceneBase> runningScene = std::move(scene);
-				std::stack<NextSceneFactory> sceneFactoryStack;
+				std::unique_ptr<SceneBase> currentScene = std::move(scene);
 
 				while (true)
 				{
-					const auto scopedRun = Co::EveryFrameDraw([&runningScene]() { runningScene->draw(); }).runScoped();
-					const auto nextScene = co_await runningScene->start();
-					if (const auto sceneFactory = std::get_if<NextSceneFactory>(&nextScene))
+					SceneFactory nextSceneFactory;
 					{
-						runningScene.reset();
-						runningScene = (*sceneFactory)();
-						if (!runningScene)
-						{
-							break;
-						}
-						sceneFactoryStack.push(*sceneFactory);
+						const auto scopedRun = EveryFrameDraw([&currentScene]() { currentScene->draw(); }).runScoped();
+						nextSceneFactory = co_await currentScene->start();
 					}
-					else if (std::holds_alternative<BackToPrevScene_tag>(nextScene))
+
+					if (nextSceneFactory != nullptr)
 					{
-						if (sceneFactoryStack.empty())
+						currentScene.reset();
+						Backend::SetCurrentSceneFactory(nextSceneFactory); // 次シーンのコンストラクタ内で参照される場合があるためシーン生成前にセットしておく必要がある
+						currentScene = nextSceneFactory();
+						if (!currentScene)
 						{
+							Backend::SetCurrentSceneFactory(nullptr);
 							break;
 						}
-						runningScene.reset();
-						runningScene = sceneFactoryStack.top()();
-						sceneFactoryStack.pop();
 					}
 					else
 					{
+						Backend::SetCurrentSceneFactory(nullptr);
 						break;
 					}
 				}
@@ -1592,23 +1602,18 @@ inline namespace cotasklib
 
 		template <detail::SceneConcept TScene, typename... Args>
 		[[nodiscard]]
-		NextScene MakeNextScene(Args... args)
+		SceneFactory MakeSceneFactory(Args&&... args)
 		{
 			// Args...はコピー構築可能である必要がある
-			static_assert((std::is_copy_constructible_v<Args> && ...), "Scene constructor arguments must be copy-constructible.");
-			return [&] { return std::make_unique<TScene>(args...); };
+			static_assert((std::is_copy_constructible_v<Args> && ...), "Scene constructor arguments must be copy-constructible to use MakeSceneFactory.");
+			return [=] { return std::make_unique<TScene>(args...); };
 		}
 
 		[[nodiscard]]
-		inline NextScene SceneBreak()
+		inline SceneFactory SceneFinish()
 		{
-			return detail::SceneBreak_tag{};
-		}
-
-		[[nodiscard]]
-		inline NextScene BackToPrevScene()
-		{
-			return detail::BackToPrevScene_tag{};
+			// SceneFactoryがnullptrの場合はシーン遷移を終了する
+			return nullptr;
 		}
 
 		class [[nodiscard]] SceneBase
@@ -1626,24 +1631,29 @@ inline namespace cotasklib
 
 			virtual ~SceneBase() = default;
 
-			// 戻り値は次のシーン。nullptrを返すとシーン遷移を終了する
+			// 戻り値は次シーンのSceneFactoryをCo::MakeSceneFactory<TScene>()で作成して返す
+			// もしくは、Co::SceneFinish()を返してシーン遷移を終了する
 			[[nodiscard]]
-			virtual Task<NextScene> start() = 0;
+			virtual Task<SceneFactory> start() = 0;
 
 			virtual void draw() const
 			{
 			}
+
+			[[nodiscard]]
+			SceneFactory currentSceneFactory() const
+			{
+				return detail::Backend::CurrentSceneFactory();
+			}
 		};
 
-		template <detail::SceneConcept TScene>
-		auto operator co_await(TScene&& sequence)
+		inline auto operator co_await(SceneFactory sceneFactory)
 		{
-			// SceneをCo::MakeTaskを使わずco_awaitに直接渡すには、ムーブ構築可能である必要がある
-			static_assert(std::is_move_constructible_v<TScene>, "To pass a Scene directly to co_await, it must be move-constructible. Otherwise, use Co::MakeTask<TScene>() instead.");
-			return detail::TaskAwaiter<typename TScene::result_type>{ detail::SequencePtrToTask(std::make_unique<TScene>(std::move(sequence))) };
+			if (sceneFactory == nullptr)
+			{
+				throw Error{ U"SceneFactory must not be nullptr" };
+			}
+			return detail::TaskAwaiter<void>{ detail::ScenePtrToTask(sceneFactory()) };
 		}
-
-		template <detail::SceneConcept TScene>
-		auto operator co_await(TScene& sequence) = delete;
 	}
 }

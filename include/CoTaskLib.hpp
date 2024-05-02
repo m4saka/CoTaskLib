@@ -1001,7 +1001,7 @@ inline namespace cotasklib
 			{
 				if (area.leftClicked())
 				{
-					const auto [releasedInArea, _] = co_await WhenAny(WaitForLeftReleased(area), WaitForUp(MouseL));
+					const auto [releasedInArea, _] = co_await Any(WaitForLeftReleased(area), WaitForUp(MouseL));
 					if (releasedInArea.has_value())
 					{
 						break;
@@ -1054,7 +1054,7 @@ inline namespace cotasklib
 			{
 				if (area.rightClicked())
 				{
-					const auto [releasedInArea, _] = co_await WhenAny(WaitForRightReleased(area), WaitForUp(MouseR));
+					const auto [releasedInArea, _] = co_await Any(WaitForRightReleased(area), WaitForUp(MouseR));
 					if (releasedInArea.has_value())
 					{
 						break;
@@ -1274,7 +1274,7 @@ inline namespace cotasklib
 			{
 				if (area.leftClicked())
 				{
-					const auto [releasedInArea, _] = co_await WhenAny(WaitForLeftReleased(area), WaitForUp(MouseL));
+					const auto [releasedInArea, _] = co_await Any(WaitForLeftReleased(area), WaitForUp(MouseL));
 					if (releasedInArea.has_value())
 					{
 						func();
@@ -1354,7 +1354,7 @@ inline namespace cotasklib
 			{
 				if (area.rightClicked())
 				{
-					const auto [releasedInArea, _] = co_await WhenAny(WaitForRightReleased(area), WaitForUp(MouseR));
+					const auto [releasedInArea, _] = co_await Any(WaitForRightReleased(area), WaitForUp(MouseR));
 					if (releasedInArea.has_value())
 					{
 						func();
@@ -1581,12 +1581,12 @@ inline namespace cotasklib
 		}
 
 		template <class... TTasks>
-		auto WhenAll(TTasks&&... args) -> Task<std::tuple<detail::VoidResultTypeReplace<typename TTasks::result_type>...>>
+		auto All(TTasks&&... args) -> Task<std::tuple<detail::VoidResultTypeReplace<typename TTasks::result_type>...>>
 		{
 			if constexpr ((!std::is_same_v<TTasks, Task<typename TTasks::result_type>> || ...))
 			{
 				// TTasksの中にTaskでないものが1つでも含まれる場合は、ToTaskで変換して呼び出し直す
-				co_return co_await WhenAll(ToTask(std::forward<TTasks>(args))...);
+				co_return co_await All(ToTask(std::forward<TTasks>(args))...);
 			}
 			else
 			{
@@ -1619,12 +1619,12 @@ inline namespace cotasklib
 		}
 
 		template <class... TTasks>
-		auto WhenAny(TTasks&&... args) -> Task<std::tuple<Optional<detail::VoidResultTypeReplace<typename TTasks::result_type>>...>>
+		auto Any(TTasks&&... args) -> Task<std::tuple<Optional<detail::VoidResultTypeReplace<typename TTasks::result_type>>...>>
 		{
 			if constexpr ((!std::is_same_v<TTasks, Task<typename TTasks::result_type>> || ...))
 			{
 				// TTasksの中にTaskでないものが1つでも含まれる場合は、ToTaskで変換して呼び出し直す
-				co_return co_await WhenAny(ToTask(std::forward<TTasks>(args))...);
+				co_return co_await Any(ToTask(std::forward<TTasks>(args))...);
 			}
 			else
 			{

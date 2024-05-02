@@ -310,6 +310,7 @@ inline namespace cotasklib
 			};
 
 			template <typename TResult>
+			[[nodiscard]]
 			std::optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(TaskAwaiter<TResult>&& awaiter)
 			{
 				if (awaiter.done())
@@ -819,11 +820,13 @@ inline namespace cotasklib
 			detail::Backend::Init();
 		}
 
+		[[nodiscard]]
 		inline Task<void> DelayFrame()
 		{
 			co_yield detail::FrameTiming::Update;
 		}
 
+		[[nodiscard]]
 		inline Task<void> DelayFrame(int32 frames)
 		{
 			for (int32 i = 0; i < frames; ++i)
@@ -832,6 +835,7 @@ inline namespace cotasklib
 			}
 		}
 
+		[[nodiscard]]
 		inline Task<void> Delay(const Duration duration)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -846,6 +850,7 @@ inline namespace cotasklib
 			}
 		}
 
+		[[nodiscard]]
 		inline Task<void> Delay(const Duration duration, std::function<void(const Timer&)> func)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -861,6 +866,7 @@ inline namespace cotasklib
 			}
 		}
 
+		[[nodiscard]]
 		inline Task<void> WaitUntil(std::function<bool()> predicate)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -875,6 +881,7 @@ inline namespace cotasklib
 		}
 
 		template <typename T>
+		[[nodiscard]]
 		inline Task<T> WaitForResult(const std::optional<T>* pOptional)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -891,6 +898,7 @@ inline namespace cotasklib
 		}
 
 		template <typename T>
+		[[nodiscard]]
 		inline Task<T> WaitForResult(const Optional<T>* pOptional)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -906,6 +914,7 @@ inline namespace cotasklib
 			co_return **pOptional;
 		}
 
+		[[nodiscard]]
 		inline Task<void> WaitForTimer(const Timer* pTimer)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -920,6 +929,7 @@ inline namespace cotasklib
 		}
 
 		template <class TInput>
+		[[nodiscard]]
 		Task<void> WaitForDown(const TInput input)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -934,6 +944,7 @@ inline namespace cotasklib
 		}
 
 		template <class TInput>
+		[[nodiscard]]
 		Task<void> WaitForUp(const TInput input)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -948,6 +959,7 @@ inline namespace cotasklib
 		}
 
 		template <class TArea>
+		[[nodiscard]]
 		Task<void> WaitForLeftClicked(const TArea area)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -962,6 +974,7 @@ inline namespace cotasklib
 		}
 
 		template <class TArea>
+		[[nodiscard]]
 		Task<void> WaitForLeftReleased(const TArea area)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -976,6 +989,7 @@ inline namespace cotasklib
 		}
 
 		template <class TArea>
+		[[nodiscard]]
 		Task<void> WaitForLeftClickedThenReleased(const TArea area)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -998,6 +1012,7 @@ inline namespace cotasklib
 		}
 
 		template <class TArea>
+		[[nodiscard]]
 		Task<void> WaitForRightClicked(const TArea area)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1012,6 +1027,7 @@ inline namespace cotasklib
 		}
 
 		template <class TArea>
+		[[nodiscard]]
 		Task<void> WaitForRightReleased(const TArea area)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1026,6 +1042,7 @@ inline namespace cotasklib
 		}
 
 		template <class TArea>
+		[[nodiscard]]
 		Task<void> WaitForRightClickedThenReleased(const TArea area)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1048,6 +1065,7 @@ inline namespace cotasklib
 		}
 
 		template <class TArea>
+		[[nodiscard]]
 		Task<void> WaitForMouseOver(const TArea area)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1061,6 +1079,7 @@ inline namespace cotasklib
 			}
 		}
 
+		[[nodiscard]]
 		inline Task<void> WaitWhile(std::function<bool()> predicate)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1074,6 +1093,7 @@ inline namespace cotasklib
 			}
 		}
 
+		[[nodiscard]]
 		inline Task<void> WaitForever()
 		{
 			while (true)
@@ -1082,6 +1102,7 @@ inline namespace cotasklib
 			}
 		}
 
+		[[nodiscard]]
 		inline Task<void> EveryFrame(std::function<void()> func)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1096,6 +1117,7 @@ inline namespace cotasklib
 			}
 		}
 
+		[[nodiscard]]
 		inline Task<void> EveryFrameDraw(std::function<void()> func)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Draw)
@@ -1110,6 +1132,7 @@ inline namespace cotasklib
 			}
 		}
 
+		[[nodiscard]]
 		inline Task<void> EveryFramePostPresent(std::function<void()> func)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::PostPresent)
@@ -1125,6 +1148,7 @@ inline namespace cotasklib
 		}
 
 		template <class TInput>
+		[[nodiscard]]
 		inline Task<void> ExecOnDown(const TInput input, std::function<void()> func)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1143,6 +1167,7 @@ inline namespace cotasklib
 		}
 
 		template <class TInput>
+		[[nodiscard]]
 		inline Task<void> ExecOnUp(const TInput input, std::function<void()> func)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1161,6 +1186,7 @@ inline namespace cotasklib
 		}
 
 		template <class TInput>
+		[[nodiscard]]
 		inline Task<void> ExecOnPressed(const TInput input, std::function<void()> func)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1179,6 +1205,7 @@ inline namespace cotasklib
 		}
 
 		template <class TArea>
+		[[nodiscard]]
 		inline Task<void> ExecOnLeftClicked(const TArea area, std::function<void()> func)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1197,6 +1224,7 @@ inline namespace cotasklib
 		}
 
 		template <class TArea>
+		[[nodiscard]]
 		inline Task<void> ExecOnLeftPressed(const TArea area, std::function<void()> func)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1215,6 +1243,7 @@ inline namespace cotasklib
 		}
 
 		template <class TArea>
+		[[nodiscard]]
 		inline Task<void> ExecOnLeftReleased(const TArea area, std::function<void()> func)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1233,6 +1262,7 @@ inline namespace cotasklib
 		}
 
 		template <class TArea>
+		[[nodiscard]]
 		inline Task<void> ExecOnLeftClickedThenReleased(const TArea area, std::function<void()> func)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1255,6 +1285,7 @@ inline namespace cotasklib
 		}
 
 		template <class TArea>
+		[[nodiscard]]
 		inline Task<void> ExecOnRightClicked(const TArea area, std::function<void()> func)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1273,6 +1304,7 @@ inline namespace cotasklib
 		}
 
 		template <class TArea>
+		[[nodiscard]]
 		inline Task<void> ExecOnRightPressed(const TArea area, std::function<void()> func)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1291,6 +1323,7 @@ inline namespace cotasklib
 		}
 
 		template <class TArea>
+		[[nodiscard]]
 		inline Task<void> ExecOnRightReleased(const TArea area, std::function<void()> func)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1309,6 +1342,7 @@ inline namespace cotasklib
 		}
 
 		template <class TArea>
+		[[nodiscard]]
 		inline Task<void> ExecOnRightClickedThenReleased(const TArea area, std::function<void()> func)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1331,6 +1365,7 @@ inline namespace cotasklib
 		}
 
 		template <class TArea>
+		[[nodiscard]]
 		inline Task<void> ExecOnMouseOver(const TArea area, std::function<void()> func)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -1433,6 +1468,7 @@ inline namespace cotasklib
 			using VoidResultTypeReplace = std::conditional_t<std::is_void_v<TResult>, Co::VoidResult, TResult>;
 
 			template <typename TResult>
+			[[nodiscard]]
 			auto ConvertVoidResult(const Task<TResult>& task) -> VoidResultTypeReplace<TResult>
 			{
 				if constexpr (std::is_void_v<TResult>)
@@ -1446,6 +1482,7 @@ inline namespace cotasklib
 			}
 
 			template <typename TResult>
+			[[nodiscard]]
 			auto ConvertOptionalVoidResult(const Task<TResult>& task) -> Optional<VoidResultTypeReplace<TResult>>
 			{
 				if (!task.done())
@@ -1467,6 +1504,7 @@ inline namespace cotasklib
 			concept SequenceConcept = std::derived_from<TSequence, SequenceBase<typename TSequence::result_type>>;
 
 			template <SequenceConcept TSequence>
+			[[nodiscard]]
 			Task<typename TSequence::result_type> SequencePtrToTask(std::unique_ptr<TSequence> sequence)
 			{
 				co_return co_await sequence->start()
@@ -1478,6 +1516,7 @@ inline namespace cotasklib
 			concept SceneConcept = std::derived_from<TScene, SceneBase>;
 
 			template <SceneConcept TScene>
+			[[nodiscard]]
 			Task<void> ScenePtrToTask(std::unique_ptr<TScene> scene)
 			{
 				std::unique_ptr<SceneBase> currentScene = std::move(scene);
@@ -1507,30 +1546,35 @@ inline namespace cotasklib
 		}
 
 		template <typename TResult>
+		[[nodiscard]]
 		Task<TResult> ToTask(Task<TResult>&& task)
 		{
 			return task;
 		}
 
 		template <detail::SequenceConcept TSequence>
+		[[nodiscard]]
 		Task<typename TSequence::result_type> ToTask(TSequence&& sequence)
 		{
 			return detail::SequencePtrToTask(std::make_unique<TSequence>(std::move(sequence)));
 		}
 
 		template <detail::SceneConcept TScene>
+		[[nodiscard]]
 		Task<void> ToTask(TScene&& scene)
 		{
 			return detail::ScenePtrToTask(std::make_unique<TScene>(std::move(scene)));
 		}
 
 		template <detail::SequenceConcept TSequence, class... Args>
+		[[nodiscard]]
 		Task<typename TSequence::result_type> MakeTask(Args&&... args)
 		{
 			return detail::SequencePtrToTask(std::make_unique<TSequence>(std::forward<Args>(args)...));
 		}
 
 		template <detail::SceneConcept TScene, class... Args>
+		[[nodiscard]]
 		Task<void> MakeTask(Args&&... args)
 		{
 			return detail::ScenePtrToTask(std::make_unique<TScene>(std::forward<Args>(args)...));
@@ -1739,11 +1783,13 @@ inline namespace cotasklib
 			};
 		}
 
+		[[nodiscard]]
 		inline Task<void> FadeIn(const Duration& duration, const ColorF& color = Palette::Black)
 		{
 			return detail::SequencePtrToTask(std::make_unique<detail::FadeInSequence>(duration, color));
 		}
 
+		[[nodiscard]]
 		inline Task<void> FadeOut(const Duration& duration, const ColorF& color = Palette::Black)
 		{
 			return detail::SequencePtrToTask(std::make_unique<detail::FadeOutSequence>(duration, color));
@@ -1823,6 +1869,7 @@ inline namespace cotasklib
 				co_await FadeOut(DefaultFadeOutDuration, DefaultFadeColor);
 			}
 
+			[[nodiscard]]
 			Task<void> waitForFadeIn()
 			{
 				while (!m_isFadeInFinished)

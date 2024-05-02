@@ -45,6 +45,7 @@ inline namespace cotasklib
 				Init,
 				Update,
 				Draw,
+				LateDraw,
 				PostPresent,
 			};
 
@@ -121,6 +122,7 @@ inline namespace cotasklib
 							return;
 						}
 						m_instance->resume(FrameTiming::Draw);
+						m_instance->resume(FrameTiming::LateDraw);
 					}
 
 					virtual void postPresent() override
@@ -448,11 +450,26 @@ inline namespace cotasklib
 		template <typename TResult>
 		class SequenceBase;
 
+		class [[nodiscard]] ITask
+		{
+		public:
+			virtual ~ITask() = default;
+
+			virtual void resume(detail::FrameTiming frameTiming) = 0;
+
+			[[nodiscard]]
+			virtual bool done() const = 0;
+		};
+
 		template <typename TResult>
-		class [[nodiscard]] Task
+		class [[nodiscard]] Task : public ITask
 		{
 		private:
 			detail::CoroutineHandleWrapper<TResult> m_handle;
+			std::vector<std::unique_ptr<ITask>> m_concurrentTasks;
+			std::vector<std::function<void()>> m_updateFuncs;
+			std::vector<std::function<void()>> m_drawFuncs;
+			std::vector<std::function<void()>> m_lateDrawFuncs;
 
 		public:
 			using promise_type = detail::Promise<TResult>;
@@ -479,6 +496,35 @@ inline namespace cotasklib
 					return;
 				}
 				m_handle.resume(frameTiming);
+
+				for (auto& task : m_concurrentTasks)
+				{
+					task->resume(frameTiming);
+				}
+
+				switch (frameTiming)
+				{
+				case detail::FrameTiming::Update:
+					for (const auto& func : m_updateFuncs)
+					{
+						func();
+					}
+					break;
+
+				case detail::FrameTiming::Draw:
+					for (const auto& func : m_drawFuncs)
+					{
+						func();
+					}
+					break;
+
+				case detail::FrameTiming::LateDraw:
+					for (const auto& func : m_lateDrawFuncs)
+					{
+						func();
+					}
+					break;
+				};
 			}
 
 			[[nodiscard]]
@@ -494,12 +540,12 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			Co::ScopedTaskRun runScoped()&&
+			Co::ScopedTaskRun runScoped() &&
 			{
 				return Co::ScopedTaskRun{ detail::TaskAwaiter<TResult>{ std::move(*this) } };
 			}
 
-			void runForget()&&
+			void runForget() &&
 			{
 				resume(detail::Backend::CurrentFrameTiming());
 				if (m_handle.done())
@@ -508,6 +554,35 @@ inline namespace cotasklib
 					return;
 				}
 				(void)detail::Backend::Add(std::make_unique<detail::TaskAwaiter<TResult>>(std::move(*this)));
+			}
+
+			template <typename TResultOther>
+			[[nodiscard]]
+			Task<TResult> with(Task<TResultOther>&& task)&&
+			{
+				m_concurrentTasks.push_back(std::make_unique<Task<TResultOther>>(std::move(task)));
+				return std::move(*this);
+			}
+
+			[[nodiscard]]
+			Task<TResult>&& withUpdate(std::function<void()> func) &&
+			{
+				m_updateFuncs.push_back(std::move(func));
+				return std::move(*this);
+			}
+
+			[[nodiscard]]
+			Task<TResult>&& withDraw(std::function<void()> func) &&
+			{
+				m_drawFuncs.push_back(std::move(func));
+				return std::move(*this);
+			}
+
+			[[nodiscard]]
+			Task<TResult>&& withLateDraw(std::function<void()> func) &&
+			{
+				m_lateDrawFuncs.push_back(std::move(func));
+				return std::move(*this);
 			}
 		};
 
@@ -799,6 +874,38 @@ inline namespace cotasklib
 			}
 		}
 
+		template <typename T>
+		inline Task<T> WaitForResult(const std::optional<T>* pOptional)
+		{
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			{
+				co_yield detail::FrameTiming::Update;
+			}
+
+			while (!pOptional->has_value())
+			{
+				co_yield detail::FrameTiming::Update;
+			}
+
+			co_return **pOptional;
+		}
+
+		template <typename T>
+		inline Task<T> WaitForResult(const Optional<T>* pOptional)
+		{
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			{
+				co_yield detail::FrameTiming::Update;
+			}
+
+			while (!pOptional->has_value())
+			{
+				co_yield detail::FrameTiming::Update;
+			}
+
+			co_return **pOptional;
+		}
+
 		inline Task<void> WaitForTimer(const Timer* pTimer)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
@@ -880,8 +987,6 @@ inline namespace cotasklib
 			{
 				if (area.leftClicked())
 				{
-					Print << U"clickeda5";
-					const auto scopedTaskRun = EveryFrame([]() {Print << U"clicked"; }).runScoped();
 					const auto [releasedInArea, _] = co_await WhenAny(WaitForLeftReleased(area), WaitForUp(MouseL));
 					if (releasedInArea.has_value())
 					{
@@ -1243,6 +1348,80 @@ inline namespace cotasklib
 			}
 		}
 
+		namespace detail
+		{
+			inline uint64 s_fadeInCount = 0;
+			inline uint64 s_fadeOutCount = 0;
+		}
+
+		[[nodiscard]]
+		inline bool IsFadingIn()
+		{
+			return detail::s_fadeInCount > 0;
+		}
+
+		[[nodiscard]]
+		inline bool IsFadingOut()
+		{
+			return detail::s_fadeOutCount > 0;
+		}
+
+		[[nodiscard]]
+		inline bool IsFading()
+		{
+			return IsFadingIn() || IsFadingOut();
+		}
+
+		class ScopedSetIsFadingInToTrue
+		{
+		public:
+			ScopedSetIsFadingInToTrue()
+			{
+				++detail::s_fadeInCount;
+			}
+
+			~ScopedSetIsFadingInToTrue()
+			{
+				if (detail::s_fadeInCount > 0)
+				{
+					--detail::s_fadeInCount;
+				}
+			}
+
+			ScopedSetIsFadingInToTrue(const ScopedSetIsFadingInToTrue&) = delete;
+
+			ScopedSetIsFadingInToTrue& operator=(const ScopedSetIsFadingInToTrue&) = delete;
+
+			ScopedSetIsFadingInToTrue(ScopedSetIsFadingInToTrue&&) = default;
+
+			ScopedSetIsFadingInToTrue& operator=(ScopedSetIsFadingInToTrue&&) = default;
+		};
+
+		class ScopedSetIsFadingOutToTrue
+		{
+		public:
+			ScopedSetIsFadingOutToTrue()
+			{
+				++detail::s_fadeOutCount;
+			}
+
+			~ScopedSetIsFadingOutToTrue()
+			{
+				if (detail::s_fadeOutCount > 0)
+				{
+					--detail::s_fadeOutCount;
+				}
+			}
+
+			ScopedSetIsFadingOutToTrue(const ScopedSetIsFadingOutToTrue&) = delete;
+
+			ScopedSetIsFadingOutToTrue& operator=(const ScopedSetIsFadingOutToTrue&) = delete;
+
+			ScopedSetIsFadingOutToTrue(ScopedSetIsFadingOutToTrue&&) = default;
+
+			ScopedSetIsFadingOutToTrue& operator=(ScopedSetIsFadingOutToTrue&&) = default;
+		};
+
 		// voidを含むタプルは使用できないため、voidの代わりに戻り値として返すための空の構造体を用意
 		struct VoidResult
 		{
@@ -1290,8 +1469,9 @@ inline namespace cotasklib
 			template <SequenceConcept TSequence>
 			Task<typename TSequence::result_type> SequencePtrToTask(std::unique_ptr<TSequence> sequence)
 			{
-				const auto scopedRun = Co::EveryFrameDraw([&sequence]() { sequence->draw(); }).runScoped();
-				co_return co_await sequence->start();
+				co_return co_await sequence->start()
+					.withDraw([&sequence]() { sequence->draw(); })
+					.withLateDraw([&sequence]() { sequence->lateDraw(); });
 			}
 
 			template <typename TScene>
@@ -1304,24 +1484,20 @@ inline namespace cotasklib
 
 				while (true)
 				{
-					SceneFactory nextSceneFactory;
+					const SceneFactory nextSceneFactory = co_await currentScene->run();
+
+					// 次シーンがなければ抜ける
+					if (nextSceneFactory == nullptr)
 					{
-						const auto scopedRun = EveryFrameDraw([&currentScene]() { currentScene->draw(); }).runScoped();
-						nextSceneFactory = co_await currentScene->start();
+						Backend::SetCurrentSceneFactory(nullptr);
+						break;
 					}
 
-					if (nextSceneFactory != nullptr)
-					{
-						currentScene.reset();
-						Backend::SetCurrentSceneFactory(nextSceneFactory); // 次シーンのコンストラクタ内で参照される場合があるためシーン生成前にセットしておく必要がある
-						currentScene = nextSceneFactory();
-						if (!currentScene)
-						{
-							Backend::SetCurrentSceneFactory(nullptr);
-							break;
-						}
-					}
-					else
+					// 次シーンを生成
+					currentScene.reset();
+					Backend::SetCurrentSceneFactory(nextSceneFactory); // 次シーンのコンストラクタ内で参照される場合があるためシーン生成前にセットしておく必要がある
+					currentScene = nextSceneFactory();
+					if (!currentScene)
 					{
 						Backend::SetCurrentSceneFactory(nullptr);
 						break;
@@ -1389,6 +1565,8 @@ inline namespace cotasklib
 					}
 					co_yield detail::FrameTiming::Draw;
 					(args.resume(detail::FrameTiming::Draw), ...);
+					co_yield detail::FrameTiming::LateDraw;
+					(args.resume(detail::FrameTiming::LateDraw), ...);
 					co_yield detail::FrameTiming::PostPresent;
 					(args.resume(detail::FrameTiming::PostPresent), ...);
 					co_yield detail::FrameTiming::Update;
@@ -1425,6 +1603,8 @@ inline namespace cotasklib
 					}
 					co_yield detail::FrameTiming::Draw;
 					(args.resume(detail::FrameTiming::Draw), ...);
+					co_yield detail::FrameTiming::LateDraw;
+					(args.resume(detail::FrameTiming::LateDraw), ...);
 					co_yield detail::FrameTiming::PostPresent;
 					(args.resume(detail::FrameTiming::PostPresent), ...);
 					co_yield detail::FrameTiming::Update;
@@ -1455,6 +1635,10 @@ inline namespace cotasklib
 			virtual void draw() const
 			{
 			}
+
+			virtual void lateDraw() const
+			{
+			}
 		};
 
 		template <detail::SequenceConcept TSequence>
@@ -1470,42 +1654,7 @@ inline namespace cotasklib
 
 		namespace detail
 		{
-			inline uint64 s_fadeCount = 0;
-		}
-
-		[[nodiscard]]
-		inline bool IsFading()
-		{
-			return detail::s_fadeCount > 0;
-		}
-
-		class ScopedSetIsFadingToTrue
-		{
-		public:
-			ScopedSetIsFadingToTrue()
-			{
-				++detail::s_fadeCount;
-			}
-
-			~ScopedSetIsFadingToTrue()
-			{
-				if (detail::s_fadeCount > 0)
-				{
-					--detail::s_fadeCount;
-				}
-			}
-
-			ScopedSetIsFadingToTrue(const ScopedSetIsFadingToTrue&) = delete;
-
-			ScopedSetIsFadingToTrue& operator=(const ScopedSetIsFadingToTrue&) = delete;
-
-			ScopedSetIsFadingToTrue(ScopedSetIsFadingToTrue&&) = default;
-
-			ScopedSetIsFadingToTrue& operator=(ScopedSetIsFadingToTrue&&) = default;
-		};
-
-		namespace detail
-		{
+			template <typename TScopedSetFadingToTrue>
 			class [[nodiscard]] FadeSequenceBase : public SequenceBase<void>
 			{
 			private:
@@ -1522,7 +1671,7 @@ inline namespace cotasklib
 
 				Task<void> start() override final
 				{
-					const Co::ScopedSetIsFadingToTrue scopedSetIsFadingToTrue;
+					const TScopedSetFadingToTrue scopedSetIsFadingToTrue;
 
 					m_timer.start();
 					while (true)
@@ -1540,7 +1689,7 @@ inline namespace cotasklib
 					co_yield FrameTiming::Update;
 				}
 
-				void draw() const override final
+				void lateDraw() const override final
 				{
 					drawFade(m_t);
 				}
@@ -1549,7 +1698,7 @@ inline namespace cotasklib
 				virtual void drawFade(double t) const = 0;
 			};
 
-			class [[nodiscard]] FadeInSequence : public FadeSequenceBase
+			class [[nodiscard]] FadeInSequence : public FadeSequenceBase<ScopedSetIsFadingInToTrue>
 			{
 			private:
 				ColorF m_color;
@@ -1569,7 +1718,7 @@ inline namespace cotasklib
 				}
 			};
 
-			class [[nodiscard]] FadeOutSequence : public FadeSequenceBase
+			class [[nodiscard]] FadeOutSequence : public FadeSequenceBase<ScopedSetIsFadingOutToTrue>
 			{
 			private:
 				ColorF m_color;
@@ -1618,7 +1767,29 @@ inline namespace cotasklib
 
 		class [[nodiscard]] SceneBase
 		{
+		private:
+			bool m_isFadeInFinished = false;
+
+			[[nodiscard]]
+			Task<SceneFactory> startAndFadeOut()
+			{
+				SceneFactory nextSceneFactory = co_await start();
+				co_await fadeOut();
+				co_return std::move(nextSceneFactory);
+			}
+
+			[[nodiscard]]
+			Task<void> fadeInInternal()
+			{
+				co_await fadeIn();
+				m_isFadeInFinished = true;
+			}
+
 		public:
+			static constexpr Duration DefaultFadeInDuration = 0.5s;
+			static constexpr Duration DefaultFadeOutDuration = 0.5s;
+			static constexpr ColorF DefaultFadeColor = Palette::Black;
+
 			SceneBase() = default;
 
 			SceneBase(const SceneBase&) = delete;
@@ -1641,10 +1812,60 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			SceneFactory currentSceneFactory() const
+			virtual Task<void> fadeIn()
 			{
-				return detail::Backend::CurrentSceneFactory();
+				co_await FadeIn(DefaultFadeInDuration, DefaultFadeColor);
 			}
+
+			[[nodiscard]]
+			virtual Task<void> fadeOut()
+			{
+				co_await FadeOut(DefaultFadeOutDuration, DefaultFadeColor);
+			}
+
+			Task<void> waitForFadeIn()
+			{
+				while (!m_isFadeInFinished)
+				{
+					co_yield detail::FrameTiming::Update;
+				}
+			}
+
+			[[nodiscard]]
+			Task<SceneFactory> run()
+			{
+				co_return co_await startAndFadeOut()
+					.withDraw([this] { draw(); })
+					.with(fadeInInternal());
+			}
+		};
+
+		// 毎フレーム呼ばれるupdate関数を記述するタイプのシーン基底クラス
+		class [[nodiscard]] UpdateSceneBase : public SceneBase
+		{
+		private:
+			std::optional<SceneFactory> m_nextSceneFactory;
+
+		protected:
+			template <class TScene, typename... Args>
+			void requestNextScene(Args&&... args)
+			{
+				m_nextSceneFactory = MakeSceneFactory<TScene>(std::forward<Args>(args)...);
+			}
+
+			void requestSceneFinish()
+			{
+				m_nextSceneFactory = SceneFinish();
+			}
+
+		public:
+			[[nodiscard]]
+			virtual Task<SceneFactory> start() override
+			{
+				co_return co_await WaitForResult(&m_nextSceneFactory).withUpdate([this] { update(); });
+			}
+
+			virtual void update() = 0;
 		};
 
 		inline auto operator co_await(SceneFactory sceneFactory)

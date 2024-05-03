@@ -1133,6 +1133,21 @@ inline namespace cotasklib
 		}
 
 		[[nodiscard]]
+		inline Task<void> EveryFrameLateDraw(std::function<void()> func)
+		{
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::LateDraw)
+			{
+				co_yield detail::FrameTiming::LateDraw;
+			}
+
+			while (true)
+			{
+				func();
+				co_yield detail::FrameTiming::LateDraw;
+			}
+		}
+
+		[[nodiscard]]
 		inline Task<void> EveryFramePostPresent(std::function<void()> func)
 		{
 			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::PostPresent)

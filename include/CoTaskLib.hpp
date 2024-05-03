@@ -1476,35 +1476,6 @@ inline namespace cotasklib
 
 			template <typename TScene>
 			concept SceneConcept = std::derived_from<TScene, SceneBase>;
-
-			template <SceneConcept TScene>
-			[[nodiscard]]
-			Task<void> ScenePtrToTask(std::unique_ptr<TScene> scene)
-			{
-				std::unique_ptr<SceneBase> currentScene = std::move(scene);
-
-				while (true)
-				{
-					const SceneFactory nextSceneFactory = co_await currentScene->run();
-
-					// 次シーンがなければ抜ける
-					if (nextSceneFactory == nullptr)
-					{
-						Backend::SetCurrentSceneFactory(nullptr);
-						break;
-					}
-
-					// 次シーンを生成
-					currentScene.reset();
-					Backend::SetCurrentSceneFactory(nextSceneFactory); // 次シーンのコンストラクタ内で参照される場合があるためシーン生成前にセットしておく必要がある
-					currentScene = nextSceneFactory();
-					if (!currentScene)
-					{
-						Backend::SetCurrentSceneFactory(nullptr);
-						break;
-					}
-				}
-			}
 		}
 
 		template <typename TResult>
@@ -1521,25 +1492,11 @@ inline namespace cotasklib
 			return detail::SequencePtrToTask(std::make_unique<TSequence>(std::move(sequence)));
 		}
 
-		template <detail::SceneConcept TScene>
-		[[nodiscard]]
-		Task<void> ToTask(TScene&& scene)
-		{
-			return detail::ScenePtrToTask(std::make_unique<TScene>(std::move(scene)));
-		}
-
 		template <detail::SequenceConcept TSequence, class... Args>
 		[[nodiscard]]
-		Task<typename TSequence::result_type> MakeTask(Args&&... args)
+		Task<typename TSequence::result_type> AsTask(Args&&... args)
 		{
 			return detail::SequencePtrToTask(std::make_unique<TSequence>(std::forward<Args>(args)...));
-		}
-
-		template <detail::SceneConcept TScene, class... Args>
-		[[nodiscard]]
-		Task<void> MakeTask(Args&&... args)
-		{
-			return detail::ScenePtrToTask(std::make_unique<TScene>(std::forward<Args>(args)...));
 		}
 
 		template <class... TTasks>
@@ -1691,16 +1648,19 @@ inline namespace cotasklib
 			virtual void update() = 0;
 		};
 
+#ifdef __cpp_deleted_function_with_reason
 		template <detail::SequenceConcept TSequence>
-		auto operator co_await(TSequence&& sequence)
-		{
-			// SequenceをCo::MakeTaskを使わずco_awaitに直接渡すには、ムーブ構築可能である必要がある
-			static_assert(std::is_move_constructible_v<TSequence>, "To pass a Sequence directly to co_await, it must be move-constructible. Otherwise, use Co::MakeTask<TSequence>() instead.");
-			return detail::TaskAwaiter<typename TSequence::result_type>{ detail::SequencePtrToTask(std::make_unique<TSequence>(std::move(sequence))) };
-		}
+		auto operator co_await(TSequence&& sequence) = delete("To co_await a Sequence, use Co::AsTask<TSequence>() instead.");
+
+		template <detail::SequenceConcept TSequence>
+		auto operator co_await(TSequence& sequence) = delete("To co_await a Sequence, use Co::AsTask<TSequence>() instead.");
+#else
+		template <detail::SequenceConcept TSequence>
+		auto operator co_await(TSequence&& sequence) = delete;
 
 		template <detail::SequenceConcept TSequence>
 		auto operator co_await(TSequence& sequence) = delete;
+#endif
 
 		namespace detail
 		{
@@ -1789,13 +1749,13 @@ inline namespace cotasklib
 		[[nodiscard]]
 		inline Task<void> SimpleFadeIn(const Duration& duration, const ColorF& color = Palette::Black)
 		{
-			return MakeTask<detail::SimpleFadeInSequence>(duration, color);
+			return AsTask<detail::SimpleFadeInSequence>(duration, color);
 		}
 
 		[[nodiscard]]
 		inline Task<void> SimpleFadeOut(const Duration& duration, const ColorF& color = Palette::Black)
 		{
-			return MakeTask<detail::SimpleFadeOutSequence>(duration, color);
+			return AsTask<detail::SimpleFadeOutSequence>(duration, color);
 		}
 
 		template <detail::SceneConcept TScene, typename... Args>
@@ -1934,13 +1894,73 @@ inline namespace cotasklib
 			virtual void update() = 0;
 		};
 
-		inline auto operator co_await(SceneFactory sceneFactory)
+		namespace detail
 		{
-			if (sceneFactory == nullptr)
+			[[nodiscard]]
+			inline Task<void> ScenePtrToTask(std::unique_ptr<SceneBase> scene)
 			{
-				throw Error{ U"SceneFactory must not be nullptr" };
+				std::unique_ptr<SceneBase> currentScene = std::move(scene);
+
+				while (true)
+				{
+					const SceneFactory nextSceneFactory = co_await currentScene->run();
+
+					// 次シーンがなければ抜ける
+					if (nextSceneFactory == nullptr)
+					{
+						Backend::SetCurrentSceneFactory(nullptr);
+						break;
+					}
+
+					// 次シーンを生成
+					currentScene.reset();
+					Backend::SetCurrentSceneFactory(nextSceneFactory); // 次シーンのコンストラクタ内で参照される場合があるためシーン生成前にセットしておく必要がある
+					currentScene = nextSceneFactory();
+					if (!currentScene)
+					{
+						Backend::SetCurrentSceneFactory(nullptr);
+						break;
+					}
+				}
 			}
-			return detail::TaskAwaiter<void>{ detail::ScenePtrToTask(sceneFactory()) };
 		}
+
+		template <detail::SceneConcept TScene>
+		[[nodiscard]]
+		Task<void> ToTask(TScene&& scene)
+		{
+			return detail::ScenePtrToTask(std::make_unique<TScene>(std::move(scene)));
+		}
+
+		template <detail::SceneConcept TScene, class... Args>
+		[[nodiscard]]
+		Task<void> AsTask(Args&&... args)
+		{
+			return detail::ScenePtrToTask(std::make_unique<TScene>(std::forward<Args>(args)...));
+		}
+
+		inline Task<void> AsTask(SceneFactory sceneFactory)
+		{
+			auto scenePtr = sceneFactory();
+			return detail::ScenePtrToTask(std::move(scenePtr));
+		}
+
+#ifdef __cpp_deleted_function_with_reason
+		template <detail::SceneConcept TScene>
+		auto operator co_await(TScene&& scene) = delete("To co_await a Scene, use Co::AsTask<TScene>() instead.");
+
+		template <detail::SceneConcept TScene>
+		auto operator co_await(TScene& scene) = delete("To co_await a Scene, use Co::AsTask<TScene>() instead.");
+
+		auto operator co_await(SceneFactory sceneFactory) = delete("To co_await a Scene created by a SceneFactory, use Co::AsTask(SceneFactory) instead.");
+#else
+		template <detail::SceneConcept TScene>
+		auto operator co_await(TScene&& scene) = delete;
+
+		template <detail::SceneConcept TScene>
+		auto operator co_await(TScene& scene) = delete;
+
+		auto operator co_await(SceneFactory sceneFactory) = delete;
+#endif
 	}
 }

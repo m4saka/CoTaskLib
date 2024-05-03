@@ -435,6 +435,88 @@ inline namespace cotasklib
 					return m_handle.promise().nextResumeTiming();
 				}
 			};
+
+
+			template <typename TResult>
+			class ThenCaller
+			{
+			public:
+				using function_type = std::function<void(TResult)>;
+
+			private:
+				std::vector<function_type> m_funcs;
+				bool m_called = false;
+
+			public:
+				ThenCaller() = default;
+
+				ThenCaller(const ThenCaller&) = delete;
+
+				ThenCaller& operator=(const ThenCaller&) = delete;
+
+				ThenCaller(ThenCaller&&) = default;
+
+				ThenCaller& operator=(ThenCaller&&) = default;
+
+				void add(function_type func)
+				{
+					m_funcs.push_back(std::move(func));
+				}
+
+				void callOnce(const Task<TResult>& task)
+				{
+					if (m_called)
+					{
+						return;
+					}
+					const TResult result = task.value();
+					for (const auto& func : m_funcs)
+					{
+						func(result);
+					}
+					m_called = true;
+				}
+			};
+
+			template <>
+			class ThenCaller<void>
+			{
+			public:
+				using function_type = std::function<void()>;
+
+			private:
+				std::vector<function_type> m_funcs;
+				bool m_called = false;
+
+			public:
+				ThenCaller() = default;
+
+				ThenCaller(const ThenCaller&) = delete;
+
+				ThenCaller& operator=(const ThenCaller&) = delete;
+
+				ThenCaller(ThenCaller&&) = default;
+
+				ThenCaller& operator=(ThenCaller&&) = default;
+
+				void add(function_type func)
+				{
+					m_funcs.push_back(std::move(func));
+				}
+
+				void callOnce(const Task<void>&)
+				{
+					if (m_called)
+					{
+						return;
+					}
+					for (const auto& func : m_funcs)
+					{
+						func();
+					}
+					m_called = true;
+				}
+			};
 		}
 
 		template <typename TResult>
@@ -460,11 +542,13 @@ inline namespace cotasklib
 			std::vector<std::function<void()>> m_updateFuncs;
 			std::vector<std::function<void()>> m_drawFuncs;
 			std::vector<std::function<void()>> m_lateDrawFuncs;
+			detail::ThenCaller<TResult> m_thenCaller;
 
 		public:
 			using promise_type = detail::Promise<TResult>;
 			using handle_type = std::coroutine_handle<promise_type>;
 			using result_type = TResult;
+			using then_function_type = typename detail::ThenCaller<TResult>::function_type;
 
 			explicit Task(handle_type h)
 				: m_handle(std::move(h))
@@ -483,6 +567,7 @@ inline namespace cotasklib
 			{
 				if (m_handle.done())
 				{
+					m_thenCaller.callOnce(*this);
 					return;
 				}
 				m_handle.resume(frameTiming);
@@ -572,6 +657,13 @@ inline namespace cotasklib
 			Task<TResult>&& withLateDraw(std::function<void()> func) &&
 			{
 				m_lateDrawFuncs.push_back(std::move(func));
+				return std::move(*this);
+			}
+
+			[[nodiscard]]
+			Task<TResult>&& then(then_function_type func) &&
+			{
+				m_thenCaller.add(std::move(func));
 				return std::move(*this);
 			}
 		};

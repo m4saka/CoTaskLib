@@ -522,6 +522,12 @@ inline namespace cotasklib
 		template <typename TResult>
 		class SequenceBase;
 
+		enum class WithTiming
+		{
+			Before,
+			After,
+		};
+
 		class [[nodiscard]] ITask
 		{
 		public:
@@ -538,7 +544,8 @@ inline namespace cotasklib
 		{
 		private:
 			detail::CoroutineHandleWrapper<TResult> m_handle;
-			std::vector<std::unique_ptr<ITask>> m_concurrentTasks;
+			std::vector<std::unique_ptr<ITask>> m_concurrentTasksBefore;
+			std::vector<std::unique_ptr<ITask>> m_concurrentTasksAfter;
 			std::vector<std::function<void()>> m_updateFuncs;
 			std::vector<std::function<void()>> m_drawFuncs;
 			std::vector<std::function<void()>> m_lateDrawFuncs;
@@ -570,9 +577,15 @@ inline namespace cotasklib
 					m_thenCaller.callOnce(*this);
 					return;
 				}
+
+				for (auto& task : m_concurrentTasksBefore)
+				{
+					task->resume(frameTiming);
+				}
+
 				m_handle.resume(frameTiming);
 
-				for (auto& task : m_concurrentTasks)
+				for (auto& task : m_concurrentTasksAfter)
 				{
 					task->resume(frameTiming);
 				}
@@ -633,9 +646,29 @@ inline namespace cotasklib
 
 			template <typename TResultOther>
 			[[nodiscard]]
-			Task<TResult> with(Task<TResultOther>&& task)&&
+			Task<TResult> with(Task<TResultOther>&& task) &&
 			{
-				m_concurrentTasks.push_back(std::make_unique<Task<TResultOther>>(std::move(task)));
+				m_concurrentTasksAfter.push_back(std::make_unique<Task<TResultOther>>(std::move(task)));
+				return std::move(*this);
+			}
+
+			template <typename TResultOther>
+			[[nodiscard]]
+			Task<TResult> with(Task<TResultOther>&& task, WithTiming timing) &&
+			{
+				switch (timing)
+				{
+				case WithTiming::Before:
+					m_concurrentTasksBefore.push_back(std::make_unique<Task<TResultOther>>(std::move(task)));
+					break;
+
+				case WithTiming::After:
+					m_concurrentTasksAfter.push_back(std::make_unique<Task<TResultOther>>(std::move(task)));
+					break;
+
+				default:
+					throw Error{ U"Task: Invalid WithTiming" };
+				}
 				return std::move(*this);
 			}
 
@@ -647,6 +680,25 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
+			Task<TResult>&& withUpdate(std::function<void()> func, WithTiming timing) &&
+			{
+				switch (timing)
+				{
+				case WithTiming::Before:
+					m_updateFuncs.insert(m_updateFuncs.begin(), std::move(func));
+					break;
+
+				case WithTiming::After:
+					m_updateFuncs.push_back(std::move(func));
+					break;
+
+				default:
+					throw Error{ U"Task: Invalid WithTiming" };
+				}
+				return std::move(*this);
+			}
+
+			[[nodiscard]]
 			Task<TResult>&& withDraw(std::function<void()> func) &&
 			{
 				m_drawFuncs.push_back(std::move(func));
@@ -654,9 +706,47 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
+			Task<TResult>&& withDraw(std::function<void()> func, WithTiming timing) &&
+			{
+				switch (timing)
+				{
+				case WithTiming::Before:
+					m_drawFuncs.insert(m_drawFuncs.begin(), std::move(func));
+					break;
+
+				case WithTiming::After:
+					m_drawFuncs.push_back(std::move(func));
+					break;
+
+				default:
+					throw Error{ U"Task: Invalid WithTiming" };
+				}
+				return std::move(*this);
+			}
+
+			[[nodiscard]]
 			Task<TResult>&& withLateDraw(std::function<void()> func) &&
 			{
 				m_lateDrawFuncs.push_back(std::move(func));
+				return std::move(*this);
+			}
+
+			[[nodiscard]]
+			Task<TResult>&& withLateDraw(std::function<void()> func, WithTiming timing) &&
+			{
+				switch (timing)
+				{
+				case WithTiming::Before:
+					m_lateDrawFuncs.insert(m_lateDrawFuncs.begin(), std::move(func));
+					break;
+
+				case WithTiming::After:
+					m_lateDrawFuncs.push_back(std::move(func));
+					break;
+
+				default:
+					throw Error{ U"Task: Invalid WithTiming" };
+				}
 				return std::move(*this);
 			}
 
@@ -1862,7 +1952,7 @@ inline namespace cotasklib
 			{
 				co_return co_await startAndFadeOut()
 					.withDraw([this] { draw(); })
-					.with(fadeInInternal());
+					.with(fadeInInternal(), WithTiming::Before);
 			}
 		};
 

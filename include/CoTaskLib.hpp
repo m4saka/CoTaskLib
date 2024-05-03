@@ -60,6 +60,10 @@ inline namespace cotasklib
 
 			using AwaiterID = uint64;
 
+			using UpdaterID = uint64;
+
+			using DrawerID = uint64;
+
 			template <typename TResult>
 			class TaskAwaiter;
 		}
@@ -139,6 +143,16 @@ inline namespace cotasklib
 
 				std::map<AwaiterID, std::unique_ptr<IAwaiter>> m_awaiters;
 
+				UpdaterID m_nextUpdaterID = 1;
+
+				std::map<int32, std::map<UpdaterID, std::function<void()>>> m_updatersByPriorityOrderNegative;
+				std::map<int32, std::map<UpdaterID, std::function<void()>>> m_updatersByPriorityOrderNonNegative;
+
+				DrawerID m_nextDrawerID = 1;
+
+				std::map<int32, std::map<DrawerID, std::function<void()>>> m_drawersByZIndexNegative;
+				std::map<int32, std::map<DrawerID, std::function<void()>>> m_drawersByZIndexNonNegative;
+
 				SceneFactory m_currentSceneFactory;
 
 			public:
@@ -147,6 +161,30 @@ inline namespace cotasklib
 				void resume(FrameTiming frameTiming)
 				{
 					m_currentFrameTiming = frameTiming;
+
+					switch (frameTiming)
+					{
+					case FrameTiming::Update:
+						for (auto& [priorityOrder, updaters] : m_updatersByPriorityOrderNegative)
+						{
+							for (auto& [updaterID, updateFunc] : updaters)
+							{
+								updateFunc();
+							}
+						}
+						break;
+
+					case FrameTiming::Draw:
+						for (const auto& [zIndex, drawers] : m_drawersByZIndexNegative)
+						{
+							for (const auto& [drawerID, drawFunc] : drawers)
+							{
+								drawFunc();
+							}
+						}
+						break;
+					}
+
 					for (auto it = m_awaiters.begin(); it != m_awaiters.end();)
 					{
 						m_currentAwaiterID = it->first;
@@ -162,6 +200,29 @@ inline namespace cotasklib
 						}
 					}
 					m_currentAwaiterID = none;
+
+					switch (frameTiming)
+					{
+					case FrameTiming::Update:
+						for (auto& [priorityOrder, updaters] : m_updatersByPriorityOrderNonNegative)
+						{
+							for (auto& [updaterID, updateFunc] : updaters)
+							{
+								updateFunc();
+							}
+						}
+						break;
+
+					case FrameTiming::Draw:
+						for (const auto& [zIndex, drawers] : m_drawersByZIndexNonNegative)
+						{
+							for (const auto& [drawerID, drawFunc] : drawers)
+							{
+								drawFunc();
+							}
+						}
+						break;
+					}
 				}
 
 				static void Init()
@@ -198,6 +259,90 @@ inline namespace cotasklib
 						throw Error{ U"Backend::UnregisterTask: Cannot unregister the currently running task" };
 					}
 					s_pInstance->m_awaiters.erase(id);
+				}
+
+				[[nodiscard]]
+				static AwaiterID AddUpdater(std::function<void()> func, int32 priorityOrder)
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+					const UpdaterID id = s_pInstance->m_nextUpdaterID++;
+					if (priorityOrder < 0)
+					{
+						s_pInstance->m_updatersByPriorityOrderNegative[priorityOrder].emplace(id, std::move(func));
+					}
+					else
+					{
+						s_pInstance->m_updatersByPriorityOrderNonNegative[priorityOrder].emplace(id, std::move(func));
+					}
+					return id;
+				}
+
+				static void RemoveUpdater(UpdaterID id)
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+					for (auto& [_, updaters] : s_pInstance->m_updatersByPriorityOrderNonNegative)
+					{
+						if (updaters.erase(id))
+						{
+							return;
+						}
+					}
+					for (auto& [_, updaters] : s_pInstance->m_updatersByPriorityOrderNegative)
+					{
+						if (updaters.erase(id))
+						{
+							return;
+						}
+					}
+					throw Error{ U"Backend::RemoveUpdater: Updater not found" };
+				}
+
+				[[nodiscard]]
+				static DrawerID AddDrawer(std::function<void()> func, int32 zIndex)
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+					const DrawerID id = s_pInstance->m_nextDrawerID++;
+					if (zIndex < 0)
+					{
+						s_pInstance->m_drawersByZIndexNegative[zIndex].emplace(id, std::move(func));
+					}
+					else
+					{
+						s_pInstance->m_drawersByZIndexNonNegative[zIndex].emplace(id, std::move(func));
+					}
+					return id;
+				}
+
+				static void RemoveDrawer(DrawerID id)
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+					for (auto& [_, drawers] : s_pInstance->m_drawersByZIndexNonNegative)
+					{
+						if (drawers.erase(id))
+						{
+							return;
+						}
+					}
+					for (auto& [_, drawers] : s_pInstance->m_drawersByZIndexNegative)
+					{
+						if (drawers.erase(id))
+						{
+							return;
+						}
+					}
+					throw Error{ U"Backend::RemoveDrawer: Drawer not found" };
 				}
 
 				[[nodiscard]]
@@ -343,6 +488,94 @@ inline namespace cotasklib
 			bool done() const
 			{
 				return m_lifetime.done();
+			}
+		};
+
+		class ScopedDrawer
+		{
+		private:
+			detail::DrawerID m_id;
+
+		public:
+			ScopedDrawer(std::function<void()> func, int32 zIndex = 0)
+				: m_id(detail::Backend::AddDrawer(std::move(func), zIndex))
+			{
+			}
+
+			ScopedDrawer(const ScopedDrawer&) = delete;
+
+			ScopedDrawer& operator=(const ScopedDrawer&) = delete;
+
+			ScopedDrawer(ScopedDrawer&& rhs) noexcept
+				: m_id(rhs.m_id)
+			{
+				rhs.m_id = 0;
+			}
+
+			ScopedDrawer& operator=(ScopedDrawer&& rhs) noexcept
+			{
+				if (this != &rhs)
+				{
+					if (m_id)
+					{
+						detail::Backend::RemoveDrawer(m_id);
+					}
+					m_id = rhs.m_id;
+					rhs.m_id = 0;
+				}
+				return *this;
+			}
+
+			~ScopedDrawer()
+			{
+				if (m_id)
+				{
+					detail::Backend::RemoveDrawer(m_id);
+				}
+			}
+		};
+
+		class ScopedUpdater
+		{
+		private:
+			detail::UpdaterID m_id;
+
+		public:
+			ScopedUpdater(std::function<void()> func, int32 priorityOrder = 0)
+				: m_id(detail::Backend::AddUpdater(std::move(func), priorityOrder))
+			{
+			}
+
+			ScopedUpdater(const ScopedUpdater&) = delete;
+
+			ScopedUpdater& operator=(const ScopedUpdater&) = delete;
+
+			ScopedUpdater(ScopedUpdater&& rhs) noexcept
+				: m_id(rhs.m_id)
+			{
+				rhs.m_id = 0;
+			}
+
+			ScopedUpdater& operator=(ScopedUpdater&& rhs) noexcept
+			{
+				if (this != &rhs)
+				{
+					if (m_id)
+					{
+						detail::Backend::RemoveUpdater(m_id);
+					}
+					m_id = rhs.m_id;
+					rhs.m_id = 0;
+				}
+				return *this;
+			}
+
+			~ScopedUpdater()
+			{
+				if (m_id)
+				{
+					detail::Backend::RemoveUpdater(m_id);
+				}
 			}
 		};
 
@@ -546,9 +779,6 @@ inline namespace cotasklib
 			detail::CoroutineHandleWrapper<TResult> m_handle;
 			std::vector<std::unique_ptr<ITask>> m_concurrentTasksBefore;
 			std::vector<std::unique_ptr<ITask>> m_concurrentTasksAfter;
-			std::vector<std::function<void()>> m_updateFuncs;
-			std::vector<std::function<void()>> m_drawFuncs;
-			std::vector<std::function<void()>> m_lateDrawFuncs;
 			detail::ThenCaller<TResult> m_thenCaller;
 
 		public:
@@ -585,39 +815,15 @@ inline namespace cotasklib
 
 				m_handle.resume(frameTiming);
 
-				if (m_handle.done())
-				{
-					m_thenCaller.callOnce(*this);
-				}
-
 				for (auto& task : m_concurrentTasksAfter)
 				{
 					task->resume(frameTiming);
 				}
 
-				switch (frameTiming)
+				if (m_handle.done())
 				{
-				case detail::FrameTiming::Update:
-					for (const auto& func : m_updateFuncs)
-					{
-						func();
-					}
-					break;
-
-				case detail::FrameTiming::Draw:
-					for (const auto& func : m_drawFuncs)
-					{
-						func();
-					}
-					break;
-
-				case detail::FrameTiming::LateDraw:
-					for (const auto& func : m_lateDrawFuncs)
-					{
-						func();
-					}
-					break;
-				};
+					m_thenCaller.callOnce(*this);
+				}
 			}
 
 			[[nodiscard]]
@@ -674,27 +880,6 @@ inline namespace cotasklib
 				default:
 					throw Error{ U"Task: Invalid WithTiming" };
 				}
-				return std::move(*this);
-			}
-
-			[[nodiscard]]
-			Task<TResult>&& withUpdate(std::function<void()> func) &&
-			{
-				m_updateFuncs.push_back(std::move(func));
-				return std::move(*this);
-			}
-
-			[[nodiscard]]
-			Task<TResult>&& withDraw(std::function<void()> func) &&
-			{
-				m_drawFuncs.push_back(std::move(func));
-				return std::move(*this);
-			}
-
-			[[nodiscard]]
-			Task<TResult>&& withLateDraw(std::function<void()> func) &&
-			{
-				m_lateDrawFuncs.push_back(std::move(func));
 				return std::move(*this);
 			}
 
@@ -1507,9 +1692,8 @@ inline namespace cotasklib
 			[[nodiscard]]
 			Task<typename TSequence::result_type> SequencePtrToTask(std::unique_ptr<TSequence> sequence)
 			{
-				co_return co_await sequence->start()
-					.withDraw([&sequence] { sequence->draw(); })
-					.withLateDraw([&sequence] { sequence->lateDraw(); });
+				const ScopedDrawer everyFrameDraw{ [&sequence] { sequence->draw(); } };
+				co_return co_await sequence->start();
 			}
 
 			template <typename TScene>
@@ -1655,8 +1839,11 @@ inline namespace cotasklib
 			[[nodiscard]]
 			virtual Task<TResult> start() override final
 			{
-				// TResultのコピーコストが大きい場合を考慮して、WaitForResultは使わない
-				co_await WaitUntil([this] { return m_result.has_value(); }).withUpdate([this] { update(); });
+				while (!m_result)
+				{
+					update();
+					co_yield detail::FrameTiming::Update;
+				}
 				co_return *m_result;
 			}
 
@@ -1680,7 +1867,11 @@ inline namespace cotasklib
 			[[nodiscard]]
 			virtual Task<void> start() override final
 			{
-				co_await WaitUntil([this] { return m_isFinished; }).withUpdate([this] { update(); });
+				while (!m_isFinished)
+				{
+					update();
+					co_yield detail::FrameTiming::Update;
+				}
 			}
 
 			virtual void update() = 0;
@@ -1898,9 +2089,9 @@ inline namespace cotasklib
 			[[nodiscard]]
 			Task<SceneFactory> run()
 			{
-				co_return co_await startAndFadeOut()
-					.withDraw([this] { draw(); })
-					.with(fadeInInternal(), WithTiming::Before);
+				const ScopedDrawer drawer{ [this] { draw(); } };
+
+				co_return co_await startAndFadeOut().with(fadeInInternal());
 			}
 		};
 
@@ -1926,7 +2117,13 @@ inline namespace cotasklib
 			[[nodiscard]]
 			virtual Task<SceneFactory> start() override final
 			{
-				co_return co_await WaitForResult(&m_nextSceneFactory).withUpdate([this] { update(); });
+				while (!m_nextSceneFactory.has_value())
+				{
+					update();
+					co_yield detail::FrameTiming::Update;
+				}
+
+				co_return std::move(*m_nextSceneFactory);
 			}
 
 			virtual void update() = 0;

@@ -585,6 +585,11 @@ inline namespace cotasklib
 
 				m_handle.resume(frameTiming);
 
+				if (m_handle.done())
+				{
+					m_thenCaller.callOnce(*this);
+				}
+
 				for (auto& task : m_concurrentTasksAfter)
 				{
 					task->resume(frameTiming);
@@ -1560,8 +1565,8 @@ inline namespace cotasklib
 			Task<typename TSequence::result_type> SequencePtrToTask(std::unique_ptr<TSequence> sequence)
 			{
 				co_return co_await sequence->start()
-					.withDraw([&sequence]() { sequence->draw(); })
-					.withLateDraw([&sequence]() { sequence->lateDraw(); });
+					.withDraw([&sequence] { sequence->draw(); })
+					.withLateDraw([&sequence] { sequence->lateDraw(); });
 			}
 
 			template <typename TScene>

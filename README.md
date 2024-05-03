@@ -270,6 +270,8 @@ Siv3D標準のシーン機能を使用して作成したシーンをCoTaskLibへ
     - 指定された条件が満たされるまで待機します。
 - `Co::WaitWhile(std::function<bool()>)` -> `Co::Task<void>`
     - 指定された関数を毎フレーム実行し、結果がtrueの間、待機します。
+- `Co::WaitForever()` -> `Co::Task<void>`
+    - 永久に待機します。
 - `Co::WaitForResult(const Optional<T>*)` -> `Co::Task<T>`
     - `Optional`の`has_value()`関数がtrueを返すまで待機します。
     - 値はコピーして返却されます。値のコピーを避けたい場合は、代わりに`Co::WaitUntil`を使用して`has_value()`がtrueを返すまで待機し、`Optional`の値を手動で取得してください。
@@ -293,14 +295,6 @@ Siv3D標準のシーン機能を使用して作成したシーンをCoTaskLibへ
     - マウスの右ボタンが指定領域でクリックされてから離されるまで待機します。
 - `Co::WaitForMouseOver(TArea)` -> `Co::Task<void>`
     - マウスカーソルが指定領域内に侵入するまで待機します。
-- `Co::EveryFrame(std::function<void()>)` -> `Co::Task<void>`
-    - updateフェーズで毎フレーム指定された関数を実行します。
-- `Co::EveryFrameDraw(std::function<void()>)` -> `Co::Task<void>`
-    - drawフェーズで毎フレーム指定された関数を実行します。
-- `Co::EveryFrameLateDraw(std::function<void()>)` -> `Co::Task<void>`
-    - lateDrawフェーズで毎フレーム指定された関数を実行します。
-- `Co::EveryFramePostPresent(std::function<void()>)` -> `Co::Task<void>`
-    - postPresentフェーズで毎フレーム指定された関数を実行します。
 - `Co::ExecOnDown(TInput, std::function<void()>)` -> `Co::Task<void>`
     - 入力が押された時に関数を実行します。
 - `Co::ExecOnUp(TInput, std::function<void()>)` -> `Co::Task<void>`

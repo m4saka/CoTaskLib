@@ -46,7 +46,6 @@ inline namespace cotasklib
 				Update,
 				Draw,
 				LateDraw,
-				PostPresent,
 			};
 
 			class IAwaiter
@@ -123,16 +122,6 @@ inline namespace cotasklib
 						}
 						m_instance->resume(FrameTiming::Draw);
 						m_instance->resume(FrameTiming::LateDraw);
-					}
-
-					virtual void postPresent() override
-					{
-						if (!m_isFirstUpdated)
-						{
-							// Addonの初回postPresentがupdateより先に実行される挙動を回避
-							return;
-						}
-						m_instance->resume(FrameTiming::PostPresent);
 					}
 
 					[[nodiscard]]
@@ -1102,66 +1091,6 @@ inline namespace cotasklib
 			}
 		}
 
-		[[nodiscard]]
-		inline Task<void> EveryFrame(std::function<void()> func)
-		{
-			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
-			{
-				co_yield detail::FrameTiming::Update;
-			}
-
-			while (true)
-			{
-				func();
-				co_yield detail::FrameTiming::Update;
-			}
-		}
-
-		[[nodiscard]]
-		inline Task<void> EveryFrameDraw(std::function<void()> func)
-		{
-			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Draw)
-			{
-				co_yield detail::FrameTiming::Draw;
-			}
-
-			while (true)
-			{
-				func();
-				co_yield detail::FrameTiming::Draw;
-			}
-		}
-
-		[[nodiscard]]
-		inline Task<void> EveryFrameLateDraw(std::function<void()> func)
-		{
-			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::LateDraw)
-			{
-				co_yield detail::FrameTiming::LateDraw;
-			}
-
-			while (true)
-			{
-				func();
-				co_yield detail::FrameTiming::LateDraw;
-			}
-		}
-
-		[[nodiscard]]
-		inline Task<void> EveryFramePostPresent(std::function<void()> func)
-		{
-			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::PostPresent)
-			{
-				co_yield detail::FrameTiming::PostPresent;
-			}
-
-			while (true)
-			{
-				func();
-				co_yield detail::FrameTiming::PostPresent;
-			}
-		}
-
 		template <class TInput>
 		[[nodiscard]]
 		inline Task<void> ExecOnDown(const TInput input, std::function<void()> func)
@@ -1626,8 +1555,6 @@ inline namespace cotasklib
 					(args.resume(detail::FrameTiming::Draw), ...);
 					co_yield detail::FrameTiming::LateDraw;
 					(args.resume(detail::FrameTiming::LateDraw), ...);
-					co_yield detail::FrameTiming::PostPresent;
-					(args.resume(detail::FrameTiming::PostPresent), ...);
 					co_yield detail::FrameTiming::Update;
 				}
 			}
@@ -1664,8 +1591,6 @@ inline namespace cotasklib
 					(args.resume(detail::FrameTiming::Draw), ...);
 					co_yield detail::FrameTiming::LateDraw;
 					(args.resume(detail::FrameTiming::LateDraw), ...);
-					co_yield detail::FrameTiming::PostPresent;
-					(args.resume(detail::FrameTiming::PostPresent), ...);
 					co_yield detail::FrameTiming::Update;
 				}
 			}

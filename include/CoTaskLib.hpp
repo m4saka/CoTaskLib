@@ -1698,7 +1698,7 @@ inline namespace cotasklib
 
 		namespace detail
 		{
-			template <typename TScopedSetFadingToTrue>
+			template <class TScopedSetFadingToTrue>
 			class [[nodiscard]] FadeSequenceBase : public SequenceBase<void>
 			{
 			private:
@@ -1715,7 +1715,7 @@ inline namespace cotasklib
 
 				Task<void> start() override final
 				{
-					const TScopedSetFadingToTrue scopedSetIsFadingToTrue;
+					const TScopedSetFadingToTrue scopedSetIsFadingToTrue{};
 
 					m_timer.start();
 					while (true)

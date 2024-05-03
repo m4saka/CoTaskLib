@@ -1643,6 +1643,54 @@ inline namespace cotasklib
 			}
 		};
 
+		// 毎フレーム呼ばれるupdate関数を記述するタイプのシーケンス基底クラス
+		template <typename TResult>
+		class [[nodiscard]] UpdateSequenceBase : public SequenceBase<TResult>
+		{
+		private:
+			std::optional<TResult> m_result;
+
+		protected:
+			void finish(const TResult& result)
+			{
+				m_result = result;
+			}
+
+		public:
+			[[nodiscard]]
+			virtual Task<TResult> start() override final
+			{
+				// TResultのコピーコストが大きい場合を考慮して、WaitForResultは使わない
+				co_await WaitUntil([this] { return m_result.has_value(); }).withUpdate([this] { update(); });
+				co_return *m_result;
+			}
+
+			virtual void update() = 0;
+		};
+
+		// 毎フレーム呼ばれるupdate関数を記述するタイプのシーケンス基底クラス(void特殊化)
+		template <>
+		class [[nodiscard]] UpdateSequenceBase<void> : public SequenceBase<void>
+		{
+		private:
+			bool m_isFinished;
+
+		protected:
+			void finish()
+			{
+				m_isFinished = true;
+			}
+
+		public:
+			[[nodiscard]]
+			virtual Task<void> start() override final
+			{
+				co_await WaitUntil([this] { return m_isFinished; }).withUpdate([this] { update(); });
+			}
+
+			virtual void update() = 0;
+		};
+
 		template <detail::SequenceConcept TSequence>
 		auto operator co_await(TSequence&& sequence)
 		{
@@ -1878,7 +1926,7 @@ inline namespace cotasklib
 
 		public:
 			[[nodiscard]]
-			virtual Task<SceneFactory> start() override
+			virtual Task<SceneFactory> start() override final
 			{
 				co_return co_await WaitForResult(&m_nextSceneFactory).withUpdate([this] { update(); });
 			}

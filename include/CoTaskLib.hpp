@@ -685,25 +685,6 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			Task<TResult>&& withUpdate(std::function<void()> func, WithTiming timing) &&
-			{
-				switch (timing)
-				{
-				case WithTiming::Before:
-					m_updateFuncs.insert(m_updateFuncs.begin(), std::move(func));
-					break;
-
-				case WithTiming::After:
-					m_updateFuncs.push_back(std::move(func));
-					break;
-
-				default:
-					throw Error{ U"Task: Invalid WithTiming" };
-				}
-				return std::move(*this);
-			}
-
-			[[nodiscard]]
 			Task<TResult>&& withDraw(std::function<void()> func) &&
 			{
 				m_drawFuncs.push_back(std::move(func));
@@ -711,47 +692,9 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			Task<TResult>&& withDraw(std::function<void()> func, WithTiming timing) &&
-			{
-				switch (timing)
-				{
-				case WithTiming::Before:
-					m_drawFuncs.insert(m_drawFuncs.begin(), std::move(func));
-					break;
-
-				case WithTiming::After:
-					m_drawFuncs.push_back(std::move(func));
-					break;
-
-				default:
-					throw Error{ U"Task: Invalid WithTiming" };
-				}
-				return std::move(*this);
-			}
-
-			[[nodiscard]]
 			Task<TResult>&& withLateDraw(std::function<void()> func) &&
 			{
 				m_lateDrawFuncs.push_back(std::move(func));
-				return std::move(*this);
-			}
-
-			[[nodiscard]]
-			Task<TResult>&& withLateDraw(std::function<void()> func, WithTiming timing) &&
-			{
-				switch (timing)
-				{
-				case WithTiming::Before:
-					m_lateDrawFuncs.insert(m_lateDrawFuncs.begin(), std::move(func));
-					break;
-
-				case WithTiming::After:
-					m_lateDrawFuncs.push_back(std::move(func));
-					break;
-
-				default:
-					throw Error{ U"Task: Invalid WithTiming" };
-				}
 				return std::move(*this);
 			}
 

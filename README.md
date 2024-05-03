@@ -102,7 +102,6 @@ Co::Task<void> ExampleTask()
 ```
 
 ## `Co::SequenceBase<TResult>`クラス
-
 シーケンスの基底クラスです。シーケンスとは、タスクと描画処理(draw関数)を組み合わせたものです。  
 描画処理を含むタスクを作成したい場合、このクラスを継承したクラスを作成します。
 
@@ -125,34 +124,24 @@ Co::Task<void> ExampleTask()
 ### シーケンスの実行方法
 
 #### 通常の関数内から実行開始する場合
-`Co::MakeTask`関数を使用することで、シーケンスを生成した上でそれを実行する`Co::Task`を取得できます。これに対して通常通り、`runScoped`関数または`runForget`関数を使用します。
+`Co::AsTask`関数を使用することで、シーケンスを生成した上でそれを実行する`Co::Task`を取得できます。これに対して通常通り、`runScoped`関数または`runForget`関数を使用します。
 
-もしシーケンスクラスのコンストラクタに引数が必要な場合、`Co::MakeTask`関数の引数として渡すことができます。
+もしシーケンスクラスのコンストラクタに引数が必要な場合、`Co::AsTask`関数の引数として渡すことができます。
 
 ```cpp
-const auto taskRun = Co::MakeTask<ExampleSequence>().runScoped();
+const auto taskRun = Co::AsTask<ExampleSequence>().runScoped();
 ```
 ```cpp
-Co::MakeTask<ExampleSequence>().runForget();
+Co::AsTask<ExampleSequence>().runForget();
 ```
 
 ### コルーチン内から実行する場合
-`Co::Task`と同様、`co_await`へ渡すことでシーケンスを実行して完了まで待機できます。
+同様に`Co::AsTask`関数で`Co::Task`を取得し、これに対して通常通り`co_await`を使用します。
 
 ```cpp
 Co::Task<void> ExampleTask()
 {
-    co_await Co::MakeTask<ExampleSequence>(); // ExampleSequenceを実行し、完了まで待機します
-}
-```
-
-シーケンスクラスがムーブ構築可能な場合に限り、下記のようにシーケンスクラスのインスタンスを直接`co_await`に指定するシンプルな記述方法も使用できます。  
-※ムーブ構築可能でない場合、こちらの記述方法はコンパイルエラーになります。
-
-```cpp
-Co::Task<void> ExampleTask()
-{
-    co_await ExampleSequence{}; // ExampleSequenceを実行し、完了まで待機します
+    co_await Co::AsTask<ExampleSequence>(); // ExampleSequenceを実行し、完了まで待機します
 }
 ```
 
@@ -161,7 +150,6 @@ Co::Task<void> ExampleTask()
 `start`関数を直接呼び出してタスク実行すると、`draw`関数が呼び出されません。
 
 ## `Co::UpdateSequenceBase<TResult>`クラス
-
 毎フレーム実行される`update()`関数を持つシーケンスの基底クラスです。コルーチンを使用しないシーケンスを作成する際は、このクラスを継承します。
 
 コルーチンを使用せずに作成した既存の処理をなるべく変更せずに移植したい場合や、毎フレームの処理を記述した方が都合が良いシーケンスを作成する場合に便利です。
@@ -181,7 +169,6 @@ Co::Task<void> ExampleTask()
         - `start`関数内で`co_await`を使用して別のコルーチンの実行完了まで待機している間も、`draw`関数は実行され続けます。
 
 ## `Co::SceneBase`クラス
-
 シーンの基底クラスです。シーンを実装するには、このクラスを継承します。
 
 シーンとは、例えばタイトル画面・ゲーム画面・リザルト画面など、ゲームの大まかな画面を表す単位です。
@@ -354,14 +341,21 @@ Siv3D標準のシーン機能を使用して作成したシーンをなるべく
 - `Co::Any(TTasks&&...)` -> `Co::Task<std::tuple<Optional<...>>>`
     - いずれかの `Co::Task` が完了した時点で進行し、各`Co::Task`の結果が`Optional<T>`型の`std::tuple`で返されます。
     - `Co::Task`の結果が`void`型の場合、`Co::VoidResult`型(空の構造体)に置換して返されます。
-- `Co::MakeTask<TSequence>(...)` -> `Co::Task<TResult>`
+- `Co::MakeSceneFactory<TScene>(...)` -> `Co::Task<void>`
+    - シーンを生成するための情報を持つオブジェクトを生成します。
+    - `TScene`クラスは`Co::SceneBase`の派生クラスである必要があります。
+    - 引数には、`TScene`のコンストラクタの引数を指定します。
+    - シーンクラスの`start()`関数内で次のシーンを指定する際に使用します。
+- `Co::AsTask<TSequence>(...)` -> `Co::Task<TResult>`
     - `TSequence`クラスのインスタンスを構築し、それを実行するタスクを返します。
     - `TSequence`クラスは`Co::SequenceBase<TResult>`の派生クラスである必要があります。
     - 引数には、`TSequence`のコンストラクタの引数を指定します。
-- `Co::MakeTask<TScene>(...)` -> `Co::Task<void>`
+- `Co::AsTask<TScene>(...)` -> `Co::Task<void>`
     - `TScene`クラスのインスタンスを構築し、それを実行するタスクを返します。
     - `TScene`クラスは`Co::SceneBase`の派生クラスである必要があります。
     - 引数には、`TScene`のコンストラクタの引数を指定します。
+- `Co::AsTask(SceneFactory)` -> `Co::Task<void>`
+    - `SceneFactory`をもとにシーンのインスタンスを構築し、それを実行するタスクを返します。
 
 ## サンプル
 

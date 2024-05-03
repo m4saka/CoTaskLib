@@ -1419,80 +1419,6 @@ inline namespace cotasklib
 			}
 		}
 
-		namespace detail
-		{
-			inline uint64 s_fadeInCount = 0;
-			inline uint64 s_fadeOutCount = 0;
-		}
-
-		[[nodiscard]]
-		inline bool IsFadingIn()
-		{
-			return detail::s_fadeInCount > 0;
-		}
-
-		[[nodiscard]]
-		inline bool IsFadingOut()
-		{
-			return detail::s_fadeOutCount > 0;
-		}
-
-		[[nodiscard]]
-		inline bool IsFading()
-		{
-			return IsFadingIn() || IsFadingOut();
-		}
-
-		class ScopedSetIsFadingInToTrue
-		{
-		public:
-			ScopedSetIsFadingInToTrue()
-			{
-				++detail::s_fadeInCount;
-			}
-
-			~ScopedSetIsFadingInToTrue()
-			{
-				if (detail::s_fadeInCount > 0)
-				{
-					--detail::s_fadeInCount;
-				}
-			}
-
-			ScopedSetIsFadingInToTrue(const ScopedSetIsFadingInToTrue&) = delete;
-
-			ScopedSetIsFadingInToTrue& operator=(const ScopedSetIsFadingInToTrue&) = delete;
-
-			ScopedSetIsFadingInToTrue(ScopedSetIsFadingInToTrue&&) = default;
-
-			ScopedSetIsFadingInToTrue& operator=(ScopedSetIsFadingInToTrue&&) = default;
-		};
-
-		class ScopedSetIsFadingOutToTrue
-		{
-		public:
-			ScopedSetIsFadingOutToTrue()
-			{
-				++detail::s_fadeOutCount;
-			}
-
-			~ScopedSetIsFadingOutToTrue()
-			{
-				if (detail::s_fadeOutCount > 0)
-				{
-					--detail::s_fadeOutCount;
-				}
-			}
-
-			ScopedSetIsFadingOutToTrue(const ScopedSetIsFadingOutToTrue&) = delete;
-
-			ScopedSetIsFadingOutToTrue& operator=(const ScopedSetIsFadingOutToTrue&) = delete;
-
-			ScopedSetIsFadingOutToTrue(ScopedSetIsFadingOutToTrue&&) = default;
-
-			ScopedSetIsFadingOutToTrue& operator=(ScopedSetIsFadingOutToTrue&&) = default;
-		};
-
 		// voidを含むタプルは使用できないため、voidの代わりに戻り値として返すための空の構造体を用意
 		struct VoidResult
 		{
@@ -1730,7 +1656,6 @@ inline namespace cotasklib
 
 		namespace detail
 		{
-			template <class TScopedSetFadingToTrue>
 			class [[nodiscard]] FadeSequenceBase : public SequenceBase<void>
 			{
 			private:
@@ -1747,8 +1672,6 @@ inline namespace cotasklib
 
 				Task<void> start() override final
 				{
-					const TScopedSetFadingToTrue scopedSetIsFadingToTrue{};
-
 					m_timer.start();
 					while (true)
 					{
@@ -1774,13 +1697,13 @@ inline namespace cotasklib
 				virtual void drawFade(double t) const = 0;
 			};
 
-			class [[nodiscard]] FadeInSequence : public FadeSequenceBase<ScopedSetIsFadingInToTrue>
+			class [[nodiscard]] SimpleFadeInSequence : public FadeSequenceBase
 			{
 			private:
 				ColorF m_color;
 
 			public:
-				explicit FadeInSequence(const Duration& duration, const ColorF& color)
+				explicit SimpleFadeInSequence(const Duration& duration, const ColorF& color)
 					: FadeSequenceBase(duration)
 					, m_color(color)
 				{
@@ -1794,13 +1717,13 @@ inline namespace cotasklib
 				}
 			};
 
-			class [[nodiscard]] FadeOutSequence : public FadeSequenceBase<ScopedSetIsFadingOutToTrue>
+			class [[nodiscard]] SimpleFadeOutSequence : public FadeSequenceBase
 			{
 			private:
 				ColorF m_color;
 
 			public:
-				explicit FadeOutSequence(const Duration& duration, const ColorF& color)
+				explicit SimpleFadeOutSequence(const Duration& duration, const ColorF& color)
 					: FadeSequenceBase(duration)
 					, m_color(color)
 				{
@@ -1816,15 +1739,15 @@ inline namespace cotasklib
 		}
 
 		[[nodiscard]]
-		inline Task<void> FadeIn(const Duration& duration, const ColorF& color = Palette::Black)
+		inline Task<void> SimpleFadeIn(const Duration& duration, const ColorF& color = Palette::Black)
 		{
-			return detail::SequencePtrToTask(std::make_unique<detail::FadeInSequence>(duration, color));
+			return MakeTask<detail::SimpleFadeInSequence>(duration, color);
 		}
 
 		[[nodiscard]]
-		inline Task<void> FadeOut(const Duration& duration, const ColorF& color = Palette::Black)
+		inline Task<void> SimpleFadeOut(const Duration& duration, const ColorF& color = Palette::Black)
 		{
-			return detail::SequencePtrToTask(std::make_unique<detail::FadeOutSequence>(duration, color));
+			return MakeTask<detail::SimpleFadeOutSequence>(duration, color);
 		}
 
 		template <detail::SceneConcept TScene, typename... Args>
@@ -1846,28 +1769,32 @@ inline namespace cotasklib
 		class [[nodiscard]] SceneBase
 		{
 		private:
-			bool m_isFadeInFinished = false;
-
-			[[nodiscard]]
-			Task<SceneFactory> startAndFadeOut()
-			{
-				SceneFactory nextSceneFactory = co_await start();
-				co_await fadeOut();
-				co_return std::move(nextSceneFactory);
-			}
+			bool m_isFadingIn = true;
+			bool m_isFadingOut = false;
 
 			[[nodiscard]]
 			Task<void> fadeInInternal()
 			{
 				co_await fadeIn();
-				m_isFadeInFinished = true;
+				m_isFadingIn = false;
+			}
+
+			[[nodiscard]]
+			Task<void> fadeOutInternal()
+			{
+				m_isFadingOut = true;
+				co_await fadeOut();
+			}
+
+			[[nodiscard]]
+			Task<SceneFactory> startAndFadeOut()
+			{
+				SceneFactory nextSceneFactory = co_await start();
+				co_await fadeOutInternal();
+				co_return std::move(nextSceneFactory);
 			}
 
 		public:
-			static constexpr Duration DefaultFadeInDuration = 0.5s;
-			static constexpr Duration DefaultFadeOutDuration = 0.5s;
-			static constexpr ColorF DefaultFadeColor = Palette::Black;
-
 			SceneBase() = default;
 
 			SceneBase(const SceneBase&) = delete;
@@ -1892,22 +1819,34 @@ inline namespace cotasklib
 			[[nodiscard]]
 			virtual Task<void> fadeIn()
 			{
-				co_await FadeIn(DefaultFadeInDuration, DefaultFadeColor);
+				co_return;
 			}
 
 			[[nodiscard]]
 			virtual Task<void> fadeOut()
 			{
-				co_await FadeOut(DefaultFadeOutDuration, DefaultFadeColor);
+				co_return;
 			}
 
 			[[nodiscard]]
 			Task<void> waitForFadeIn()
 			{
-				while (!m_isFadeInFinished)
+				while (m_isFadingIn)
 				{
 					co_yield detail::FrameTiming::Update;
 				}
+			}
+
+			[[nodiscard]]
+			bool isFadingIn() const
+			{
+				return m_isFadingIn;
+			}
+
+			[[nodiscard]]
+			bool isFadingOut() const
+			{
+				return m_isFadingOut;
 			}
 
 			[[nodiscard]]

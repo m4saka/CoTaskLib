@@ -45,7 +45,6 @@ inline namespace cotasklib
 				Init,
 				Update,
 				Draw,
-				LateDraw,
 			};
 
 			class IAwaiter
@@ -125,7 +124,6 @@ inline namespace cotasklib
 							return;
 						}
 						m_instance->resume(FrameTiming::Draw);
-						m_instance->resume(FrameTiming::LateDraw);
 					}
 
 					[[nodiscard]]
@@ -1692,8 +1690,11 @@ inline namespace cotasklib
 			[[nodiscard]]
 			Task<typename TSequence::result_type> SequencePtrToTask(std::unique_ptr<TSequence> sequence)
 			{
-				const ScopedDrawer everyFrameDraw{ [&sequence] { sequence->draw(); } };
-				co_return co_await sequence->start();
+				// オーバーライドしなかった場合に派生クラス側の同名関数を呼ばないよう、基底クラス側のポインタへキャスト
+				std::unique_ptr<SequenceBase<typename TSequence::result_type>> sequenceBase = std::move(sequence);
+
+				const ScopedDrawer drawer{ [&sequenceBase] { sequenceBase->draw(); }, sequenceBase->zIndex() };
+				co_return co_await sequenceBase->start();
 			}
 
 			template <typename TScene>
@@ -1750,8 +1751,6 @@ inline namespace cotasklib
 					}
 					co_yield detail::FrameTiming::Draw;
 					(args.resume(detail::FrameTiming::Draw), ...);
-					co_yield detail::FrameTiming::LateDraw;
-					(args.resume(detail::FrameTiming::LateDraw), ...);
 					co_yield detail::FrameTiming::Update;
 				}
 			}
@@ -1786,8 +1785,6 @@ inline namespace cotasklib
 					}
 					co_yield detail::FrameTiming::Draw;
 					(args.resume(detail::FrameTiming::Draw), ...);
-					co_yield detail::FrameTiming::LateDraw;
-					(args.resume(detail::FrameTiming::LateDraw), ...);
 					co_yield detail::FrameTiming::Update;
 				}
 			}
@@ -1796,10 +1793,18 @@ inline namespace cotasklib
 		template <typename TResult>
 		class [[nodiscard]] SequenceBase
 		{
+		private:
+			int32 m_zIndex = 0;
+
 		public:
 			using result_type = TResult;
 
 			SequenceBase() = default;
+
+			explicit SequenceBase(int32 zIndex)
+				: m_zIndex(zIndex)
+			{
+			}
 
 			SequenceBase(const SequenceBase&) = delete;
 
@@ -1817,8 +1822,10 @@ inline namespace cotasklib
 			{
 			}
 
-			virtual void lateDraw() const
+			[[nodiscard]]
+			int32 zIndex() const
 			{
+				return m_zIndex;
 			}
 		};
 
@@ -1836,6 +1843,13 @@ inline namespace cotasklib
 			}
 
 		public:
+			UpdateSequenceBase() = default;
+
+			explicit UpdateSequenceBase(int32 zIndex)
+				: SequenceBase<TResult>(zIndex)
+			{
+			}
+
 			[[nodiscard]]
 			virtual Task<TResult> start() override final
 			{
@@ -1855,7 +1869,7 @@ inline namespace cotasklib
 		class [[nodiscard]] UpdateSequenceBase<void> : public SequenceBase<void>
 		{
 		private:
-			bool m_isFinished;
+			bool m_isFinished = false;
 
 		protected:
 			void finish()
@@ -1864,6 +1878,13 @@ inline namespace cotasklib
 			}
 
 		public:
+			UpdateSequenceBase() = default;
+
+			explicit UpdateSequenceBase(int32 zIndex)
+				: SequenceBase<void>(zIndex)
+			{
+			}
+
 			[[nodiscard]]
 			virtual Task<void> start() override final
 			{
@@ -1925,7 +1946,7 @@ inline namespace cotasklib
 					co_yield FrameTiming::Update;
 				}
 
-				void lateDraw() const override final
+				void draw() const override final
 				{
 					drawFade(m_t);
 				}

@@ -13,7 +13,7 @@ C++20の`co_await`/`co_return`キーワードを利用して、複数フレー�
 `Co::Task`を戻り値とするコルーチン関数内では、下記のキーワードでコルーチンを制御できます。  
 ※本ライブラリでは`co_yield`は使用しません。
 
-- `co_await`: 他の`Co::Task`を実行し、終了まで待機します。結果がある場合は値を返します。
+- `co_await`: 他の`Co::Task`を実行し、完了まで待機します。結果がある場合は値を返します。
 - `co_return`: `TResult`型で結果を返します。
 
 ### メンバ関数
@@ -21,7 +21,7 @@ C++20の`co_await`/`co_return`キーワードを利用して、複数フレー�
 
 - `runScoped()` -> `Co::ScopedTaskRun`
     - タスクの実行を開始し、`Co::ScopedTaskRun`(生存期間オブジェクト)のインスタンスを返します。
-    - タスクの実行が完了する前に`Co::ScopedTaskRun`のインスタンスが破棄された場合、タスクは中断されます。
+    - タスクの実行が完了する前に`Co::ScopedTaskRun`のインスタンスが破棄された場合、タスクは途中で終了されます。
         - メモリ安全性のため、タスク内で外部の変数を参照する場合は必ず`Co::ScopedTaskRun`のインスタンスよりも生存期間が長い変数であることを確認してください。
 - `runForget()`
     - タスクの実行を開始し、バックグラウンドで実行します。
@@ -29,7 +29,7 @@ C++20の`co_await`/`co_return`キーワードを利用して、複数フレー�
         - 基本的には`runScoped`を優先して使用し、シーンをまたぐ必要がある処理などどうしても必要な場合にのみ`runForget`を使用することを推奨します。
 - `with(Co::Task)` -> `Co::Task<TResult>`
     - タスクの実行中、同時に実行される子タスクを登録します。
-    - 子タスクの完了は待ちません。また、親タスクが先に終了した場合、子タスクの実行は途中で中断されます。
+    - 子タスクの完了は待ちません。親タスクが先に完了した場合、子タスクの実行は途中で終了されます。
     - 子タスクの戻り値は無視されます。
 - `withUpdate(std::function<void()>)` -> `Co::Task<TResult>`
     - タスクの実行中にupdateフェーズで毎フレーム実行する関数を登録します。
@@ -40,6 +40,10 @@ C++20の`co_await`/`co_return`キーワードを利用して、複数フレー�
 - `withLateDraw(std::function<void()>)` -> `Co::Task<TResult>`
     - タスクの実行中にlateDrawフェーズで毎フレーム実行する関数を登録します。
         - lateDrawフェーズはdrawフェーズより後に実行されるフェーズで、最前面に描画したい場合はここに処理を登録します。
+    - この関数を複数回使用して、複数個の関数を登録することも可能です。その場合、登録した順番で実行されます。
+- `then(std::function<void(TResult)>)` -> `Co::Task<TResult>`
+    - タスクの実行完了時に実行する関数を登録します。
+    - タスクが実行完了前に途中で終了された場合、登録した関数は実行されません。
     - この関数を複数回使用して、複数個の関数を登録することも可能です。その場合、登録した順番で実行されます。
 
 ### タスクの実行方法
@@ -71,9 +75,9 @@ Co::Task<void> ExampleTask()
 ```cpp
 Co::Task<void> ExampleTask()
 {
-    // 2つのタスクを同時に実行開始し、10秒間経ったらタスクの完了を待たずに終了
-    const auto anotherTask1Run = AnotherTask1().runScoped();
-    const auto anotherTask2Run = AnotherTask2().runScoped();
+    // Task1とTask2を同時に実行開始し、10秒間経ったらタスクの完了を待たずに終了
+    const auto anotherTask1Run = Task1().runScoped();
+    const auto anotherTask2Run = Task2().runScoped();
 
     co_await Co::Delay(10s);
 }
@@ -84,26 +88,27 @@ Co::Task<void> ExampleTask()
 ```cpp
 Co::Task<void> ExampleTask()
 {
-    // 2つのタスクを同時に実行し、AnotherTask1が完了するまで待機
-    co_await AnotherTask1().with(AnotherTask2());
+    // Task1とTask2を同時に実行し、Task1が完了するまで待機
+    // (Task1の実行が完了したタイミングでTask2の実行は途中で終了される)
+    co_await Task1().with(Task2());
 }
 ```
 ```cpp
 Co::Task<void> ExampleTask()
 {
-    // 2つのタスクを同時に実行し、両方完了するまで待機
-    co_await Co::All(AnotherTask1(), AnotherTask2());
+    // Task1とTask2を同時に実行し、両方完了するまで待機
+    co_await Co::All(Task1(), Task2());
 }
 ```
 
 ## `Co::SequenceBase<TResult>`クラス
 
-シーケンスの基底クラスです。シーケンスとは、毎フレーム実行される描画処理(draw関数)を含んだ`Co::Task`のことです。  
-描画処理を含む`Co::Task`を作成したい場合、このクラスを継承したクラスを作成します。
+シーケンスの基底クラスです。シーケンスとは、タスクと描画処理(draw関数)を組み合わせたものです。  
+描画処理を含むタスクを作成したい場合、このクラスを継承したクラスを作成します。
 
 作成したシーケンスは`Co::Task`と同様に`co_await`で実行できます。
 
-シーケンス同士は`co_await`を利用して入れ子構造にできます。そのため、タイトル画面やゲーム画面といった大きなシーンから、ちょっとした画面表示(エフェクトのアニメーション、ダイアログ表示など)を記述する場合まで幅広く利用できます。
+シーケンス同士は`co_await`を利用して入れ子構造にできます。そのため、単純なシーケンスを複数組み合わせて複雑なシーケンスを作成することができます。
 
 ### 仮想関数
 
@@ -199,7 +204,7 @@ Co::Task<void> ExampleTask()
 すべてのシーンが終了したらプログラムを終了するには、下記のように`done()`関数でタスクの完了を確認してwhileループを抜けます。
 
 ```cpp
-const auto taskRun = Co::MakeTask<ExampleSequence>().runScoped();
+const auto taskRun = Co::MakeTask<ExampleScene>().runScoped();
 while (System::Update())
 {
     if (taskRun.done())
@@ -217,7 +222,7 @@ while (System::Update())
 - CoTaskLibでは、シーンクラスのコンストラクタに引数を持たせることができます。そのため、遷移元のシーンから必要なデータを受け渡すことができます。
     - Siv3D標準のシーン機能にある`getData()`のような、シーン間でグローバルにデータを受け渡すための機能は提供していません。代わりに、シーンクラスのコンストラクタに引数を用意して受け渡してください。
 - CoTaskLibのシーンクラスでは、毎フレーム実行されるupdate関数の代わりに、`start()`関数というコルーチン関数を実装します。
-    - update関数を使用したい場合、`SceneBase`クラスの代わりに`UpdateSceneBase`クラスを基底クラスとして使用するか(詳細は後述)、`co_await Delay(10s).withUpdate([this] { update(); })`のように`Co::Task`の`withUpdate()`関数を使用してタスク実行に紐づけて実行してください。
+    - update関数を使用したい場合、`SceneBase`クラスの代わりに`UpdateSceneBase`クラスを基底クラスとして使用するか(詳細は後述)、`co_await Co::Delay(10s).withUpdate([this] { update(); })`のように`Co::Task`の`withUpdate()`関数を使用してタスク実行に紐づけて実行してください。
 
 ## `Co::UpdateSceneBase`クラス
 
@@ -247,7 +252,7 @@ Siv3D標準のシーン機能を使用して作成したシーンをCoTaskLibへ
 
 - `fadeIn()` -> `Co::Task<void>`
     - シーン開始時に実行されるフェードイン用のコルーチンです。
-    - `update()`と同時に実行されます。もし同時に実行したくない場合は、`update`関数内で`Co::IsFadingIn()`がtrueの場合は処理をスキップするなどしてください。
+    - `update()`と同時に実行されます。もし同時に実行したくない場合は、`update`関数内で`isFadingIn()`がtrueの場合は処理をスキップするなどしてください。
     - `fadeIn()`の実行が完了する前にシーン処理および`fadeOut()`が実行完了した場合、`fadeIn()`の実行は途中で終了されます。
 
 - `fadeOut()` -> `Co::Task<void>`
@@ -319,22 +324,10 @@ Siv3D標準のシーン機能を使用して作成したシーンをCoTaskLibへ
     - マウスの右ボタンを指定領域でクリックした後、指定領域で離した時に関数を実行します。
 - `Co::ExecOnMouseOver(TArea, std::function<void()>)` -> `Co::Task<void>`
     - マウスが指定領域上にある間、関数を実行します。
-- `Co::FadeIn(Duration, ColorF)` -> `Co::Task<void>`
+- `Co::SimpleFadeIn(Duration, ColorF)` -> `Co::Task<void>`
     - 指定色からのフェードインを開始し、完了まで待機します。
-    - この関数の実行中、`Co::IsFadingIn()`はtrueを返します。
-- `Co::FadeOut(Duration, ColorF)` -> `Co::Task<void>`
+- `Co::SimpleFadeOut(Duration, ColorF)` -> `Co::Task<void>`
     - 指定色へのフェードアウトを開始し、完了まで待機します。
-    - この関数の実行中、`Co::IsFadingIn()`はtrueを返します。
-- `Co::IsFadingIn()` -> `bool`
-    - 現在フェードイン中かどうかを返します。
-        - 具体的には、Sceneの`fadeIn`関数が実行中、または`Co::FadeIn`関数が実行中の場合にtrueになります。
-    - もしSceneの`fadeIn`関数を使用せずに独自のフェードイン処理を作成したい場合、フェード開始時に`Co::ScopedSetIsFadingInToTrue`のインスタンスを生成、フェード完了時に破棄することで、独自のフェード処理中も本関数の結果を`true`に上書きできます。
-- `Co::IsFadingOut()` -> `bool`
-    - 現在フェードアウト中かどうかを返します。
-        - 具体的には、Sceneの`fadeIn`関数が実行中、または`Co::FadeIn`関数が実行中の場合にtrueになります。
-    - もしSceneの`fadeOut`関数を使用せずに独自のフェードアウト処理を作成したい場合、フェード開始時に`Co::ScopedSetIsFadingOutToTrue`のインスタンスを生成、フェード完了時に破棄することで、独自のフェード処理中も本関数の結果を`true`に上書きできます。
-- `Co::IsFading()` -> `bool`
-    - `Co::IsFadingIn() || Co::IsFadingOut()`の結果を返します。
 - `Co::All(TTasks&&...)` -> `Co::Task<std::tuple<...>>`
     - すべての`Co::Task`が完了するまで待機します。各`Co::Task`の結果が`std::tuple`で返されます。
     - `Co::Task`の結果が`void`型の場合、`Co::VoidResult`型(空の構造体)に置換して返されます。
@@ -379,7 +372,7 @@ void Main()
 {
     Co::Init();
 
-    const auto scopedCoTaskRun = ShowMessages().runScoped();
+    const auto taskRun = ShowMessages().runScoped();
     while (System::Update())
     {
     }
@@ -437,7 +430,7 @@ void Main()
 {
     Co::Init();
 
-    const auto scopedCoTaskRun = MainTask().runScoped();
+    const auto mainTaskRun = MainTask().runScoped();
     while (System::Update())
     {
     }

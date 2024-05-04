@@ -676,7 +676,7 @@ inline namespace cotasklib
 			class ThenCaller
 			{
 			public:
-				using function_type = std::function<void(TResult)>;
+				using function_type = std::function<void(const TResult&)>;
 
 			private:
 				std::vector<function_type> m_funcs;

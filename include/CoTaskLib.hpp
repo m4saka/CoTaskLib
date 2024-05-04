@@ -2033,24 +2033,11 @@ inline namespace cotasklib
 			bool m_isFadingOut = false;
 
 			[[nodiscard]]
-			Task<void> fadeInInternal()
-			{
-				co_await fadeIn();
-				m_isFadingIn = false;
-			}
-
-			[[nodiscard]]
-			Task<void> fadeOutInternal()
-			{
-				m_isFadingOut = true;
-				co_await fadeOut();
-			}
-
-			[[nodiscard]]
 			Task<SceneFactory> startAndFadeOut()
 			{
 				SceneFactory nextSceneFactory = co_await start();
-				co_await fadeOutInternal();
+				m_isFadingOut = true;
+				co_await fadeOut();
 				co_return std::move(nextSceneFactory);
 			}
 
@@ -2114,7 +2101,8 @@ inline namespace cotasklib
 			{
 				const ScopedDrawer drawer{ [this] { draw(); } };
 
-				co_return co_await startAndFadeOut().with(fadeInInternal());
+				co_return co_await startAndFadeOut()
+					.with(fadeIn().then([this] { m_isFadingIn = false; }));
 			}
 		};
 

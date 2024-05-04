@@ -249,7 +249,7 @@ inline namespace cotasklib
 				{
 					if (!s_pInstance)
 					{
-						// Note: ユーザーがScopedTaskRunをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
+						// Note: ユーザーがインスタンスをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
 						return;
 					}
 					if (id == s_pInstance->m_currentAwaiterID)
@@ -282,7 +282,8 @@ inline namespace cotasklib
 				{
 					if (!s_pInstance)
 					{
-						throw Error{ U"Backend is not initialized" };
+						// Note: ユーザーがインスタンスをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
+						return;
 					}
 					for (auto& [_, updaters] : s_pInstance->m_updatersByPriorityOrderNonNegative)
 					{
@@ -324,7 +325,8 @@ inline namespace cotasklib
 				{
 					if (!s_pInstance)
 					{
-						throw Error{ U"Backend is not initialized" };
+						// Note: ユーザーがインスタンスをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
+						return;
 					}
 					for (auto& [_, drawers] : s_pInstance->m_drawersByZIndexNonNegative)
 					{

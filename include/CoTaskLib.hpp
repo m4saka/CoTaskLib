@@ -2209,6 +2209,46 @@ inline namespace cotasklib
 		auto operator co_await(SceneFactory sceneFactory) = delete;
 #endif
 
+		class [[nodiscard]] ComponentBase
+		{
+		private:
+			bool m_isActive = true;
+			ScopedUpdater m_updater;
+			ScopedDrawer m_drawer;
+
+		public:
+			ComponentBase()
+				: m_updater([this] { if (m_isActive) update(); })
+				, m_drawer([this] { if (m_isActive) draw(); })
+			{
+			}
+
+			ComponentBase(const ComponentBase&) = delete;
+
+			ComponentBase& operator=(const ComponentBase&) = delete;
+
+			ComponentBase(ComponentBase&&) = default;
+
+			ComponentBase& operator=(ComponentBase&&) = default;
+
+			virtual ~ComponentBase() = default;
+
+			virtual void update() = 0;
+
+			virtual void draw() const = 0;
+
+			[[nodiscard]]
+			bool isActive() const
+			{
+				return m_isActive;
+			}
+
+			void setActive(bool isActive)
+			{
+				m_isActive = isActive;
+			}
+		};
+
 		namespace detail
 		{
 			class IUnsubscribable

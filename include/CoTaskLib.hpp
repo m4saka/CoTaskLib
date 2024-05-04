@@ -2269,8 +2269,15 @@ inline namespace cotasklib
 			class EventStreamImpl : public IUnsubscribable
 			{
 			private:
+				struct Subscriber
+				{
+					std::function<void(const TEvent&)> onEventFunc;
+					std::function<void()> onCloseFunc;
+				};
+
 				detail::SubscriberID m_nextSubscriberID = 1;
-				std::map<detail::SubscriberID, std::function<void(const TEvent&)>> m_subscribers;
+				std::map<detail::SubscriberID, Subscriber> m_subscribers;
+				bool m_isClosed = false;
 
 			public:
 				EventStreamImpl() = default;
@@ -2287,10 +2294,32 @@ inline namespace cotasklib
 
 				void publish(const TEvent& event)
 				{
+					if (m_isClosed)
+					{
+						return;
+					}
+
 					for (const auto& [_, subscriber] : m_subscribers)
 					{
-						subscriber(event);
+						if (subscriber.onEventFunc == nullptr)
+						{
+							continue;
+						}
+						subscriber.onEventFunc(event);
 					}
+				}
+
+				void close()
+				{
+					for (const auto& [_, subscriber] : m_subscribers)
+					{
+						if (subscriber.onCloseFunc == nullptr)
+						{
+							continue;
+						}
+						subscriber.onCloseFunc();
+					}
+					m_isClosed = true;
 				}
 
 				detail::SubscriberID subscribe(std::function<void(const TEvent&)> func)
@@ -2310,8 +2339,15 @@ inline namespace cotasklib
 			class EventStreamImpl<void> : public IUnsubscribable
 			{
 			private:
+				struct Subscriber
+				{
+					std::function<void()> onEventFunc;
+					std::function<void()> onCloseFunc;
+				};
+
 				detail::SubscriberID m_nextSubscriberID = 1;
-				std::map<detail::SubscriberID, std::function<void()>> m_subscribers;
+				std::map<detail::SubscriberID, Subscriber> m_subscribers;
+				bool m_isClosed = false;
 
 			public:
 				EventStreamImpl() = default;
@@ -2328,16 +2364,38 @@ inline namespace cotasklib
 
 				void publish()
 				{
+					if (m_isClosed)
+					{
+						return;
+					}
+
 					for (const auto& [_, subscriber] : m_subscribers)
 					{
-						subscriber();
+						if (subscriber.onEventFunc == nullptr)
+						{
+							continue;
+						}
+						subscriber.onEventFunc();
 					}
 				}
 
-				detail::SubscriberID subscribe(std::function<void()> func)
+				void close()
+				{
+					for (const auto& [_, subscriber] : m_subscribers)
+					{
+						if (subscriber.onCloseFunc == nullptr)
+						{
+							continue;
+						}
+						subscriber.onCloseFunc();
+					}
+					m_isClosed = true;
+				}
+
+				detail::SubscriberID subscribe(std::function<void()> onEventFunc, std::function<void()> onCloseFunc)
 				{
 					const detail::SubscriberID id = m_nextSubscriberID++;
-					m_subscribers.emplace(id, std::move(func));
+					m_subscribers.emplace(id, Subscriber{ std::move(onEventFunc), std::move(onCloseFunc) });
 					return id;
 				}
 
@@ -2406,6 +2464,13 @@ inline namespace cotasklib
 				m_impl->publish(eventValue);
 			}
 
+			void close()
+			{
+				const std::lock_guard lock{ m_mutex };
+
+				m_impl->close();
+			}
+
 			[[nodiscard]]
 			ScopedSubscriber subscribeScoped(std::function<void(const TEvent&)> func) const
 			{
@@ -2422,6 +2487,22 @@ inline namespace cotasklib
 				const auto subscriber = subscribeScoped([&eventValue](const TEvent& event) { eventValue = event; });
 				co_await WaitUntil([&eventValue] { return eventValue.has_value(); });
 				co_return *eventValue;
+			}
+
+			[[nodiscard]]
+			Task<void> subscribeAsync(std::function<void(const TEvent&)> onEventFunc) const
+			{
+				bool isClosed = false;
+				const auto subscriber = subscribeScoped(std::move(onEventFunc), [&isClosed] { isClosed = true; });
+				co_await WaitUntil([&isClosed] { return isClosed; });
+			}
+
+			[[nodiscard]]
+			Task<void> waitUntilClosed() const
+			{
+				bool isClosed = false;
+				const auto subscriber = subscribeScoped(nullptr, [&isClosed] { isClosed = true; });
+				co_await WaitUntil([&isClosed] { return isClosed; });
 			}
 		};
 
@@ -2461,11 +2542,20 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			ScopedSubscriber subscribeScoped(std::function<void()> func) const
+			ScopedSubscriber subscribeScoped(std::function<void()> onEventFunc) const
 			{
 				const std::lock_guard lock{ m_mutex };
 
-				const auto subscriberID = m_impl->subscribe(std::move(func));
+				const auto subscriberID = m_impl->subscribe(std::move(onEventFunc), nullptr);
+				return ScopedSubscriber{ m_impl, subscriberID };
+			}
+
+			[[nodiscard]]
+			ScopedSubscriber subscribeScoped(std::function<void()> onEventFunc, std::function<void()> onCloseFunc) const
+			{
+				const std::lock_guard lock{ m_mutex };
+
+				const auto subscriberID = m_impl->subscribe(std::move(onEventFunc), std::move(onCloseFunc));
 				return ScopedSubscriber{ m_impl, subscriberID };
 			}
 
@@ -2475,6 +2565,22 @@ inline namespace cotasklib
 				bool eventReceived = false;
 				const auto subscriber = subscribeScoped([&eventReceived] { eventReceived = true; });
 				co_await WaitUntil([&eventReceived] { return eventReceived; });
+			}
+
+			[[nodiscard]]
+			Task<void> subscribeAsync(std::function<void()> onEventFunc) const
+			{
+				bool isClosed = false;
+				const auto subscriber = subscribeScoped(std::move(onEventFunc), [&isClosed] { isClosed = true; });
+				co_await WaitUntil([&isClosed] { return isClosed; });
+			}
+
+			[[nodiscard]]
+			Task<void> waitUntilClosed() const
+			{
+				bool isClosed = false;
+				const auto subscriber = subscribeScoped(nullptr, [&isClosed] { isClosed = true; });
+				co_await WaitUntil([&isClosed] { return isClosed; });
 			}
 		};
 	}

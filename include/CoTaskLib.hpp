@@ -1933,6 +1933,12 @@ inline namespace cotasklib
 
 				Task<void> start() override final
 				{
+					if (m_timer.duration().count() <= 0.0)
+					{
+						// durationが0の場合は何もしない
+						co_return;
+					}
+
 					m_timer.start();
 					while (true)
 					{

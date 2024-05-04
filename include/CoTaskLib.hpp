@@ -63,6 +63,8 @@ inline namespace cotasklib
 
 			using DrawerID = uint64;
 
+			using SubscriberID = uint64;
+
 			template <typename TResult>
 			class TaskAwaiter;
 		}
@@ -1688,15 +1690,11 @@ inline namespace cotasklib
 			template <typename TSequence>
 			concept SequenceConcept = std::derived_from<TSequence, SequenceBase<typename TSequence::result_type>>;
 
-			template <SequenceConcept TSequence>
+			template <typename TResult>
 			[[nodiscard]]
-			Task<typename TSequence::result_type> SequencePtrToTask(std::unique_ptr<TSequence> sequence)
+			Task<TResult> SequencePtrToTask(std::unique_ptr<SequenceBase<TResult>> sequence)
 			{
-				// オーバーライドしなかった場合に派生クラス側の同名関数を呼ばないよう、基底クラス側のポインタへキャスト
-				std::unique_ptr<SequenceBase<typename TSequence::result_type>> sequenceBase = std::move(sequence);
-
-				const ScopedDrawer drawer{ [&sequenceBase] { sequenceBase->draw(); }, sequenceBase->zIndex() };
-				co_return co_await sequenceBase->start();
+				co_return co_await sequence->run();
 			}
 
 			template <typename TScene>
@@ -1714,14 +1712,16 @@ inline namespace cotasklib
 		[[nodiscard]]
 		Task<typename TSequence::result_type> ToTask(TSequence&& sequence)
 		{
-			return detail::SequencePtrToTask(std::make_unique<TSequence>(std::move(sequence)));
+			std::unique_ptr<SequenceBase<typename TSequence::result_type>> sequence = std::make_unique<TSequence>(std::move(sequence));
+			return detail::SequencePtrToTask(std::move(sequence));
 		}
 
 		template <detail::SequenceConcept TSequence, class... Args>
 		[[nodiscard]]
 		Task<typename TSequence::result_type> AsTask(Args&&... args)
 		{
-			return detail::SequencePtrToTask(std::make_unique<TSequence>(std::forward<Args>(args)...));
+			std::unique_ptr<SequenceBase<typename TSequence::result_type>> sequence = std::make_unique<TSequence>(std::forward<Args>(args)...);
+			return detail::SequencePtrToTask(std::move(sequence));
 		}
 
 		template <class... TTasks>
@@ -1825,9 +1825,10 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			int32 zIndex() const
+			Task<TResult> run()
 			{
-				return m_zIndex;
+				const ScopedDrawer drawer{ [this] { draw(); }, m_zIndex };
+				co_return co_await start();
 			}
 		};
 
@@ -2100,7 +2101,6 @@ inline namespace cotasklib
 			Task<SceneFactory> run()
 			{
 				const ScopedDrawer drawer{ [this] { draw(); } };
-
 				co_return co_await startAndFadeOut()
 					.with(fadeIn().then([this] { m_isFadingIn = false; }));
 			}
@@ -2208,5 +2208,228 @@ inline namespace cotasklib
 
 		auto operator co_await(SceneFactory sceneFactory) = delete;
 #endif
+
+		namespace detail
+		{
+			class IUnsubscribable
+			{
+			public:
+				virtual ~IUnsubscribable() = default;
+
+				virtual void unsubscribe(detail::SubscriberID id) = 0;
+			};
+
+			template <typename TEvent>
+			class EventStreamImpl : public IUnsubscribable
+			{
+			private:
+				detail::SubscriberID m_nextSubscriberID = 1;
+				std::map<detail::SubscriberID, std::function<void(const TEvent&)>> m_subscribers;
+
+			public:
+				EventStreamImpl() = default;
+
+				EventStreamImpl(const EventStreamImpl&) = delete;
+
+				EventStreamImpl& operator=(const EventStreamImpl&) = delete;
+
+				EventStreamImpl(EventStreamImpl&&) = default;
+
+				EventStreamImpl& operator=(EventStreamImpl&&) = default;
+
+				~EventStreamImpl() = default;
+
+				void publish(const TEvent& event)
+				{
+					for (const auto& [_, subscriber] : m_subscribers)
+					{
+						subscriber(event);
+					}
+				}
+
+				detail::SubscriberID subscribe(std::function<void(const TEvent&)> func)
+				{
+					const detail::SubscriberID id = m_nextSubscriberID++;
+					m_subscribers.emplace(id, std::move(func));
+					return id;
+				}
+
+				virtual void unsubscribe(detail::SubscriberID id) override
+				{
+					m_subscribers.erase(id);
+				}
+			};
+
+			template <>
+			class EventStreamImpl<void> : public IUnsubscribable
+			{
+			private:
+				detail::SubscriberID m_nextSubscriberID = 1;
+				std::map<detail::SubscriberID, std::function<void()>> m_subscribers;
+
+			public:
+				EventStreamImpl() = default;
+
+				EventStreamImpl(const EventStreamImpl&) = delete;
+
+				EventStreamImpl& operator=(const EventStreamImpl&) = delete;
+
+				EventStreamImpl(EventStreamImpl&&) = default;
+
+				EventStreamImpl& operator=(EventStreamImpl&&) = default;
+
+				~EventStreamImpl() = default;
+
+				void publish()
+				{
+					for (const auto& [_, subscriber] : m_subscribers)
+					{
+						subscriber();
+					}
+				}
+
+				detail::SubscriberID subscribe(std::function<void()> func)
+				{
+					const detail::SubscriberID id = m_nextSubscriberID++;
+					m_subscribers.emplace(id, std::move(func));
+					return id;
+				}
+
+				virtual void unsubscribe(detail::SubscriberID id) override
+				{
+					m_subscribers.erase(id);
+				}
+			};
+		}
+
+		class ScopedSubscriber
+		{
+		private:
+			// 先にEventStreamImplが破棄された場合にダングリングポインタとなるのを防ぐため、weak_ptrで生存を監視する
+			std::weak_ptr<detail::IUnsubscribable> m_unsubscribable;
+			detail::SubscriberID m_subscriberID;
+
+		public:
+			explicit ScopedSubscriber(const std::shared_ptr<detail::IUnsubscribable>& unsubscribable, detail::SubscriberID subscriberID)
+				: m_unsubscribable(unsubscribable)
+				, m_subscriberID(subscriberID)
+			{
+			}
+
+			~ScopedSubscriber()
+			{
+				if (const auto unsubscribable = m_unsubscribable.lock())
+				{
+					unsubscribable->unsubscribe(m_subscriberID);
+				}
+			}
+		};
+
+		template <typename TEvent>
+		class EventStream
+		{
+		private:
+			// Note: CoTaskLibではマルチスレッドでの使用はサポートしないが、念のためconstのスレッド安全性は満たすようにしておく
+			mutable std::mutex m_mutex;
+
+			// Note: ポインタなのでmutableにする必要がない
+			std::shared_ptr<detail::EventStreamImpl<TEvent>> m_impl;
+
+		public:
+			using event_type = TEvent;
+
+			EventStream()
+				: m_impl(std::make_shared<detail::EventStreamImpl<TEvent>>())
+			{
+			}
+
+			EventStream(const EventStream&) = delete;
+
+			EventStream& operator=(const EventStream&) = delete;
+
+			EventStream(EventStream&&) = default;
+
+			EventStream& operator=(EventStream&&) = default;
+
+			~EventStream() = default;
+
+			void publish(const TEvent& eventValue)
+			{
+				const std::lock_guard lock{ m_mutex };
+
+				m_impl->publish(eventValue);
+			}
+
+			[[nodiscard]]
+			ScopedSubscriber subscribeScoped(std::function<void(const TEvent&)> func) const
+			{
+				const std::lock_guard lock{ m_mutex };
+
+				const auto subscriberID = m_impl->subscribe(std::move(func));
+				return ScopedSubscriber{ m_impl, subscriberID };
+			}
+
+			[[nodiscard]]
+			Task<TEvent> firstAsync() const
+			{
+				std::optional<TEvent> eventValue;
+				const auto subscriber = subscribeScoped([&eventValue](const TEvent& event) { eventValue = event; });
+				co_await WaitUntil([&eventValue] { return eventValue.has_value(); });
+				co_return *eventValue;
+			}
+		};
+
+		template <>
+		class EventStream<void>
+		{
+		private:
+			// Note: CoTaskLibではマルチスレッドでの使用はサポートしないが、念のためconstのスレッド安全性は満たすようにしておく
+			mutable std::mutex m_mutex;
+
+			// Note: ポインタなのでmutableにする必要がない
+			std::shared_ptr<detail::EventStreamImpl<void>> m_impl;
+
+		public:
+			using event_type = void;
+
+			EventStream()
+				: m_impl(std::make_shared<detail::EventStreamImpl<void>>())
+			{
+			}
+
+			EventStream(const EventStream&) = delete;
+
+			EventStream& operator=(const EventStream&) = delete;
+
+			EventStream(EventStream&&) = default;
+
+			EventStream& operator=(EventStream&&) = default;
+
+			~EventStream() = default;
+
+			void publish()
+			{
+				const std::lock_guard lock{ m_mutex };
+
+				m_impl->publish();
+			}
+
+			[[nodiscard]]
+			ScopedSubscriber subscribeScoped(std::function<void()> func) const
+			{
+				const std::lock_guard lock{ m_mutex };
+
+				const auto subscriberID = m_impl->subscribe(std::move(func));
+				return ScopedSubscriber{ m_impl, subscriberID };
+			}
+
+			[[nodiscard]]
+			Task<void> firstAsync() const
+			{
+				bool eventReceived = false;
+				const auto subscriber = subscribeScoped([&eventReceived] { eventReceived = true; });
+				co_await WaitUntil([&eventReceived] { return eventReceived; });
+			}
+		};
 	}
 }

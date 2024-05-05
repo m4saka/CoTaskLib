@@ -2117,12 +2117,32 @@ inline namespace cotasklib
 			return AsTask<detail::SimpleFadeOutSequence>(duration, color, drawOrder);
 		}
 
+		template <typename T>
+		concept IsBasicStringView = std::is_same_v<T, std::basic_string_view<typename T::value_type, typename T::traits_type>>;
+
+		template <typename T>
+		concept IsSpan = std::is_same_v<T, std::span<typename T::value_type>>;
+
 		template <detail::SceneConcept TScene, typename... Args>
 		[[nodiscard]]
 		SceneFactory MakeSceneFactory(Args&&... args)
 		{
 			// Args...はコピー構築可能である必要がある
-			static_assert((std::is_copy_constructible_v<Args> && ...), "Scene constructor arguments must be copy-constructible to use MakeSceneFactory.");
+			static_assert((std::is_copy_constructible_v<Args> && ...),
+				"Scene constructor arguments must be copy-constructible.");
+
+			// std::basic_string_viewは許可しない
+			static_assert(!(IsBasicStringView<Args> || ...),
+				"std::basic_string_view is not allowed as a scene constructor argument because it is not deep-copied, risking dangling references. Use std::string instead.");
+
+			// StringViewは許可しない
+			static_assert(!(std::is_same_v<std::decay_t<Args>, StringView> || ...),
+				"StringView is not allowed as a scene constructor argument because it is not deep-copied, risking dangling references. Use String instead.");
+
+			// std::spanは許可しない
+			static_assert(!(IsSpan<Args> || ...),
+				"std::span is not allowed as a scene constructor argument because it is not deep-copied, risking dangling references. Use std::vector or similar.");
+
 			return [=] { return std::make_unique<TScene>(args...); };
 		}
 

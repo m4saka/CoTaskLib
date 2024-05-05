@@ -82,82 +82,139 @@ inline namespace cotasklib
 			class OrderedExecutor
 			{
 			private:
-				struct Caller
+				struct CallerKey
 				{
 					IDType id;
-					std::function<void()> func;
 					int32 sortingOrder;
 
-					bool operator<(const Caller& other) const
+					CallerKey(IDType id, int32 sortingOrder)
+						: id(id)
+						, sortingOrder(sortingOrder)
 					{
-						if (sortingOrder == other.sortingOrder)
+					}
+
+					CallerKey(const CallerKey&) = default;
+
+					CallerKey& operator=(const CallerKey&) = default;
+
+					CallerKey(CallerKey&&) = default;
+
+					CallerKey& operator=(CallerKey&&) = default;
+
+					bool operator<(const CallerKey& other) const
+					{
+						if (sortingOrder != other.sortingOrder)
 						{
-							return id < other.id;
+							return sortingOrder < other.sortingOrder;
 						}
-						return sortingOrder < other.sortingOrder;
+						return id < other.id;
 					}
 				};
 
-				IDType m_nextID = 1;
-				std::set<Caller> m_callerSet;
-
-			public:
-				using CallerSetIterator = typename decltype(m_callerSet)::iterator;
-
-			private:
-				std::map<IDType, CallerSetIterator> m_callerSetIteratorByID;
-
-			public:
-				IDType add(std::function<void()> func, int32 sortingOrder)
+				struct Caller
 				{
-					const auto [it, inserted] = m_callerSet.insert(Caller{ m_nextID, std::move(func), sortingOrder });
-					if (inserted)
+					std::function<void()> func;
+					std::function<int32()> sortingOrderFunc;
+
+					Caller(std::function<void()> func, std::function<int32()> sortingOrderFunc)
+						: func(std::move(func))
+						, sortingOrderFunc(std::move(sortingOrderFunc))
 					{
-						m_callerSetIteratorByID[m_nextID] = it;
 					}
+
+					Caller(const Caller&) = default;
+
+					Caller& operator=(const Caller&) = default;
+				};
+
+				IDType m_nextID = 1;
+				std::map<CallerKey, Caller> m_callers;
+				std::unordered_map<IDType, CallerKey> m_callerKeyByID;
+				std::vector<std::pair<CallerKey, int32>> m_tempNewSortingOrders;
+
+				using CallersIterator = typename decltype(m_callers)::iterator;
+
+			public:
+				IDType add(std::function<void()> func, std::function<int32()> sortingOrderFunc)
+				{
+					const int32 sortingOrder = sortingOrderFunc();
+					const auto [it, inserted] = m_callers.insert(std::make_pair(CallerKey{ m_nextID, sortingOrder }, Caller{ std::move(func), std::move(sortingOrderFunc) }));
+					if (!inserted)
+					{
+						throw Error{ U"OrderedExecutor::add: ID={} cannot be inserted"_fmt(m_nextID) };
+					}
+					if (m_callerKeyByID.contains(m_nextID))
+					{
+						throw Error{ U"OrderedExecutor::add: ID={} inconsistency detected"_fmt(m_nextID) };
+					}
+					m_callerKeyByID.insert_or_assign(m_nextID, it->first);
 					return m_nextID++;
+				}
+
+				CallersIterator findByID(IDType id)
+				{
+					const auto it = m_callerKeyByID.find(id);
+					if (it == m_callerKeyByID.end())
+					{
+						return m_callers.end();
+					}
+					return m_callers.find(it->second);
 				}
 
 				void remove(IDType id)
 				{
-					const auto it = m_callerSetIteratorByID.find(id);
-					if (it != m_callerSetIteratorByID.end())
+					const auto it = findByID(id);
+					if (it == m_callers.end())
 					{
-						m_callerSet.erase(it->second);
-						m_callerSetIteratorByID.erase(it);
-					}
-				}
-
-				void setSortingOrder(IDType id, int32 sortingOrder)
-				{
-					const auto mapIt = m_callerSetIteratorByID.find(id);
-					if (mapIt == m_callerSetIteratorByID.end())
-					{
-						throw Error{ U"Co::OrderedExecutor::setSortingOrder: Caller not found (id:{})"_fmt(id) };
-					}
-
-					if (mapIt->second->sortingOrder == sortingOrder)
-					{
-						// sortingOrderに変化がない場合は何もしない
+						if (m_callerKeyByID.contains(id))
+						{
+							throw Error{ U"OrderedExecutor::remove: ID={} inconsistency detected"_fmt(id) };
+						}
 						return;
 					}
+					m_callers.erase(it);
+					m_callerKeyByID.erase(id);
+				}
 
-					// 新しいsortingOrderに変更して挿入し直す
-					Caller newCaller = *mapIt->second;
-					m_callerSet.erase(mapIt->second);
-					newCaller.sortingOrder = sortingOrder;
-					auto result = m_callerSet.insert(newCaller);
-					if (result.second)
+				void refreshSortingOrder()
+				{
+					m_tempNewSortingOrders.clear();
+
+					// まず、sortingOrderの変更をリストアップ
+					for (const auto& [key, caller] : m_callers)
 					{
-						mapIt->second = result.first;
+						const int32 newSortingOrder = caller.sortingOrderFunc();
+						if (newSortingOrder != key.sortingOrder)
+						{
+							m_tempNewSortingOrders.emplace_back(key, newSortingOrder);
+						}
+					}
+
+					// sortingOrderに変更があったものを再挿入
+					for (const auto& [oldKey, newSortingOrder] : m_tempNewSortingOrders)
+					{
+						const IDType id = oldKey.id;
+						const auto it = m_callers.find(oldKey);
+						if (it == m_callers.end())
+						{
+							throw Error{ U"OrderedExecutor::refreshSortingOrder: ID={} not found"_fmt(id) };
+						}
+						Caller newCaller = it->second;
+						m_callers.erase(it);
+						const auto [newIt, inserted] = m_callers.insert(std::make_pair(CallerKey{ id, newSortingOrder }, std::move(newCaller)));
+						if (!inserted)
+						{
+							throw Error{ U"OrderedExecutor::refreshSortingOrder: ID={} cannot be inserted"_fmt(id) };
+						}
+						m_callerKeyByID.insert_or_assign(id, newIt->first);
 					}
 				}
 
 				void callNegativeSortingOrder()
 				{
-					for (const auto& caller : m_callerSet)
+					for (const auto& [key, caller] : m_callers)
 					{
-						if (caller.sortingOrder >= 0)
+						if (key.sortingOrder >= 0)
 						{
 							break;
 						}
@@ -167,9 +224,9 @@ inline namespace cotasklib
 
 				void callNonNegativeSortingOrder()
 				{
-					for (const auto& caller : m_callerSet)
+					for (const auto& [key, caller] : m_callers)
 					{
-						if (caller.sortingOrder < 0)
+						if (key.sortingOrder < 0)
 						{
 							continue;
 						}
@@ -278,12 +335,14 @@ inline namespace cotasklib
 					switch (frameTiming)
 					{
 					case FrameTiming::Update:
+						m_updateExecutor.refreshSortingOrder();
 						m_updateExecutor.callNegativeSortingOrder();
 						fnResumeAwaiters();
 						m_updateExecutor.callNonNegativeSortingOrder();
 						break;
 
 					case FrameTiming::Draw:
+						m_drawExecutor.refreshSortingOrder();
 						m_drawExecutor.callNegativeSortingOrder();
 						fnResumeAwaiters();
 						m_drawExecutor.callNonNegativeSortingOrder();
@@ -349,13 +408,13 @@ inline namespace cotasklib
 				}
 
 				[[nodiscard]]
-				static AwaiterID AddUpdater(std::function<void()> func, int32 updateOrder)
+				static UpdaterID AddUpdater(std::function<void()> func, std::function<int32()> updateOrderFunc)
 				{
 					if (!s_pInstance)
 					{
 						throw Error{ U"Backend is not initialized" };
 					}
-					return s_pInstance->m_updateExecutor.add(std::move(func), updateOrder);
+					return s_pInstance->m_updateExecutor.add(std::move(func), std::move(updateOrderFunc));
 				}
 
 				static void RemoveUpdater(UpdaterID id)
@@ -368,23 +427,14 @@ inline namespace cotasklib
 					s_pInstance->m_updateExecutor.remove(id);
 				}
 
-				static void SetUpdaterOrder(UpdaterID id, int32 updateOrder)
-				{
-					if (!s_pInstance)
-					{
-						throw Error{ U"Backend is not initialized" };
-					}
-					s_pInstance->m_updateExecutor.setSortingOrder(id, updateOrder);
-				}
-
 				[[nodiscard]]
-				static DrawerID AddDrawer(std::function<void()> func, int32 drawOrder)
+				static DrawerID AddDrawer(std::function<void()> func, std::function<int32()> drawOrderFunc)
 				{
 					if (!s_pInstance)
 					{
 						throw Error{ U"Backend is not initialized" };
 					}
-					return s_pInstance->m_drawExecutor.add(std::move(func), drawOrder);
+					return s_pInstance->m_drawExecutor.add(std::move(func), std::move(drawOrderFunc));
 				}
 
 				static void RemoveDrawer(DrawerID id)
@@ -395,15 +445,6 @@ inline namespace cotasklib
 						return;
 					}
 					s_pInstance->m_drawExecutor.remove(id);
-				}
-
-				static void SetDrawerOrder(DrawerID id, int32 drawOrder)
-				{
-					if (!s_pInstance)
-					{
-						throw Error{ U"Backend is not initialized" };
-					}
-					s_pInstance->m_drawExecutor.setSortingOrder(id, drawOrder);
 				}
 
 				[[nodiscard]]
@@ -539,12 +580,20 @@ inline namespace cotasklib
 		{
 		private:
 			detail::DrawerID m_id;
-			int32 m_drawOrder;
 
 		public:
-			ScopedDrawer(std::function<void()> func, int32 drawOrder = 0)
-				: m_id(detail::Backend::AddDrawer(std::move(func), drawOrder))
-				, m_drawOrder(drawOrder)
+			ScopedDrawer(std::function<void()> func)
+				: m_id(detail::Backend::AddDrawer(std::move(func), [] { return 0; }))
+			{
+			}
+
+			ScopedDrawer(std::function<void()> func, int32 drawOrder)
+				: m_id(detail::Backend::AddDrawer(std::move(func), [drawOrder] { return drawOrder; }))
+			{
+			}
+
+			ScopedDrawer(std::function<void()> func, std::function<int32()> drawOrderFunc)
+				: m_id(detail::Backend::AddDrawer(std::move(func), std::move(drawOrderFunc)))
 			{
 			}
 
@@ -579,27 +628,26 @@ inline namespace cotasklib
 					detail::Backend::RemoveDrawer(m_id);
 				}
 			}
-
-			void setDrawOrder(int32 drawOrder)
-			{
-				if (m_id == 0 || drawOrder == m_drawOrder)
-				{
-					return;
-				}
-				m_drawOrder = drawOrder;
-				detail::Backend::SetDrawerOrder(m_id, drawOrder);
-			}
 		};
 
 		class ScopedUpdater
 		{
 		private:
 			detail::UpdaterID m_id;
-			int32 m_updateOrder;
 
 		public:
-			ScopedUpdater(std::function<void()> func, int32 updateOrder = 0)
-				: m_id(detail::Backend::AddUpdater(std::move(func), updateOrder))
+			ScopedUpdater(std::function<void()> func)
+				: m_id(detail::Backend::AddUpdater(std::move(func), [] { return 0; }))
+			{
+			}
+
+			ScopedUpdater(std::function<void()> func, int32 updateOrder)
+				: m_id(detail::Backend::AddUpdater(std::move(func), [updateOrder] { return updateOrder; }))
+			{
+			}
+
+			ScopedUpdater(std::function<void()> func, std::function<int32()> updateOrderFunc)
+				: m_id(detail::Backend::AddUpdater(std::move(func), std::move(updateOrderFunc)))
 			{
 			}
 
@@ -633,16 +681,6 @@ inline namespace cotasklib
 				{
 					detail::Backend::RemoveUpdater(m_id);
 				}
-			}
-
-			void setUpdateOrder(int32 updateOrder)
-			{
-				if (m_id == 0 || updateOrder == m_updateOrder)
-				{
-					return;
-				}
-				m_updateOrder = updateOrder;
-				detail::Backend::SetUpdaterOrder(m_id, updateOrder);
 			}
 		};
 
@@ -1889,7 +1927,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			Task<TResult> run()
 			{
-				ScopedDrawer drawer{ [this, &drawer] { drawer.setDrawOrder(drawOrder()); draw(); }, drawOrder() };
+				ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawOrder(); } };
 				co_return co_await start();
 			}
 		};
@@ -2173,7 +2211,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			Task<SceneFactory> run()
 			{
-				ScopedDrawer drawer{ [this, &drawer] { drawer.setDrawOrder(drawOrder()); draw(); }, drawOrder() };
+				ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawOrder(); } };
 				co_return co_await startAndFadeOut()
 					.with(fadeIn().then([this] { m_isFadingIn = false; }));
 			}

@@ -2441,6 +2441,56 @@ inline namespace cotasklib
 			};
 		}
 
+		class ScopedTweener
+		{
+		private:
+			std::function<double(double)> m_easingFunc;
+			std::function<void(double)> m_callback;
+			Timer m_timer;
+			std::optional<ScopedUpdater> m_updater;
+
+			void update()
+			{
+				m_callback(m_easingFunc(m_timer.progress0_1()));
+				if (m_timer.reachedZero())
+				{
+					m_updater.reset();
+				}
+			}
+
+		public:
+			explicit ScopedTweener(Duration duration, std::function<void(double)> callback)
+				: m_easingFunc([] (double t) { return t; })
+				, m_callback(std::move(callback))
+				, m_timer(duration, StartImmediately::Yes)
+				, m_updater(std::make_optional<ScopedUpdater>([this] { update(); }))
+			{
+			}
+
+			explicit ScopedTweener(Duration duration, std::function<double(double)> easingFunc, std::function<void(double)> callback)
+				: m_easingFunc(std::move(easingFunc))
+				, m_callback(std::move(callback))
+				, m_timer(duration, StartImmediately::Yes)
+				, m_updater(std::make_optional<ScopedUpdater>([this] { update(); }))
+			{
+			}
+
+			ScopedTweener(const ScopedTweener&) = delete;
+
+			ScopedTweener& operator=(const ScopedTweener&) = delete;
+
+			ScopedTweener(ScopedTweener&&) = default;
+
+			ScopedTweener& operator=(ScopedTweener&&) = default;
+
+			~ScopedTweener() = default;
+
+			Co::Task<void> waitForFinish() const
+			{
+				co_await WaitForTimer(&m_timer);
+			}
+		};
+
 		class ScopedSubscriber
 		{
 		private:

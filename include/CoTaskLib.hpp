@@ -78,6 +78,106 @@ inline namespace cotasklib
 
 		namespace detail
 		{
+			template <typename IDType>
+			class OrderedExecutor
+			{
+			private:
+				struct Caller
+				{
+					IDType id;
+					std::function<void()> func;
+					int32 sortingOrder;
+
+					bool operator<(const Caller& other) const
+					{
+						if (sortingOrder == other.sortingOrder)
+						{
+							return id < other.id;
+						}
+						return sortingOrder < other.sortingOrder;
+					}
+				};
+
+				IDType m_nextID = 1;
+				std::set<Caller> m_callerSet;
+
+			public:
+				using CallerSetIterator = typename decltype(m_callerSet)::iterator;
+
+			private:
+				std::map<IDType, CallerSetIterator> m_callerSetIteratorByID;
+
+			public:
+				IDType add(std::function<void()> func, int32 sortingOrder)
+				{
+					const auto [it, inserted] = m_callerSet.insert(Caller{ m_nextID, std::move(func), sortingOrder });
+					if (inserted)
+					{
+						m_callerSetIteratorByID[m_nextID] = it;
+					}
+					return m_nextID++;
+				}
+
+				void remove(IDType id)
+				{
+					const auto it = m_callerSetIteratorByID.find(id);
+					if (it != m_callerSetIteratorByID.end())
+					{
+						m_callerSet.erase(it->second);
+						m_callerSetIteratorByID.erase(it);
+					}
+				}
+
+				void setSortingOrder(IDType id, int32 sortingOrder)
+				{
+					const auto mapIt = m_callerSetIteratorByID.find(id);
+					if (mapIt == m_callerSetIteratorByID.end())
+					{
+						throw Error{ U"Co::OrderedExecutor::setSortingOrder: Caller not found (id:{})"_fmt(id) };
+					}
+
+					if (mapIt->second->sortingOrder == sortingOrder)
+					{
+						// sortingOrderに変化がない場合は何もしない
+						return;
+					}
+
+					// 新しいsortingOrderに変更して挿入し直す
+					Caller newCaller = *mapIt->second;
+					m_callerSet.erase(mapIt->second);
+					newCaller.sortingOrder = sortingOrder;
+					auto result = m_callerSet.insert(newCaller);
+					if (result.second)
+					{
+						mapIt->second = result.first;
+					}
+				}
+
+				void callNegativeSortingOrder()
+				{
+					for (const auto& caller : m_callerSet)
+					{
+						if (caller.sortingOrder >= 0)
+						{
+							break;
+						}
+						caller.func();
+					}
+				}
+
+				void callNonNegativeSortingOrder()
+				{
+					for (const auto& caller : m_callerSet)
+					{
+						if (caller.sortingOrder < 0)
+						{
+							continue;
+						}
+						caller.func();
+					}
+				}
+			};
+
 			class Backend
 			{
 			private:
@@ -143,15 +243,9 @@ inline namespace cotasklib
 
 				std::map<AwaiterID, std::unique_ptr<IAwaiter>> m_awaiters;
 
-				UpdaterID m_nextUpdaterID = 1;
+				OrderedExecutor<UpdaterID> m_updateExecutor;
 
-				std::map<int32, std::map<UpdaterID, std::function<void()>>> m_updatersByPriorityOrderNegative;
-				std::map<int32, std::map<UpdaterID, std::function<void()>>> m_updatersByPriorityOrderNonNegative;
-
-				DrawerID m_nextDrawerID = 1;
-
-				std::map<int32, std::map<DrawerID, std::function<void()>>> m_drawersByZIndexNegative;
-				std::map<int32, std::map<DrawerID, std::function<void()>>> m_drawersByZIndexNonNegative;
+				OrderedExecutor<DrawerID> m_drawExecutor;
 
 				SceneFactory m_currentSceneFactory;
 
@@ -162,65 +256,41 @@ inline namespace cotasklib
 				{
 					m_currentFrameTiming = frameTiming;
 
-					switch (frameTiming)
+					const auto fnResumeAwaiters = [this]
 					{
-					case FrameTiming::Update:
-						for (auto& [priorityOrder, updaters] : m_updatersByPriorityOrderNegative)
+						for (auto it = m_awaiters.begin(); it != m_awaiters.end();)
 						{
-							for (auto& [updaterID, updateFunc] : updaters)
+							m_currentAwaiterID = it->first;
+
+							it->second->resume(m_currentFrameTiming);
+							if (it->second->done())
 							{
-								updateFunc();
+								it = m_awaiters.erase(it);
+							}
+							else
+							{
+								++it;
 							}
 						}
-						break;
-
-					case FrameTiming::Draw:
-						for (const auto& [zIndex, drawers] : m_drawersByZIndexNegative)
-						{
-							for (const auto& [drawerID, drawFunc] : drawers)
-							{
-								drawFunc();
-							}
-						}
-						break;
-					}
-
-					for (auto it = m_awaiters.begin(); it != m_awaiters.end();)
-					{
-						m_currentAwaiterID = it->first;
-
-						it->second->resume(frameTiming);
-						if (it->second->done())
-						{
-							it = m_awaiters.erase(it);
-						}
-						else
-						{
-							++it;
-						}
-					}
-					m_currentAwaiterID = none;
+						m_currentAwaiterID = none;
+					};
 
 					switch (frameTiming)
 					{
 					case FrameTiming::Update:
-						for (auto& [priorityOrder, updaters] : m_updatersByPriorityOrderNonNegative)
-						{
-							for (auto& [updaterID, updateFunc] : updaters)
-							{
-								updateFunc();
-							}
-						}
+						m_updateExecutor.callNegativeSortingOrder();
+						fnResumeAwaiters();
+						m_updateExecutor.callNonNegativeSortingOrder();
 						break;
 
 					case FrameTiming::Draw:
-						for (const auto& [zIndex, drawers] : m_drawersByZIndexNonNegative)
-						{
-							for (const auto& [drawerID, drawFunc] : drawers)
-							{
-								drawFunc();
-							}
-						}
+						m_drawExecutor.callNegativeSortingOrder();
+						fnResumeAwaiters();
+						m_drawExecutor.callNonNegativeSortingOrder();
+						break;
+
+					default:
+						fnResumeAwaiters();
 						break;
 					}
 				}
@@ -262,92 +332,6 @@ inline namespace cotasklib
 				}
 
 				[[nodiscard]]
-				static AwaiterID AddUpdater(std::function<void()> func, int32 priorityOrder)
-				{
-					if (!s_pInstance)
-					{
-						throw Error{ U"Backend is not initialized" };
-					}
-					const UpdaterID id = s_pInstance->m_nextUpdaterID++;
-					if (priorityOrder < 0)
-					{
-						s_pInstance->m_updatersByPriorityOrderNegative[priorityOrder].emplace(id, std::move(func));
-					}
-					else
-					{
-						s_pInstance->m_updatersByPriorityOrderNonNegative[priorityOrder].emplace(id, std::move(func));
-					}
-					return id;
-				}
-
-				static void RemoveUpdater(UpdaterID id)
-				{
-					if (!s_pInstance)
-					{
-						// Note: ユーザーがインスタンスをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
-						return;
-					}
-					for (auto& [_, updaters] : s_pInstance->m_updatersByPriorityOrderNonNegative)
-					{
-						if (updaters.erase(id))
-						{
-							return;
-						}
-					}
-					for (auto& [_, updaters] : s_pInstance->m_updatersByPriorityOrderNegative)
-					{
-						if (updaters.erase(id))
-						{
-							return;
-						}
-					}
-					throw Error{ U"Backend::RemoveUpdater: Updater not found" };
-				}
-
-				[[nodiscard]]
-				static DrawerID AddDrawer(std::function<void()> func, int32 zIndex)
-				{
-					if (!s_pInstance)
-					{
-						throw Error{ U"Backend is not initialized" };
-					}
-					const DrawerID id = s_pInstance->m_nextDrawerID++;
-					if (zIndex < 0)
-					{
-						s_pInstance->m_drawersByZIndexNegative[zIndex].emplace(id, std::move(func));
-					}
-					else
-					{
-						s_pInstance->m_drawersByZIndexNonNegative[zIndex].emplace(id, std::move(func));
-					}
-					return id;
-				}
-
-				static void RemoveDrawer(DrawerID id)
-				{
-					if (!s_pInstance)
-					{
-						// Note: ユーザーがインスタンスをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
-						return;
-					}
-					for (auto& [_, drawers] : s_pInstance->m_drawersByZIndexNonNegative)
-					{
-						if (drawers.erase(id))
-						{
-							return;
-						}
-					}
-					for (auto& [_, drawers] : s_pInstance->m_drawersByZIndexNegative)
-					{
-						if (drawers.erase(id))
-						{
-							return;
-						}
-					}
-					throw Error{ U"Backend::RemoveDrawer: Drawer not found" };
-				}
-
-				[[nodiscard]]
 				static bool IsDone(AwaiterID id)
 				{
 					if (!s_pInstance)
@@ -362,6 +346,64 @@ inline namespace cotasklib
 					{
 						return id < s_pInstance->m_nextAwaiterID;
 					}
+				}
+
+				[[nodiscard]]
+				static AwaiterID AddUpdater(std::function<void()> func, int32 updateOrder)
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+					return s_pInstance->m_updateExecutor.add(std::move(func), updateOrder);
+				}
+
+				static void RemoveUpdater(UpdaterID id)
+				{
+					if (!s_pInstance)
+					{
+						// Note: ユーザーがインスタンスをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
+						return;
+					}
+					s_pInstance->m_updateExecutor.remove(id);
+				}
+
+				static void SetUpdaterOrder(UpdaterID id, int32 updateOrder)
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+					s_pInstance->m_updateExecutor.setSortingOrder(id, updateOrder);
+				}
+
+				[[nodiscard]]
+				static DrawerID AddDrawer(std::function<void()> func, int32 drawOrder)
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+					return s_pInstance->m_drawExecutor.add(std::move(func), drawOrder);
+				}
+
+				static void RemoveDrawer(DrawerID id)
+				{
+					if (!s_pInstance)
+					{
+						// Note: ユーザーがインスタンスをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
+						return;
+					}
+					s_pInstance->m_drawExecutor.remove(id);
+				}
+
+				static void SetDrawerOrder(DrawerID id, int32 drawOrder)
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+					s_pInstance->m_drawExecutor.setSortingOrder(id, drawOrder);
 				}
 
 				[[nodiscard]]
@@ -497,10 +539,12 @@ inline namespace cotasklib
 		{
 		private:
 			detail::DrawerID m_id;
+			int32 m_drawOrder;
 
 		public:
-			ScopedDrawer(std::function<void()> func, int32 zIndex = 0)
-				: m_id(detail::Backend::AddDrawer(std::move(func), zIndex))
+			ScopedDrawer(std::function<void()> func, int32 drawOrder = 0)
+				: m_id(detail::Backend::AddDrawer(std::move(func), drawOrder))
+				, m_drawOrder(drawOrder)
 			{
 			}
 
@@ -535,16 +579,27 @@ inline namespace cotasklib
 					detail::Backend::RemoveDrawer(m_id);
 				}
 			}
+
+			void setDrawOrder(int32 drawOrder)
+			{
+				if (m_id == 0 || drawOrder == m_drawOrder)
+				{
+					return;
+				}
+				m_drawOrder = drawOrder;
+				detail::Backend::SetDrawerOrder(m_id, drawOrder);
+			}
 		};
 
 		class ScopedUpdater
 		{
 		private:
 			detail::UpdaterID m_id;
+			int32 m_updateOrder;
 
 		public:
-			ScopedUpdater(std::function<void()> func, int32 priorityOrder = 0)
-				: m_id(detail::Backend::AddUpdater(std::move(func), priorityOrder))
+			ScopedUpdater(std::function<void()> func, int32 updateOrder = 0)
+				: m_id(detail::Backend::AddUpdater(std::move(func), updateOrder))
 			{
 			}
 
@@ -578,6 +633,16 @@ inline namespace cotasklib
 				{
 					detail::Backend::RemoveUpdater(m_id);
 				}
+			}
+
+			void setUpdateOrder(int32 updateOrder)
+			{
+				if (m_id == 0 || updateOrder == m_updateOrder)
+				{
+					return;
+				}
+				m_updateOrder = updateOrder;
+				detail::Backend::SetUpdaterOrder(m_id, updateOrder);
 			}
 		};
 
@@ -841,12 +906,12 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			Co::ScopedTaskRun runScoped() &&
+			Co::ScopedTaskRun runScoped()&&
 			{
 				return Co::ScopedTaskRun{ detail::TaskAwaiter<TResult>{ std::move(*this) } };
 			}
 
-			void runForget() &&
+			void runForget()&&
 			{
 				resume(detail::Backend::CurrentFrameTiming());
 				if (m_handle.done())
@@ -859,7 +924,7 @@ inline namespace cotasklib
 
 			template <typename TResultOther>
 			[[nodiscard]]
-			Task<TResult> with(Task<TResultOther>&& task) &&
+			Task<TResult> with(Task<TResultOther>&& task)&&
 			{
 				m_concurrentTasksAfter.push_back(std::make_unique<Task<TResultOther>>(std::move(task)));
 				return std::move(*this);
@@ -867,7 +932,7 @@ inline namespace cotasklib
 
 			template <typename TResultOther>
 			[[nodiscard]]
-			Task<TResult> with(Task<TResultOther>&& task, WithTiming timing) &&
+			Task<TResult> with(Task<TResultOther>&& task, WithTiming timing)&&
 			{
 				switch (timing)
 				{
@@ -886,7 +951,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			Task<TResult>&& then(then_function_type func) &&
+			Task<TResult>&& then(then_function_type func)&&
 			{
 				m_thenCaller.add(std::move(func));
 				return std::move(*this);
@@ -1795,18 +1860,10 @@ inline namespace cotasklib
 		template <typename TResult>
 		class [[nodiscard]] SequenceBase
 		{
-		private:
-			int32 m_zIndex = 0;
-
 		public:
 			using result_type = TResult;
 
 			SequenceBase() = default;
-
-			explicit SequenceBase(int32 zIndex)
-				: m_zIndex(zIndex)
-			{
-			}
 
 			SequenceBase(const SequenceBase&) = delete;
 
@@ -1824,10 +1881,15 @@ inline namespace cotasklib
 			{
 			}
 
+			virtual int32 drawOrder() const
+			{
+				return 0;
+			}
+
 			[[nodiscard]]
 			Task<TResult> run()
 			{
-				const ScopedDrawer drawer{ [this] { draw(); }, m_zIndex };
+				ScopedDrawer drawer{ [this, &drawer] { drawer.setDrawOrder(drawOrder()); draw(); }, drawOrder() };
 				co_return co_await start();
 			}
 		};
@@ -1847,11 +1909,6 @@ inline namespace cotasklib
 
 		public:
 			UpdateSequenceBase() = default;
-
-			explicit UpdateSequenceBase(int32 zIndex)
-				: SequenceBase<TResult>(zIndex)
-			{
-			}
 
 			[[nodiscard]]
 			virtual Task<TResult> start() override final
@@ -1882,11 +1939,6 @@ inline namespace cotasklib
 
 		public:
 			UpdateSequenceBase() = default;
-
-			explicit UpdateSequenceBase(int32 zIndex)
-				: SequenceBase<void>(zIndex)
-			{
-			}
 
 			[[nodiscard]]
 			virtual Task<void> start() override final
@@ -1920,18 +1972,20 @@ inline namespace cotasklib
 			class [[nodiscard]] FadeSequenceBase : public SequenceBase<void>
 			{
 			private:
+				int32 m_drawOrder;
 				Timer m_timer;
 				double m_t = 0.0;
 
 			public:
-				explicit FadeSequenceBase(const Duration& duration)
-					: m_timer(duration, StartImmediately::No)
+				explicit FadeSequenceBase(const Duration& duration, int32 drawOrder)
+					: m_drawOrder(drawOrder)
+					, m_timer(duration, StartImmediately::No)
 				{
 				}
 
 				virtual ~FadeSequenceBase() = default;
 
-				Task<void> start() override final
+				virtual Task<void> start() override final
 				{
 					if (m_timer.duration().count() <= 0.0)
 					{
@@ -1955,9 +2009,14 @@ inline namespace cotasklib
 					co_yield FrameTiming::Update;
 				}
 
-				void draw() const override final
+				virtual void draw() const override final
 				{
 					drawFade(m_t);
+				}
+
+				virtual int32 drawOrder() const override final
+				{
+					return m_drawOrder;
 				}
 
 				// tには時間が0.0～1.0で渡される
@@ -1970,8 +2029,8 @@ inline namespace cotasklib
 				ColorF m_color;
 
 			public:
-				explicit SimpleFadeInSequence(const Duration& duration, const ColorF& color)
-					: FadeSequenceBase(duration)
+				explicit SimpleFadeInSequence(const Duration& duration, const ColorF& color, int32 drawOrder)
+					: FadeSequenceBase(duration, drawOrder)
 					, m_color(color)
 				{
 				}
@@ -1990,8 +2049,8 @@ inline namespace cotasklib
 				ColorF m_color;
 
 			public:
-				explicit SimpleFadeOutSequence(const Duration& duration, const ColorF& color)
-					: FadeSequenceBase(duration)
+				explicit SimpleFadeOutSequence(const Duration& duration, const ColorF& color, int32 drawOrder)
+					: FadeSequenceBase(duration, drawOrder)
 					, m_color(color)
 				{
 				}
@@ -2005,16 +2064,19 @@ inline namespace cotasklib
 			};
 		}
 
+		constexpr int32 FadeInDrawOrder = 10000000;
+		constexpr int32 FadeOutDrawOrder = 11000000;
+
 		[[nodiscard]]
-		inline Task<void> SimpleFadeIn(const Duration& duration, const ColorF& color = Palette::Black)
+		inline Task<void> SimpleFadeIn(const Duration& duration, const ColorF& color = Palette::Black, int32 drawOrder = FadeInDrawOrder)
 		{
-			return AsTask<detail::SimpleFadeInSequence>(duration, color);
+			return AsTask<detail::SimpleFadeInSequence>(duration, color, drawOrder);
 		}
 
 		[[nodiscard]]
-		inline Task<void> SimpleFadeOut(const Duration& duration, const ColorF& color = Palette::Black)
+		inline Task<void> SimpleFadeOut(const Duration& duration, const ColorF& color = Palette::Black, int32 drawOrder = FadeOutDrawOrder)
 		{
-			return AsTask<detail::SimpleFadeOutSequence>(duration, color);
+			return AsTask<detail::SimpleFadeOutSequence>(duration, color, drawOrder);
 		}
 
 		template <detail::SceneConcept TScene, typename... Args>
@@ -2070,6 +2132,11 @@ inline namespace cotasklib
 			{
 			}
 
+			virtual int32 drawOrder() const
+			{
+				return 0;
+			}
+
 			[[nodiscard]]
 			virtual Task<void> fadeIn()
 			{
@@ -2106,7 +2173,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			Task<SceneFactory> run()
 			{
-				const ScopedDrawer drawer{ [this] { draw(); } };
+				ScopedDrawer drawer{ [this, &drawer] { drawer.setDrawOrder(drawOrder()); draw(); }, drawOrder() };
 				co_return co_await startAndFadeOut()
 					.with(fadeIn().then([this] { m_isFadingIn = false; }));
 			}

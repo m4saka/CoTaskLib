@@ -2253,6 +2253,11 @@ inline namespace cotasklib
 				m_nextSceneFactory = MakeSceneFactory<TScene>(std::forward<Args>(args)...);
 			}
 
+			void requestNextScene(SceneFactory sceneFactory)
+			{
+				m_nextSceneFactory = std::move(sceneFactory);
+			}
+
 			void requestSceneFinish()
 			{
 				m_nextSceneFactory = SceneFinish();

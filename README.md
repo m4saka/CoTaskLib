@@ -19,18 +19,15 @@ C++20の`co_await`/`co_return`キーワードを利用して、複数フレー�
 ### メンバ関数
 下記のメンバ関数を使用してタスクの実行を制御できます。
 
-- `runScoped()` -> `Co::ScopedTaskRun`
-    - タスクの実行を開始し、`Co::ScopedTaskRun`(生存期間オブジェクト)のインスタンスを返します。
-    - タスクの実行が完了する前に`Co::ScopedTaskRun`のインスタンスが破棄された場合、タスクは途中で終了されます。
-        - メモリ安全性のため、タスク内で外部の変数を参照する場合は必ず`Co::ScopedTaskRun`のインスタンスよりも生存期間が長い変数であることを確認してください。
-- `runForget()`
-    - タスクの実行を開始し、バックグラウンドで実行します。
-    - プログラム終了(正確にはSiv3DのAddon破棄のタイミング)まで実行され続けるため、外部の変数を参照する場合は生存期間に注意してください。
-        - 基本的には`runScoped`を優先して使用し、シーンをまたぐ必要がある処理などどうしても必要な場合にのみ`runForget`を使用することを推奨します。
+- `runScoped()` -> `Co::ScopedTaskRunner`
+    - タスクの実行を開始し、`Co::ScopedTaskRunner`(生存期間オブジェクト)のインスタンスを返します。
+    - タスクの実行が完了する前に`Co::ScopedTaskRunner`のインスタンスが破棄された場合、タスクは途中で終了されます。
+        - メモリ安全性のため、タスク内で外部の変数を参照する場合は必ず`Co::ScopedTaskRunner`のインスタンスよりも生存期間が長い変数であることを確認してください。
 - `with(Co::Task)` -> `Co::Task<TResult>`
     - タスクの実行中、同時に実行される子タスクを登録します。
     - 子タスクの完了は待ちません。親タスクが先に完了した場合、子タスクの実行は途中で終了されます。
     - 子タスクの戻り値は無視されます。
+    - この関数を複数回使用して、複数個のタスクを登録することも可能です。その場合、登録した順番で実行されます。
 - `then(std::function<void(TResult)>)` -> `Co::Task<TResult>`
     - タスクの実行完了時に実行する関数を登録します。
     - タスクが実行完了前に途中で終了された場合、登録した関数は実行されません。
@@ -39,13 +36,10 @@ C++20の`co_await`/`co_return`キーワードを利用して、複数フレー�
 ### タスクの実行方法
 
 #### 通常の関数内から実行開始する場合
-`runScoped`関数または`runForget`関数を使用します。
+`runScoped`関数を使用します。
 
 ```cpp
-const auto taskRun = ExampleTask().runScoped();
-```
-```cpp
-ExampleTask().runForget();
+const auto taskRunner = ExampleTask().runScoped();
 ```
 
 ### コルーチン内から実行する場合
@@ -60,14 +54,14 @@ Co::Task<void> ExampleTask()
 }
 ```
 
-完了を待つ必要がない場合は`runScoped`関数および`runForget`関数を併用することもできます。
+完了を待つ必要がない場合は`runScoped`関数を併用することもできます。
 
 ```cpp
 Co::Task<void> ExampleTask()
 {
     // Task1とTask2を同時に実行開始し、10秒間経ったらタスクの完了を待たずに終了
-    const auto anotherTask1Run = Task1().runScoped();
-    const auto anotherTask2Run = Task2().runScoped();
+    const auto anotherTask1Runner = Task1().runScoped();
+    const auto anotherTask2Runner = Task2().runScoped();
 
     co_await Co::Delay(10s);
 }
@@ -118,19 +112,22 @@ Co::Task<void> ExampleTask()
 ### シーケンスの実行方法
 
 #### 通常の関数内から実行開始する場合
-`Co::AsTask`関数を使用することで、シーケンスを生成した上でそれを実行する`Co::Task`を取得できます。これに対して通常通り、`runScoped`関数または`runForget`関数を使用します。
-
+`Co::AsTask`関数を使用することで、シーケンスを生成した上でそれを実行する`Co::Task`を取得できます。これに対して通常通り、`runScoped`関数を使用します。  
 もしシーケンスクラスのコンストラクタに引数が必要な場合、`Co::AsTask`関数の引数として渡すことができます。
 
 ```cpp
-const auto taskRun = Co::AsTask<ExampleSequence>().runScoped();
+const auto taskRunner = Co::AsTask<ExampleSequence>().runScoped();
 ```
+
+もしくは、`Co::ScopedSequenceRunner`クラスを使用して下記のようにも記述できます。  
+もしシーケンスクラスのコンストラクタに引数が必要な場合、`Co::ScopedSequenceRunner`クラスのコンストラクタ引数として渡すことができます。
+
 ```cpp
-Co::AsTask<ExampleSequence>().runForget();
+const Co::ScopedSequenceRunner<ExampleSequence> sequenceRunner{};
 ```
 
 ### コルーチン内から実行する場合
-同様に`Co::AsTask`関数で`Co::Task`を取得し、これに対して通常通り`co_await`を使用します。
+通常の関数の場合と同様に`Co::AsTask`関数で`Co::Task`を取得し、これに対して通常通り`co_await`を使用します。
 
 ```cpp
 Co::Task<void> ExampleTask()
@@ -154,8 +151,7 @@ Co::Task<void> ExampleTask()
 
 - `update()`
     - 毎フレームの処理を記述します。
-    - シーケンスを終了するには、`finish()`関数を実行します。
-        - `finish`関数の引数には`TResult`型の結果を指定します。`TResult`が`void`型の場合、引数は不要です。
+    - シーケンスを終了するには、`requestFinish()`関数を実行します。
 
 - `draw() const`
     - シーケンスの描画処理を記述します。
@@ -165,6 +161,22 @@ Co::Task<void> ExampleTask()
 - `drawOrder() const` -> `int32`
     - 描画順序のソート値(drawOrder)を設定します。
     - デフォルト値は0です。drawOrderが同一のもの同士は、実行を開始した順番と同じ順序で描画されます。
+
+### update関数からシーケンスを完了するには
+`update()`関数内で`requestFinish()`関数を実行し、シーケンスを完了できます。
+`requestFinish()`関数の引数には`TResult`型の結果を指定します。`TResult`が`void`型の場合、引数は不要です。
+
+```cpp
+void update() override
+{
+    if (...) // 何らかの条件
+    {
+        requestFinish();
+    }
+}
+```
+
+なお、`requestFinish()`関数が複数回呼ばれた場合、1回目の呼び出しで受け取った結果のみが使用され、2回目以降の呼び出し分は無視されます。
 
 ## `Co::SceneBase`クラス
 シーンの基底クラスです。シーンを実装するには、このクラスを継承します。
@@ -194,7 +206,7 @@ Co::Task<void> ExampleTask()
 
 - `drawOrder() const` -> `int32`
     - 描画順序のソート値(drawOrder)を設定します。
-    - デフォルト値は0です。drawOrderが同一のもの同士は、実行を開始した順番と同じ順序で描画されます。
+    - デフォルト値は0です。drawOrderが同一のもの同士は、実行を開始した順番で描画されます。
 
 - `fadeIn()` -> `Co::Task<void>`
     - シーン開始時に実行されるフェードイン用のコルーチンです。
@@ -207,17 +219,31 @@ Co::Task<void> ExampleTask()
     - Tips: フェードアウトは必ずしも`fadeOut()`関数内に実装する必要はありません。遷移先のシーンごとにフェードアウトの方法を変えたい場合など、`fadeOut()`関数を使用せずに`start()`関数内でフェードアウトを実行した方がシンプルに実装できる場合があります。
 
 ### シーンの実行方法
-`Co::MakeTask`関数を使用することで、シーンを生成した上でそれを実行する`Co::Task`を取得できます。これに対して通常通り、`runScoped`関数または`runForget`関数を使用します。
+`Co::AsTask`関数を使用することで、シーンを生成した上でそれを実行する`Co::Task`を取得できます。これに対して通常通り、`runScoped`関数を使用します。
 
-もしシーンクラスのコンストラクタに引数が必要な場合、`Co::MakeTask`関数の引数として渡すことができます。
+もしシーンクラスのコンストラクタに引数が必要な場合、`Co::AsTask`関数の引数として渡すことができます。
 
-すべてのシーンが終了したらプログラムを終了するには、下記のように`done()`関数でタスクの完了を確認してwhileループを抜けます。
+すべてのシーンが終了したらプログラムを終了するために、下記のように`isFinished()`関数でタスクの完了を確認してwhileループを抜けます。
 
 ```cpp
-const auto taskRun = Co::MakeTask<ExampleScene>().runScoped();
+const auto taskRunner = Co::AsTask<ExampleScene>().runScoped();
 while (System::Update())
 {
-    if (taskRun.done())
+    if (taskRunner.isFinished())
+    {
+        break;
+    }
+}
+```
+
+もしくは、`Co::ScopedSceneRunner`クラスを使用して下記のようにも記述できます。  
+もしシーンクラスのコンストラクタに引数が必要な場合、`Co::ScopedSceneRunner`クラスのコンストラクタ引数として渡すことができます。
+
+```cpp
+const ScopedSceneRunner<ExampleScene> sceneRunner{};
+while (System::Update())
+{
+    if (sceneRunner.isFinished())
     {
         break;
     }
@@ -234,6 +260,31 @@ while (System::Update())
 - CoTaskLibのシーンクラスでは、毎フレーム実行されるupdate関数の代わりに、`start()`関数というコルーチン関数を実装します。
     - update関数を使用したい場合、`SceneBase`クラスの代わりに`UpdateSceneBase`クラスを基底クラスとして使用するか(詳細は後述)、`Co::ScopedUpdater updater{ [this] { update(); } };`のように記述して毎フレーム実行されるようにしてください。※`ScopedUpdater`/`ScopedDrawer`について加筆予定
 
+### 次のシーンの指定方法
+
+`start()`関数から、次のシーンへ遷移する場合は`Co::MakeSceneFactory<TScene>()`、次のシーンへ遷移せずにシーン実行のタスクを終了するには`Co::SceneFinish()`を返します。  
+`TScene`には次のシーンのクラスを指定します。`TScene`は`Co::SceneBase`の派生クラスである必要があります。  
+もしシーンクラスのコンストラクタに引数が必要な場合、`Co::MakeSceneFactory<TScene>()`関数の引数として渡すことができます。
+
+```cpp
+Co::Task<Co::SceneFactory> start() override
+{
+    // ... (何らかの処理)
+
+    switch (selectedMenuItem)
+    {
+    case MenuItem::Start:
+        co_return Co::MakeSceneFactory<GameScene>();
+    
+    case MenuItem::Option:
+        co_return Co::MakeSceneFactory<OptionScene>();
+
+    case MenuItem::Exit:
+        co_return Co::SceneFinish();
+    }
+}
+```
+
 ## `Co::UpdateSceneBase`クラス
 
 毎フレーム実行される`update()`関数を持つシーンの基底クラスです。コルーチンを使用しないシーンを作成する際は、このクラスを継承します。
@@ -246,14 +297,6 @@ Siv3D標準のシーン機能を使用して作成したシーンをなるべく
 
 - `update()`
     - 毎フレームの処理を記述します。
-    - シーンを終了して次のシーンへ遷移するには、基底クラスに実装されている下記のいずれかの関数を実行します。
-        - `requestNextScene<TScene>(...)`関数
-            - シーンクラスを指定し、次のシーンへ遷移します。
-            - `TScene`には次のシーンのクラスを指定します。`TScene`は`Co::SceneBase`の派生クラスである必要があります。
-            - 引数には、`TScene`のコンストラクタの引数を指定します。
-                - 指定した引数はそれぞれコピーされます。引数にコピー構築できない型が含まれる場合、コンパイルエラーとなります。
-        - `requestSceneFinish()`関数
-            - シーンを完了し、次のシーンへ遷移しません。
 
 - `draw() const`
     - シーンの描画処理を記述します。
@@ -262,7 +305,7 @@ Siv3D標準のシーン機能を使用して作成したシーンをなるべく
 
 - `drawOrder() const` -> `int32`
     - 描画順序のソート値(drawOrder)を設定します。
-    - デフォルト値は0です。drawOrderが同一のもの同士は、実行を開始した順番と同じ順序で描画されます。
+    - デフォルト値は0です。drawOrderが同一のもの同士は、実行を開始した順番で描画されます。
 
 - `fadeIn()` -> `Co::Task<void>`
     - シーン開始時に実行されるフェードイン用のコルーチンです。
@@ -272,6 +315,40 @@ Siv3D標準のシーン機能を使用して作成したシーンをなるべく
 - `fadeOut()` -> `Co::Task<void>`
     - シーン終了時に実行されるフェードアウト用のコルーチンです。
     - `update()`内でシーン終了の関数が呼ばれた後に実行されます。
+
+### シーンを完了するには
+シーンを終了して次のシーンへ遷移するには、基底クラスに実装されている下記のいずれかの関数を実行します。
+- `requestNextScene<TScene>(...)`関数
+    - シーンクラスを指定し、次のシーンへ遷移します。
+    - `TScene`には次のシーンのクラスを指定します。`TScene`は`Co::SceneBase`の派生クラスである必要があります。
+    - 引数には、`TScene`のコンストラクタの引数を指定します。
+        - 指定した引数はそれぞれコピーされます。引数にコピー構築できない型が含まれる場合、コンパイルエラーとなります。
+- `requestSceneFinish()`関数
+    - シーンを完了し、次のシーンへ遷移しません。
+
+```cpp
+void update() override
+{
+    // ... (何らかの処理)
+
+    switch (selectedMenuItem)
+    {
+    case MenuItem::Start:
+        requestNextScene<GameScene>();
+        break;
+    
+    case MenuItem::Option:
+        requestNextScene<OptionScene>();
+        break;
+
+    case MenuItem::Exit:
+        requestSceneFinish();
+        break;
+    }
+}
+```
+
+結果の型(`TResult`)がvoid以外の場合は、`requestFinish()`関数のresult引数へ結果の値を渡します。
 
 ## 関数一覧
 - `Co::Init()`
@@ -393,7 +470,7 @@ void Main()
 {
     Co::Init();
 
-    const auto taskRun = ShowMessages().runScoped();
+    const auto taskRunner = ShowMessages().runScoped();
     while (System::Update())
     {
     }
@@ -451,7 +528,7 @@ void Main()
 {
     Co::Init();
 
-    const auto mainTaskRun = MainTask().runScoped();
+    const auto mainTaskRunner = MainTask().runScoped();
     while (System::Update())
     {
     }

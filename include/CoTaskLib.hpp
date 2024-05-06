@@ -870,6 +870,18 @@ inline namespace cotasklib
 				m_thenCaller.add(std::move(func));
 				return std::move(*this);
 			}
+
+			[[nodiscard]]
+			ScopedTaskRunner runScoped() &&
+			{
+				return ScopedTaskRunner{ std::move(*this) };
+			}
+
+			[[nodiscard]]
+			void runForget() &&
+			{
+				ScopedTaskRunner{ std::move(*this) }.forget();
+			}
 		};
 
 		namespace detail

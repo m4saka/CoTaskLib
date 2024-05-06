@@ -54,7 +54,7 @@ inline namespace cotasklib
 
 				virtual void resume(FrameTiming) = 0;
 
-				virtual bool done() const = 0;
+				virtual bool isFinished() const = 0;
 			};
 
 			using AwaiterID = uint64;
@@ -320,7 +320,7 @@ inline namespace cotasklib
 							m_currentAwaiterID = it->first;
 
 							it->second->resume(m_currentFrameTiming);
-							if (it->second->done())
+							if (it->second->isFinished())
 							{
 								it = m_awaiters.erase(it);
 							}
@@ -399,7 +399,7 @@ inline namespace cotasklib
 					}
 					if (s_pInstance->m_awaiters.contains(id))
 					{
-						return s_pInstance->m_awaiters.at(id)->done();
+						return s_pInstance->m_awaiters.at(id)->isFinished();
 					}
 					else
 					{
@@ -522,9 +522,14 @@ inline namespace cotasklib
 				}
 
 				[[nodiscard]]
-				bool done() const
+				bool isFinished() const
 				{
 					return !m_id || Backend::IsDone(m_id.value());
+				}
+
+				void forget()
+				{
+					m_id = 0;
 				}
 			};
 
@@ -532,14 +537,14 @@ inline namespace cotasklib
 			[[nodiscard]]
 			std::optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(TaskAwaiter<TResult>&& awaiter)
 			{
-				if (awaiter.done())
+				if (awaiter.isFinished())
 				{
 					// 既に終了済み
 					return none;
 				}
 
 				awaiter.resume(Backend::CurrentFrameTiming());
-				if (awaiter.done())
+				if (awaiter.isFinished())
 				{
 					// フレーム待ちなしで終了した場合は登録不要
 					return none;
@@ -551,28 +556,33 @@ inline namespace cotasklib
 			std::optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(const TaskAwaiter<TResult>& awaiter) = delete;
 		}
 
-		class ScopedTaskRun
+		class ScopedTaskRunner
 		{
 		private:
 			detail::ScopedTaskRunLifetime m_lifetime;
 
 		public:
 			template <typename TResult>
-			explicit ScopedTaskRun(detail::TaskAwaiter<TResult>&& awaiter)
-				: m_lifetime(detail::ResumeAwaiterOnceAndRegisterIfNotDone(std::move(awaiter)))
+			explicit ScopedTaskRunner(Task<TResult>&& task)
+				: m_lifetime(detail::ResumeAwaiterOnceAndRegisterIfNotDone(detail::TaskAwaiter<TResult>{ std::move(task) }))
 			{
 			}
 
-			ScopedTaskRun(ScopedTaskRun&&) = default;
+			ScopedTaskRunner(ScopedTaskRunner&&) = default;
 
-			ScopedTaskRun& operator=(ScopedTaskRun&&) = default;
+			ScopedTaskRunner& operator=(ScopedTaskRunner&&) = default;
 
-			~ScopedTaskRun() = default;
+			~ScopedTaskRunner() = default;
 
 			[[nodiscard]]
-			bool done() const
+			bool isFinished() const
 			{
-				return m_lifetime.done();
+				return m_lifetime.isFinished();
+			}
+
+			void forget()
+			{
+				m_lifetime.forget();
 			}
 		};
 
@@ -874,7 +884,7 @@ inline namespace cotasklib
 			virtual void resume(detail::FrameTiming frameTiming) = 0;
 
 			[[nodiscard]]
-			virtual bool done() const = 0;
+			virtual bool isFinished() const = 0;
 		};
 
 		template <typename TResult>
@@ -932,7 +942,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			virtual bool done() const
+			virtual bool isFinished() const
 			{
 				return m_handle.done();
 			}
@@ -941,23 +951,6 @@ inline namespace cotasklib
 			TResult value() const
 			{
 				return m_handle.value();
-			}
-
-			[[nodiscard]]
-			Co::ScopedTaskRun runScoped()&&
-			{
-				return Co::ScopedTaskRun{ detail::TaskAwaiter<TResult>{ std::move(*this) } };
-			}
-
-			void runForget()&&
-			{
-				resume(detail::Backend::CurrentFrameTiming());
-				if (m_handle.done())
-				{
-					// フレーム待ちなしで終了した場合は登録不要
-					return;
-				}
-				(void)detail::Backend::Add(std::make_unique<detail::TaskAwaiter<TResult>>(std::move(*this)));
 			}
 
 			template <typename TResultOther>
@@ -1024,16 +1017,16 @@ inline namespace cotasklib
 				}
 
 				[[nodiscard]]
-				virtual bool done() const override
+				virtual bool isFinished() const override
 				{
-					return m_task.done();
+					return m_task.isFinished();
 				}
 
 				[[nodiscard]]
 				bool await_ready()
 				{
 					resume(detail::Backend::CurrentFrameTiming());
-					return m_task.done();
+					return m_task.isFinished();
 				}
 
 				template <typename TResultOther>
@@ -1133,7 +1126,7 @@ inline namespace cotasklib
 
 					m_pSubAwaiter->resume(frameTiming);
 
-					if (m_pSubAwaiter->done())
+					if (m_pSubAwaiter->isFinished())
 					{
 						m_pSubAwaiter = nullptr;
 						return false;
@@ -1775,7 +1768,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			auto ConvertOptionalVoidResult(const Task<TResult>& task) -> Optional<VoidResultTypeReplace<TResult>>
 			{
-				if (!task.done())
+				if (!task.isFinished())
 				{
 					return none;
 				}
@@ -1842,7 +1835,7 @@ inline namespace cotasklib
 					co_yield detail::FrameTiming::Update;
 				}
 
-				if ((args.done() && ...))
+				if ((args.isFinished() && ...))
 				{
 					co_return std::make_tuple(detail::ConvertVoidResult(args)...);
 				}
@@ -1850,7 +1843,7 @@ inline namespace cotasklib
 				while (true)
 				{
 					(args.resume(detail::FrameTiming::Update), ...);
-					if ((args.done() && ...))
+					if ((args.isFinished() && ...))
 					{
 						co_return std::make_tuple(detail::ConvertVoidResult(args)...);
 					}
@@ -1876,7 +1869,7 @@ inline namespace cotasklib
 					co_yield detail::FrameTiming::Update;
 				}
 
-				if ((args.done() || ...))
+				if ((args.isFinished() || ...))
 				{
 					co_return std::make_tuple(detail::ConvertOptionalVoidResult(args)...);
 				}
@@ -1884,7 +1877,7 @@ inline namespace cotasklib
 				while (true)
 				{
 					(args.resume(detail::FrameTiming::Update), ...);
-					if ((args.done() || ...))
+					if ((args.isFinished() || ...))
 					{
 						co_return std::make_tuple(detail::ConvertOptionalVoidResult(args)...);
 					}

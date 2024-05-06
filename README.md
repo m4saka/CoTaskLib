@@ -119,7 +119,18 @@ Co::Task<void> ExampleTask()
 const auto taskRunner = Co::AsTask<ExampleSequence>().runScoped();
 ```
 
-もしくは、`Co::ScopedSequenceRunner`クラスを使用して下記のようにも記述できます。  
+上記の書き方では、シーケンスのインスタンスへ外部からアクセスすることはできません。  
+もしタスク実行中に外部からシーケンスクラスのインスタンスへ操作が必要な場合は、下記のように`asTask()`関数を使用して記述します。
+
+```cpp
+ExampleSequence exampleSequence{};
+const auto taskRunner = exampleSequence.asTask().runScoped();
+
+// シーケンスクラスのインスタンスへ操作可能
+exampleSequence.setText(U"テキスト");
+```
+
+また、`Co::ScopedSequenceRunner`クラスを使用して下記のように書くこともできます。  
 もしシーケンスクラスのコンストラクタに引数が必要な場合、`Co::ScopedSequenceRunner`クラスのコンストラクタ引数として渡すことができます。
 
 ```cpp

@@ -1875,6 +1875,145 @@ inline namespace cotasklib
 		}
 
 		template <typename TResult>
+		class [[nodiscard]] TaskFinishSource
+		{
+		private:
+			std::optional<TResult> m_result;
+
+		public:
+			void requestFinish(TResult result)
+			{
+				if (m_result.has_value())
+				{
+					return;
+				}
+				m_result = std::move(result);
+			}
+
+			Task<TResult> waitForFinish() const
+			{
+				if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
+				{
+					co_yield detail::FrameTiming::Update;
+				}
+
+				while (!m_result.has_value())
+				{
+					co_yield detail::FrameTiming::Update;
+				}
+
+				co_return *m_result;
+			}
+
+			bool isFinished() const
+			{
+				return m_result.has_value();
+			}
+
+			bool hasResult() const
+			{
+				return m_result.has_value();
+			}
+
+			const TResult& result() const
+			{
+				return *m_result;
+			}
+
+			const std::optional<TResult>& resultOpt() const
+			{
+				return m_result;
+			}
+		};
+
+		template <>
+		class [[nodiscard]] TaskFinishSource<void>
+		{
+		private:
+			bool m_isFinished;
+
+		public:
+			void requestFinish()
+			{
+				m_isFinished = true;
+			}
+
+			Task<void> waitForFinish() const
+			{
+				if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
+				{
+					co_yield detail::FrameTiming::Update;
+				}
+
+				while (m_isFinished)
+				{
+					co_yield detail::FrameTiming::Update;
+				}
+			}
+
+			bool isFinished() const
+			{
+				return m_isFinished;
+			}
+		};
+
+		inline Task<void> UpdaterTask(std::function<void()> updateFunc)
+		{
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			{
+				co_yield detail::FrameTiming::Update;
+			}
+
+			while (true)
+			{
+				updateFunc();
+				co_yield detail::FrameTiming::Update;
+			}
+		}
+
+		template <typename TResult>
+		Task<TResult> UpdaterTask(std::function<void(TaskFinishSource<TResult>&)> updateFunc)
+		{
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			{
+				co_yield detail::FrameTiming::Update;
+			}
+
+			TaskFinishSource<TResult> taskFinishSource;
+
+			while (true)
+			{
+				updateFunc(taskFinishSource);
+				if (taskFinishSource.hasResult())
+				{
+					co_return taskFinishSource.result();
+				}
+				co_yield detail::FrameTiming::Update;
+			}
+		}
+
+		template <>
+		Task<void> UpdaterTask(std::function<void(TaskFinishSource<void>&)> updateFunc)
+		{
+			if (detail::Backend::CurrentFrameTiming() != detail::FrameTiming::Update)
+			{
+				co_yield detail::FrameTiming::Update;
+			}
+
+			TaskFinishSource<void> taskFinishSource;
+
+			while (true)
+			{
+				updateFunc(taskFinishSource);
+				if (taskFinishSource.isFinished())
+				{
+					co_return;
+				}
+				co_yield detail::FrameTiming::Update;
+			}
+		}
+
+		template <typename TResult>
 		class [[nodiscard]] SequenceBase
 		{
 		public:

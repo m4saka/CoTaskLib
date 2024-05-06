@@ -1927,7 +1927,7 @@ inline namespace cotasklib
 
 		// 毎フレーム呼ばれるupdate関数を記述するタイプのシーケンス基底クラス
 		template <typename TResult>
-		class [[nodiscard]] UpdateSequenceBase : public SequenceBase<TResult>
+		class [[nodiscard]] UpdaterSequenceBase : public SequenceBase<TResult>
 		{
 		private:
 			std::optional<TResult> m_result;
@@ -1939,7 +1939,17 @@ inline namespace cotasklib
 			}
 
 		public:
-			UpdateSequenceBase() = default;
+			UpdaterSequenceBase() = default;
+
+			UpdaterSequenceBase(const UpdaterSequenceBase&) = delete;
+
+			UpdaterSequenceBase& operator=(const UpdaterSequenceBase&) = delete;
+
+			UpdaterSequenceBase(UpdaterSequenceBase&&) = default;
+
+			UpdaterSequenceBase& operator=(UpdaterSequenceBase&&) = default;
+
+			virtual ~UpdaterSequenceBase() = default;
 
 			[[nodiscard]]
 			virtual Task<TResult> start() override final
@@ -1957,7 +1967,7 @@ inline namespace cotasklib
 
 		// 毎フレーム呼ばれるupdate関数を記述するタイプのシーケンス基底クラス(void特殊化)
 		template <>
-		class [[nodiscard]] UpdateSequenceBase<void> : public SequenceBase<void>
+		class [[nodiscard]] UpdaterSequenceBase<void> : public SequenceBase<void>
 		{
 		private:
 			bool m_isFinished = false;
@@ -1969,7 +1979,7 @@ inline namespace cotasklib
 			}
 
 		public:
-			UpdateSequenceBase() = default;
+			UpdaterSequenceBase() = default;
 
 			[[nodiscard]]
 			virtual Task<void> start() override final
@@ -2234,7 +2244,7 @@ inline namespace cotasklib
 		};
 
 		// 毎フレーム呼ばれるupdate関数を記述するタイプのシーン基底クラス
-		class [[nodiscard]] UpdateSceneBase : public SceneBase
+		class [[nodiscard]] UpdaterSceneBase : public SceneBase
 		{
 		private:
 			std::optional<SceneFactory> m_nextSceneFactory;
@@ -2257,6 +2267,18 @@ inline namespace cotasklib
 			}
 
 		public:
+			UpdaterSceneBase() = default;
+
+			UpdaterSceneBase(const UpdaterSceneBase&) = delete;
+
+			UpdaterSceneBase& operator=(const UpdaterSceneBase&) = delete;
+
+			UpdaterSceneBase(UpdaterSceneBase&&) = default;
+
+			UpdaterSceneBase& operator=(UpdaterSceneBase&&) = default;
+
+			virtual ~UpdaterSceneBase() = default;
+
 			[[nodiscard]]
 			virtual Task<SceneFactory> start() override final
 			{

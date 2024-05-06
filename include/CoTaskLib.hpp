@@ -876,12 +876,6 @@ inline namespace cotasklib
 			{
 				return ScopedTaskRunner{ std::move(*this) };
 			}
-
-			[[nodiscard]]
-			void runForget() &&
-			{
-				ScopedTaskRunner{ std::move(*this) }.forget();
-			}
 		};
 
 		namespace detail

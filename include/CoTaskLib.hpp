@@ -1863,6 +1863,41 @@ inline namespace cotasklib
 		auto operator co_await(TSequence& sequence) = delete;
 #endif
 
+		template <detail::SequenceConcept TSequence>
+		class [[nodiscard]] ScopedSequenceRunner
+		{
+		private:
+			ScopedTaskRunner m_runner;
+
+		public:
+			template <typename... Args>
+			explicit ScopedSequenceRunner(Args&&... args)
+				: m_runner(AsTask<TSequence>(std::forward<Args>(args)...))
+			{
+			}
+
+			ScopedSequenceRunner(const ScopedSequenceRunner&) = delete;
+
+			ScopedSequenceRunner& operator=(const ScopedSequenceRunner&) = delete;
+
+			ScopedSequenceRunner(ScopedSequenceRunner&&) = default;
+
+			ScopedSequenceRunner& operator=(ScopedSequenceRunner&&) = default;
+
+			~ScopedSequenceRunner() = default;
+
+			[[nodiscard]]
+			bool isFinished() const
+			{
+				return m_runner.isFinished();
+			}
+
+			void forget()
+			{
+				m_runner.forget();
+			}
+		};
+
 		namespace detail
 		{
 			class [[nodiscard]] FadeSequenceBase : public SequenceBase<void>
@@ -2218,6 +2253,41 @@ inline namespace cotasklib
 		auto operator co_await(SceneFactory sceneFactory) = delete;
 #endif
 
+		template <detail::SceneConcept TScene>
+		class [[nodiscard]] ScopedSceneRunner
+		{
+		private:
+			ScopedTaskRunner m_runner;
+
+		public:
+			template <typename... Args>
+			explicit ScopedSceneRunner(Args&&... args)
+				: m_runner(AsTask<TScene>(std::forward<Args>(args)...))
+			{
+			}
+
+			ScopedSceneRunner(const ScopedSceneRunner&) = delete;
+
+			ScopedSceneRunner& operator=(const ScopedSceneRunner&) = delete;
+
+			ScopedSceneRunner(ScopedSceneRunner&&) = default;
+
+			ScopedSceneRunner& operator=(ScopedSceneRunner&&) = default;
+
+			~ScopedSceneRunner() = default;
+
+			[[nodiscard]]
+			bool isFinished() const
+			{
+				return m_runner.isFinished();
+			}
+
+			void forget()
+			{
+				m_runner.forget();
+			}
+		};
+
 		namespace detail
 		{
 			class IUnsubscribable
@@ -2358,6 +2428,12 @@ inline namespace cotasklib
 			Task<void> waitForFinish() const
 			{
 				co_await WaitForTimer(&m_timer);
+			}
+
+			[[nodiscard]]
+			bool isFinished() const
+			{
+				return !m_updater.has_value();
 			}
 		};
 

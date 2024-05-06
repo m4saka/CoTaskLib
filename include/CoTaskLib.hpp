@@ -1082,6 +1082,17 @@ inline namespace cotasklib
 			};
 		}
 
+		// voidの参照やvoidを含むタプルは使用できないため、voidの代わりに戻り値として返すための空の構造体を用意
+		struct VoidResult
+		{
+		};
+
+		namespace detail
+		{
+			template <typename TResult>
+			using VoidResultTypeReplace = std::conditional_t<std::is_void_v<TResult>, VoidResult, TResult>;
+		}
+
 		template <typename TResult>
 		class [[nodiscard]] TaskFinishSource
 		{
@@ -1089,6 +1100,18 @@ inline namespace cotasklib
 			std::optional<TResult> m_result;
 
 		public:
+			TaskFinishSource() = default;
+
+			TaskFinishSource(const TaskFinishSource&) = delete;
+
+			TaskFinishSource& operator=(const TaskFinishSource&) = delete;
+
+			TaskFinishSource(TaskFinishSource&&) = default;
+
+			TaskFinishSource& operator=(TaskFinishSource&&) = default;
+
+			~TaskFinishSource() = default;
+
 			void requestFinish(TResult result)
 			{
 				if (m_result.has_value())
@@ -1138,18 +1161,30 @@ inline namespace cotasklib
 		class [[nodiscard]] TaskFinishSource<void>
 		{
 		private:
-			bool m_isFinished;
+			std::optional<VoidResult> m_result;
 
 		public:
+			TaskFinishSource() = default;
+
+			TaskFinishSource(const TaskFinishSource&) = delete;
+
+			TaskFinishSource& operator=(const TaskFinishSource&) = delete;
+
+			TaskFinishSource(TaskFinishSource&&) = default;
+
+			TaskFinishSource& operator=(TaskFinishSource&&) = default;
+
+			~TaskFinishSource() = default;
+
 			void requestFinish()
 			{
-				m_isFinished = true;
+				m_result = VoidResult{};
 			}
 
 			[[nodiscard]]
 			Task<void> waitForFinish() const
 			{
-				while (m_isFinished)
+				while (!m_result.has_value())
 				{
 					co_await detail::Yield{};
 				}
@@ -1158,7 +1193,25 @@ inline namespace cotasklib
 			[[nodiscard]]
 			bool isFinished() const
 			{
-				return m_isFinished;
+				return m_result.has_value();
+			}
+
+			[[nodiscard]]
+			bool hasResult() const
+			{
+				return m_result.has_value();
+			}
+
+			[[nodiscard]]
+			const VoidResult& result() const
+			{
+				return *m_result;
+			}
+
+			[[nodiscard]]
+			const std::optional<VoidResult>& resultOpt() const
+			{
+				return m_result;
 			}
 		};
 
@@ -1620,16 +1673,8 @@ inline namespace cotasklib
 			}
 		}
 
-		// voidを含むタプルは使用できないため、voidの代わりに戻り値として返すための空の構造体を用意
-		struct VoidResult
-		{
-		};
-
 		namespace detail
 		{
-			template <typename TResult>
-			using VoidResultTypeReplace = std::conditional_t<std::is_void_v<TResult>, VoidResult, TResult>;
-
 			template <typename TResult>
 			[[nodiscard]]
 			auto ConvertVoidResult(const Task<TResult>& task) -> VoidResultTypeReplace<TResult>
@@ -1670,7 +1715,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			Task<TResult> SequencePtrToTask(std::unique_ptr<SequenceBase<TResult>> sequence)
 			{
-				co_return co_await sequence->internalRun();
+				co_return co_await sequence->asTask();
 			}
 
 			template <typename TScene>
@@ -1785,11 +1830,14 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			Task<TResult> internalRun()
+			Task<TResult> asTask()&
 			{
 				const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawOrder(); } };
 				co_return co_await start();
 			}
+
+			// 右辺値参照の場合はタスク実行中にthisがダングリングポインタになるため、使用しようとした場合はコンパイルエラーとする
+			Task<TResult> asTask()&& = delete;
 		};
 
 		// 毎フレーム呼ばれるupdate関数を記述するタイプのシーケンス基底クラス
@@ -1880,6 +1928,7 @@ inline namespace cotasklib
 		{
 		public:
 			using result_type = typename TSequence::result_type;
+			using result_type_void_replaced = detail::VoidResultTypeReplace<result_type>;
 
 		private:
 			ScopedTaskRunner m_runner;
@@ -1889,7 +1938,7 @@ inline namespace cotasklib
 		public:
 			template <typename... Args>
 			explicit ScopedSequenceRunner(Args&&... args)
-				: m_runner(AsTask<TSequence>(std::forward<Args>(args)...).then([this](const result_type& result) { m_taskFinishSource.requestFinish(result); }))
+				: m_runner(AsTask<TSequence>(std::forward<Args>(args)...).then([this](const result_type_void_replaced& result) { m_taskFinishSource.requestFinish(result); }))
 			{
 			}
 
@@ -1921,19 +1970,19 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			const result_type& result() const
+			const result_type_void_replaced& result() const
 			{
 				return m_taskFinishSource.result();
 			}
 
 			[[nodiscard]]
-			const std::optional<result_type>& resultOpt() const
+			const std::optional<result_type_void_replaced>& resultOpt() const
 			{
 				return m_taskFinishSource.resultOpt();
 			}
 
 			[[nodiscard]]
-			Task<result_type> waitForFinish() const
+			Task<result_type_void_replaced> waitForFinish() const
 			{
 				return m_taskFinishSource.waitForFinish();
 			}
@@ -2165,13 +2214,17 @@ inline namespace cotasklib
 				return m_isFadingOut;
 			}
 
+			// ライブラリ内部で使用するためのタスク実行関数
 			[[nodiscard]]
-			Task<SceneFactory> internalRun()
+			Task<SceneFactory> asTaskInternal()&
 			{
 				const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawOrder(); } };
 				co_return co_await startAndFadeOut()
 					.with(fadeIn().then([this] { m_isFadingIn = false; }));
 			}
+
+			// 右辺値参照の場合はタスク実行中にthisがダングリングポインタになるため、使用しようとした場合はコンパイルエラーとする
+			Task<SceneFactory> asTaskInternal()&& = delete;
 		};
 
 		// 毎フレーム呼ばれるupdate関数を記述するタイプのシーン基底クラス
@@ -2234,7 +2287,7 @@ inline namespace cotasklib
 
 				while (true)
 				{
-					const SceneFactory nextSceneFactory = co_await currentScene->internalRun();
+					const SceneFactory nextSceneFactory = co_await currentScene->asTaskInternal();
 
 					// 次シーンがなければ抜ける
 					if (nextSceneFactory == nullptr)

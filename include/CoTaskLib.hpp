@@ -134,6 +134,40 @@ inline namespace cotasklib
 
 				using CallersIterator = typename decltype(m_callers)::iterator;
 
+				void refreshSortingOrder()
+				{
+					m_tempNewSortingOrders.clear();
+
+					// まず、sortingOrderの変更をリストアップ
+					for (const auto& [key, caller] : m_callers)
+					{
+						const int32 newSortingOrder = caller.sortingOrderFunc();
+						if (newSortingOrder != key.sortingOrder)
+						{
+							m_tempNewSortingOrders.emplace_back(key, newSortingOrder);
+						}
+					}
+
+					// sortingOrderに変更があったものを再挿入
+					for (const auto& [oldKey, newSortingOrder] : m_tempNewSortingOrders)
+					{
+						const IDType id = oldKey.id;
+						const auto it = m_callers.find(oldKey);
+						if (it == m_callers.end())
+						{
+							throw Error{ U"OrderedExecutor::refreshSortingOrder: ID={} not found"_fmt(id) };
+						}
+						Caller newCaller = it->second;
+						m_callers.erase(it);
+						const auto [newIt, inserted] = m_callers.insert(std::make_pair(CallerKey{ id, newSortingOrder }, std::move(newCaller)));
+						if (!inserted)
+						{
+							throw Error{ U"OrderedExecutor::refreshSortingOrder: ID={} cannot be inserted"_fmt(id) };
+						}
+						m_callerKeyByID.insert_or_assign(id, newIt->first);
+					}
+				}
+
 			public:
 				IDType add(std::function<void()> func, std::function<int32()> sortingOrderFunc)
 				{
@@ -176,59 +210,15 @@ inline namespace cotasklib
 					m_callerKeyByID.erase(id);
 				}
 
-				void refreshSortingOrder()
+				void call()
 				{
-					m_tempNewSortingOrders.clear();
+					refreshSortingOrder();
 
-					// まず、sortingOrderの変更をリストアップ
-					for (const auto& [key, caller] : m_callers)
-					{
-						const int32 newSortingOrder = caller.sortingOrderFunc();
-						if (newSortingOrder != key.sortingOrder)
-						{
-							m_tempNewSortingOrders.emplace_back(key, newSortingOrder);
-						}
-					}
-
-					// sortingOrderに変更があったものを再挿入
-					for (const auto& [oldKey, newSortingOrder] : m_tempNewSortingOrders)
-					{
-						const IDType id = oldKey.id;
-						const auto it = m_callers.find(oldKey);
-						if (it == m_callers.end())
-						{
-							throw Error{ U"OrderedExecutor::refreshSortingOrder: ID={} not found"_fmt(id) };
-						}
-						Caller newCaller = it->second;
-						m_callers.erase(it);
-						const auto [newIt, inserted] = m_callers.insert(std::make_pair(CallerKey{ id, newSortingOrder }, std::move(newCaller)));
-						if (!inserted)
-						{
-							throw Error{ U"OrderedExecutor::refreshSortingOrder: ID={} cannot be inserted"_fmt(id) };
-						}
-						m_callerKeyByID.insert_or_assign(id, newIt->first);
-					}
-				}
-
-				void callNegativeSortingOrder()
-				{
 					for (const auto& [key, caller] : m_callers)
 					{
 						if (key.sortingOrder >= 0)
 						{
 							break;
-						}
-						caller.func();
-					}
-				}
-
-				void callNonNegativeSortingOrder()
-				{
-					for (const auto& [key, caller] : m_callers)
-					{
-						if (key.sortingOrder < 0)
-						{
-							continue;
 						}
 						caller.func();
 					}
@@ -335,17 +325,13 @@ inline namespace cotasklib
 					switch (frameTiming)
 					{
 					case FrameTiming::Update:
-						m_updateExecutor.refreshSortingOrder();
-						m_updateExecutor.callNegativeSortingOrder();
 						fnResumeAwaiters();
-						m_updateExecutor.callNonNegativeSortingOrder();
+						m_updateExecutor.call();
 						break;
 
 					case FrameTiming::Draw:
-						m_drawExecutor.refreshSortingOrder();
-						m_drawExecutor.callNegativeSortingOrder();
 						fnResumeAwaiters();
-						m_drawExecutor.callNonNegativeSortingOrder();
+						m_drawExecutor.call();
 						break;
 
 					default:

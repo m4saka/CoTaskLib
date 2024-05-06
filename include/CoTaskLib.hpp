@@ -1866,13 +1866,18 @@ inline namespace cotasklib
 		template <detail::SequenceConcept TSequence>
 		class [[nodiscard]] ScopedSequenceRunner
 		{
+		public:
+			using result_type = typename TSequence::result_type;
+
 		private:
 			ScopedTaskRunner m_runner;
+
+			TaskFinishSource<result_type> m_taskFinishSource;
 
 		public:
 			template <typename... Args>
 			explicit ScopedSequenceRunner(Args&&... args)
-				: m_runner(AsTask<TSequence>(std::forward<Args>(args)...))
+				: m_runner(AsTask<TSequence>(std::forward<Args>(args)...).then([this](const result_type& result) { m_taskFinishSource.requestFinish(result); }))
 			{
 			}
 
@@ -1895,6 +1900,30 @@ inline namespace cotasklib
 			void forget()
 			{
 				m_runner.forget();
+			}
+
+			[[nodiscard]]
+			bool hasResult() const
+			{
+				return m_taskFinishSource.hasResult();
+			}
+
+			[[nodiscard]]
+			const result_type& result() const
+			{
+				return m_taskFinishSource.result();
+			}
+
+			[[nodiscard]]
+			const std::optional<result_type>& resultOpt() const
+			{
+				return m_taskFinishSource.resultOpt();
+			}
+
+			[[nodiscard]]
+			Task<result_type> waitForFinish() const
+			{
+				return m_taskFinishSource.waitForFinish();
 			}
 		};
 

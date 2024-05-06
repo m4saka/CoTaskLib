@@ -1670,7 +1670,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			Task<TResult> SequencePtrToTask(std::unique_ptr<SequenceBase<TResult>> sequence)
 			{
-				co_return co_await sequence->run();
+				co_return co_await sequence->internalRun();
 			}
 
 			template <typename TScene>
@@ -1785,7 +1785,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			Task<TResult> run()
+			Task<TResult> internalRun()
 			{
 				const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawOrder(); } };
 				co_return co_await start();
@@ -2166,7 +2166,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			Task<SceneFactory> run()
+			Task<SceneFactory> internalRun()
 			{
 				const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawOrder(); } };
 				co_return co_await startAndFadeOut()
@@ -2234,7 +2234,7 @@ inline namespace cotasklib
 
 				while (true)
 				{
-					const SceneFactory nextSceneFactory = co_await currentScene->run();
+					const SceneFactory nextSceneFactory = co_await currentScene->internalRun();
 
 					// 次シーンがなければ抜ける
 					if (nextSceneFactory == nullptr)

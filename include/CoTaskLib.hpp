@@ -1802,6 +1802,9 @@ inline namespace cotasklib
 		template <typename TResult>
 		class [[nodiscard]] SequenceBase
 		{
+		private:
+			bool m_onceStarted = false;
+
 		public:
 			using result_type = TResult;
 
@@ -1832,12 +1835,28 @@ inline namespace cotasklib
 			[[nodiscard]]
 			Task<TResult> asTask()&
 			{
+				if (m_onceStarted)
+				{
+					// 2回以上の実行は許可しないため例外を投げる
+					throw Error{ U"Cannot run the same Sequence multiple times" };
+				}
+				m_onceStarted = true;
+
 				const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawOrder(); } };
 				co_return co_await start();
 			}
 
 			// 右辺値参照の場合はタスク実行中にthisがダングリングポインタになるため、使用しようとした場合はコンパイルエラーとする
 			Task<TResult> asTask()&& = delete;
+
+			[[nodiscard]]
+			ScopedTaskRunner runScoped()&
+			{
+				return ScopedTaskRunner{ asTask() };
+			}
+
+			[[nodiscard]]
+			ScopedTaskRunner runScoped()&& = delete;
 		};
 
 		// 毎フレーム呼ばれるupdate関数を記述するタイプのシーケンス基底クラス

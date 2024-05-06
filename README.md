@@ -120,11 +120,11 @@ const auto taskRunner = Co::AsTask<ExampleSequence>().runScoped();
 ```
 
 上記の書き方では、シーケンスのインスタンスへ外部からアクセスすることはできません。  
-もしタスク実行中に外部からシーケンスクラスのインスタンスへ操作が必要な場合は、下記のように`asTask()`関数を使用して記述します。
+もしタスク実行中に外部からシーケンスのインスタンスへ操作が必要な場合は、下記のようにシーケンスに対して`runScoped()`関数を使用して記述します。
 
 ```cpp
 ExampleSequence exampleSequence{};
-const auto taskRunner = exampleSequence.asTask().runScoped();
+const auto taskRunner = exampleSequence.runScoped();
 
 // シーケンスクラスのインスタンスへ操作可能
 exampleSequence.setText(U"テキスト");
@@ -146,6 +146,22 @@ Co::Task<void> ExampleTask()
     co_await Co::AsTask<ExampleSequence>(); // ExampleSequenceを実行し、完了まで待機します
 }
 ```
+
+上記の書き方では、シーケンスのインスタンスへ外部からアクセスすることはできません。  
+もしタスク実行中に外部からシーケンスのインスタンスへ操作が必要な場合は、下記のようにシーケンスから`Co::Task`を取得するための`asTask()`関数を使用して記述します。
+
+```cpp
+Co::Task<void> ExampleTask()
+{
+    ExampleSequence exampleSequence{};
+    co_await exampleSequence.asTask();
+
+    // シーケンスクラスのインスタンスへ操作可能
+    exampleSequence.setText(U"テキスト");
+}
+```
+
+なお、シーケンスクラスのインスタンスに対してタスクを実行できるのは1回のみです。同一インスタンスに対して複数回`asTask()`を呼び出してタスク実行することは許可されていません。2回目を実行しようとすると`s3d::Error`例外を送出します。
 
 ### 注意点
 シーケンス実行の際、シーケンスクラスの`start`関数を外部から直接呼び出すことは想定されていません。  
@@ -230,11 +246,10 @@ void update() override
     - Tips: フェードアウトは必ずしも`fadeOut()`関数内に実装する必要はありません。遷移先のシーンごとにフェードアウトの方法を変えたい場合など、`fadeOut()`関数を使用せずに`start()`関数内でフェードアウトを実行した方がシンプルに実装できる場合があります。
 
 ### シーンの実行方法
-`Co::AsTask`関数を使用することで、シーンを生成した上でそれを実行する`Co::Task`を取得できます。これに対して通常通り、`runScoped`関数を使用します。
-
+`Co::AsTask`関数を使用することで、シーンを生成した上でそれを実行する`Co::Task`を取得できます。これに対して通常通り、`runScoped`関数を使用します。  
 もしシーンクラスのコンストラクタに引数が必要な場合、`Co::AsTask`関数の引数として渡すことができます。
 
-すべてのシーンが終了したらプログラムを終了するために、下記のように`isFinished()`関数でタスクの完了を確認してwhileループを抜けます。
+全てのシーンが終了した場合にプログラムを終了するためには、下記のように`isFinished()`関数でタスクの完了を確認してwhileループを抜けます。
 
 ```cpp
 const auto taskRunner = Co::AsTask<ExampleScene>().runScoped();
@@ -247,7 +262,7 @@ while (System::Update())
 }
 ```
 
-もしくは、`Co::ScopedSceneRunner`クラスを使用して下記のようにも記述できます。  
+なお、`Co::ScopedSceneRunner`クラスを使用して下記のようにも記述できます。  
 もしシーンクラスのコンストラクタに引数が必要な場合、`Co::ScopedSceneRunner`クラスのコンストラクタ引数として渡すことができます。
 
 ```cpp
@@ -431,7 +446,7 @@ void update() override
 - `Co::SimpleFadeOut(Duration, ColorF)` -> `Co::Task<void>`
     - 指定色へのフェードアウトを開始し、完了まで待機します。
 - `Co::All(TTasks&&...)` -> `Co::Task<std::tuple<...>>`
-    - すべての`Co::Task`が完了するまで待機します。各`Co::Task`の結果が`std::tuple`で返されます。
+    - 全ての`Co::Task`が完了するまで待機します。各`Co::Task`の結果が`std::tuple`で返されます。
     - `Co::Task`の結果が`void`型の場合、`Co::VoidResult`型(空の構造体)に置換して返されます。
 - `Co::Any(TTasks&&...)` -> `Co::Task<std::tuple<Optional<...>>>`
     - いずれかの `Co::Task` が完了した時点で進行し、各`Co::Task`の結果が`Optional<T>`型の`std::tuple`で返されます。

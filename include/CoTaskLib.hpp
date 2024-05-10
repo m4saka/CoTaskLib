@@ -364,13 +364,13 @@ inline namespace cotasklib
 				}
 
 				[[nodiscard]]
-				static DrawerID AddDrawer(std::function<void()> func, std::function<int32()> drawOrderFunc)
+				static DrawerID AddDrawer(std::function<void()> func, std::function<int32()> drawIndexFunc)
 				{
 					if (!s_pInstance)
 					{
 						throw Error{ U"Backend is not initialized" };
 					}
-					return s_pInstance->m_drawExecutor.add(std::move(func), std::move(drawOrderFunc));
+					return s_pInstance->m_drawExecutor.add(std::move(func), std::move(drawIndexFunc));
 				}
 
 				static void RemoveDrawer(DrawerID id)
@@ -527,13 +527,13 @@ inline namespace cotasklib
 			{
 			}
 
-			ScopedDrawer(std::function<void()> func, int32 drawOrder)
-				: m_id(detail::Backend::AddDrawer(std::move(func), [drawOrder] { return drawOrder; }))
+			ScopedDrawer(std::function<void()> func, int32 drawIndex)
+				: m_id(detail::Backend::AddDrawer(std::move(func), [drawIndex] { return drawIndex; }))
 			{
 			}
 
-			ScopedDrawer(std::function<void()> func, std::function<int32()> drawOrderFunc)
-				: m_id(detail::Backend::AddDrawer(std::move(func), std::move(drawOrderFunc)))
+			ScopedDrawer(std::function<void()> func, std::function<int32()> drawIndexFunc)
+				: m_id(detail::Backend::AddDrawer(std::move(func), std::move(drawIndexFunc)))
 			{
 			}
 
@@ -1819,7 +1819,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			virtual int32 drawOrder() const
+			virtual int32 drawIndex() const
 			{
 				return 0;
 			}
@@ -1834,7 +1834,7 @@ inline namespace cotasklib
 				}
 				m_onceStarted = true;
 
-				const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawOrder(); } };
+				const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
 				co_return co_await start();
 			}
 
@@ -2004,13 +2004,13 @@ inline namespace cotasklib
 			class [[nodiscard]] FadeSequenceBase : public SequenceBase<void>
 			{
 			private:
-				int32 m_drawOrder;
+				int32 m_drawIndex;
 				Timer m_timer;
 				double m_t = 0.0;
 
 			public:
-				explicit FadeSequenceBase(const Duration& duration, int32 drawOrder)
-					: m_drawOrder(drawOrder)
+				explicit FadeSequenceBase(const Duration& duration, int32 drawIndex)
+					: m_drawIndex(drawIndex)
 					, m_timer(duration, StartImmediately::No)
 				{
 				}
@@ -2046,9 +2046,9 @@ inline namespace cotasklib
 					drawFade(m_t);
 				}
 
-				virtual int32 drawOrder() const override final
+				virtual int32 drawIndex() const override final
 				{
-					return m_drawOrder;
+					return m_drawIndex;
 				}
 
 				// tには時間が0.0～1.0で渡される
@@ -2061,8 +2061,8 @@ inline namespace cotasklib
 				ColorF m_color;
 
 			public:
-				explicit SimpleFadeInSequence(const Duration& duration, const ColorF& color, int32 drawOrder)
-					: FadeSequenceBase(duration, drawOrder)
+				explicit SimpleFadeInSequence(const Duration& duration, const ColorF& color, int32 drawIndex)
+					: FadeSequenceBase(duration, drawIndex)
 					, m_color(color)
 				{
 				}
@@ -2081,8 +2081,8 @@ inline namespace cotasklib
 				ColorF m_color;
 
 			public:
-				explicit SimpleFadeOutSequence(const Duration& duration, const ColorF& color, int32 drawOrder)
-					: FadeSequenceBase(duration, drawOrder)
+				explicit SimpleFadeOutSequence(const Duration& duration, const ColorF& color, int32 drawIndex)
+					: FadeSequenceBase(duration, drawIndex)
 					, m_color(color)
 				{
 				}
@@ -2096,19 +2096,19 @@ inline namespace cotasklib
 			};
 		}
 
-		constexpr int32 FadeInDrawOrder = 10000000;
-		constexpr int32 FadeOutDrawOrder = 11000000;
+		constexpr int32 FadeInDrawIndex = 10000000;
+		constexpr int32 FadeOutDrawIndex = 11000000;
 
 		[[nodiscard]]
-		inline Task<void> SimpleFadeIn(const Duration& duration, const ColorF& color = Palette::Black, int32 drawOrder = FadeInDrawOrder)
+		inline Task<void> SimpleFadeIn(const Duration& duration, const ColorF& color = Palette::Black, int32 drawIndex = FadeInDrawIndex)
 		{
-			return AsTask<detail::SimpleFadeInSequence>(duration, color, drawOrder);
+			return AsTask<detail::SimpleFadeInSequence>(duration, color, drawIndex);
 		}
 
 		[[nodiscard]]
-		inline Task<void> SimpleFadeOut(const Duration& duration, const ColorF& color = Palette::Black, int32 drawOrder = FadeOutDrawOrder)
+		inline Task<void> SimpleFadeOut(const Duration& duration, const ColorF& color = Palette::Black, int32 drawIndex = FadeOutDrawIndex)
 		{
-			return AsTask<detail::SimpleFadeOutSequence>(duration, color, drawOrder);
+			return AsTask<detail::SimpleFadeOutSequence>(duration, color, drawIndex);
 		}
 
 		namespace detail
@@ -2187,7 +2187,7 @@ inline namespace cotasklib
 			{
 			}
 
-			virtual int32 drawOrder() const
+			virtual int32 drawIndex() const
 			{
 				return 0;
 			}
@@ -2229,7 +2229,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			Task<SceneFactory> asTaskInternal()&
 			{
-				const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawOrder(); } };
+				const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
 				co_return co_await startAndFadeOut()
 					.with(fadeIn().then([this] { m_isFadingIn = false; }));
 			}

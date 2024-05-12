@@ -748,9 +748,6 @@ inline namespace cotasklib
 			};
 		}
 
-		template <typename TResult>
-		class SequenceBase;
-
 		enum class WithTiming
 		{
 			Before,
@@ -1700,16 +1697,6 @@ inline namespace cotasklib
 				}
 			}
 
-			template <typename TSequence>
-			concept SequenceConcept = std::derived_from<TSequence, SequenceBase<typename TSequence::result_type>>;
-
-			template <typename TResult>
-			[[nodiscard]]
-			Task<TResult> SequencePtrToTask(std::unique_ptr<SequenceBase<TResult>> sequence)
-			{
-				co_return co_await sequence->asTask();
-			}
-
 			template <typename TScene>
 			concept SceneConcept = std::derived_from<TScene, SceneBase>;
 		}
@@ -1719,22 +1706,6 @@ inline namespace cotasklib
 		Task<TResult> ToTask(Task<TResult>&& task)
 		{
 			return task;
-		}
-
-		template <detail::SequenceConcept TSequence>
-		[[nodiscard]]
-		Task<typename TSequence::result_type> ToTask(TSequence&& sequence)
-		{
-			std::unique_ptr<SequenceBase<typename TSequence::result_type>> sequence = std::make_unique<TSequence>(std::move(sequence));
-			return detail::SequencePtrToTask(std::move(sequence));
-		}
-
-		template <detail::SequenceConcept TSequence, class... Args>
-		[[nodiscard]]
-		Task<typename TSequence::result_type> AsTask(Args&&... args)
-		{
-			std::unique_ptr<SequenceBase<typename TSequence::result_type>> sequence = std::make_unique<TSequence>(std::forward<Args>(args)...);
-			return detail::SequencePtrToTask(std::move(sequence));
 		}
 
 		template <class... TTasks>
@@ -1794,12 +1765,38 @@ inline namespace cotasklib
 		template <typename TResult>
 		class [[nodiscard]] SequenceBase
 		{
-		private:
-			bool m_onceStarted = false;
-
 		public:
 			using result_type = TResult;
+			using result_type_void_replaced = detail::VoidResultTypeReplace<TResult>;
 
+		private:
+			bool m_onceStarted = false;
+			bool m_isFadingIn = true;
+			bool m_isFadingOut = false;
+			std::optional<result_type_void_replaced> m_result;
+
+			[[nodiscard]]
+			Task<TResult> startAndFadeOut()
+			{
+				if constexpr (std::is_void_v<TResult>)
+				{
+					co_await start();
+					m_result.emplace();
+					m_isFadingOut = true;
+					co_await fadeOut();
+					co_return;
+				}
+				else
+				{
+					const TResult result = co_await start();
+					m_result = result;
+					m_isFadingOut = true;
+					co_await fadeOut();
+					co_return result;
+				}
+			}
+
+		public:
 			SequenceBase() = default;
 
 			SequenceBase(const SequenceBase&) = delete;
@@ -1825,6 +1822,18 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
+			virtual Task<void> fadeIn()
+			{
+				co_return;
+			}
+
+			[[nodiscard]]
+			virtual Task<void> fadeOut()
+			{
+				co_return;
+			}
+
+			[[nodiscard]]
 			Task<TResult> asTask()&
 			{
 				if (m_onceStarted)
@@ -1835,7 +1844,8 @@ inline namespace cotasklib
 				m_onceStarted = true;
 
 				const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
-				co_return co_await start();
+				co_return co_await startAndFadeOut()
+					.with(fadeIn().then([this] { m_isFadingIn = false; }));
 			}
 
 			// 右辺値参照の場合はタスク実行中にthisがダングリングポインタになるため、使用しようとした場合はコンパイルエラーとする
@@ -1849,7 +1859,54 @@ inline namespace cotasklib
 
 			[[nodiscard]]
 			ScopedTaskRunner runScoped()&& = delete;
+
+			[[nodiscard]]
+			bool hasResult() const
+			{
+				return m_result.has_value();
+			}
+
+			[[nodiscard]]
+			const result_type_void_replaced& result() const
+			{
+				return *m_result;
+			}
+
+			[[nodiscard]]
+			const std::optional<result_type_void_replaced>& resultOpt() const
+			{
+				return m_result;
+			}
 		};
+
+		namespace detail
+		{
+			template <typename TSequence>
+			concept SequenceConcept = std::derived_from<TSequence, SequenceBase<typename TSequence::result_type>>;
+
+			template <typename TResult>
+			[[nodiscard]]
+			Task<TResult> SequencePtrToTask(std::unique_ptr<SequenceBase<TResult>> sequence)
+			{
+				co_return co_await sequence->asTask();
+			}
+		}
+
+		template <detail::SequenceConcept TSequence>
+		[[nodiscard]]
+		Task<typename TSequence::result_type> ToTask(TSequence&& sequence)
+		{
+			std::unique_ptr<SequenceBase<typename TSequence::result_type>> sequence = std::make_unique<TSequence>(std::move(sequence));
+			return detail::SequencePtrToTask(std::move(sequence));
+		}
+
+		template <detail::SequenceConcept TSequence, class... Args>
+		[[nodiscard]]
+		Task<typename TSequence::result_type> AsTask(Args&&... args)
+		{
+			std::unique_ptr<SequenceBase<typename TSequence::result_type>> sequence = std::make_unique<TSequence>(std::forward<Args>(args)...);
+			return detail::SequencePtrToTask(std::move(sequence));
+		}
 
 		// 毎フレーム呼ばれるupdate関数を記述するタイプのシーケンス基底クラス
 		template <typename TResult>
@@ -2001,118 +2058,6 @@ inline namespace cotasklib
 
 		namespace detail
 		{
-			class [[nodiscard]] FadeSequenceBase : public SequenceBase<void>
-			{
-			private:
-				int32 m_drawIndex;
-				Timer m_timer;
-				double m_t = 0.0;
-
-			public:
-				explicit FadeSequenceBase(const Duration& duration, int32 drawIndex)
-					: m_drawIndex(drawIndex)
-					, m_timer(duration, StartImmediately::No)
-				{
-				}
-
-				virtual ~FadeSequenceBase() = default;
-
-				virtual Task<void> start() override final
-				{
-					if (m_timer.duration().count() <= 0.0)
-					{
-						// durationが0の場合は何もしない
-						co_return;
-					}
-
-					m_timer.start();
-					while (true)
-					{
-						m_t = m_timer.progress0_1();
-						if (m_t >= 1.0)
-						{
-							break;
-						}
-						co_await Yield{};
-					}
-
-					// 最後に必ずt=1.0で描画されるように
-					m_t = 1.0;
-					co_await Yield{};
-				}
-
-				virtual void draw() const override final
-				{
-					drawFade(m_t);
-				}
-
-				virtual int32 drawIndex() const override final
-				{
-					return m_drawIndex;
-				}
-
-				// tには時間が0.0～1.0で渡される
-				virtual void drawFade(double t) const = 0;
-			};
-
-			class [[nodiscard]] SimpleFadeInSequence : public FadeSequenceBase
-			{
-			private:
-				ColorF m_color;
-
-			public:
-				explicit SimpleFadeInSequence(const Duration& duration, const ColorF& color, int32 drawIndex)
-					: FadeSequenceBase(duration, drawIndex)
-					, m_color(color)
-				{
-				}
-
-				void drawFade(double t) const override
-				{
-					const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
-
-					Scene::Rect().draw(ColorF{ m_color, 1.0 - t });
-				}
-			};
-
-			class [[nodiscard]] SimpleFadeOutSequence : public FadeSequenceBase
-			{
-			private:
-				ColorF m_color;
-
-			public:
-				explicit SimpleFadeOutSequence(const Duration& duration, const ColorF& color, int32 drawIndex)
-					: FadeSequenceBase(duration, drawIndex)
-					, m_color(color)
-				{
-				}
-
-				void drawFade(double t) const override
-				{
-					const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
-
-					Scene::Rect().draw(ColorF{ m_color, t });
-				}
-			};
-		}
-
-		constexpr int32 FadeInDrawIndex = 10000000;
-		constexpr int32 FadeOutDrawIndex = 11000000;
-
-		[[nodiscard]]
-		inline Task<void> SimpleFadeIn(const Duration& duration, const ColorF& color = Palette::Black, int32 drawIndex = FadeInDrawIndex)
-		{
-			return AsTask<detail::SimpleFadeInSequence>(duration, color, drawIndex);
-		}
-
-		[[nodiscard]]
-		inline Task<void> SimpleFadeOut(const Duration& duration, const ColorF& color = Palette::Black, int32 drawIndex = FadeOutDrawIndex)
-		{
-			return AsTask<detail::SimpleFadeOutSequence>(duration, color, drawIndex);
-		}
-
-		namespace detail
-		{
 			template <typename T>
 			concept IsBasicStringView = std::is_same_v<T, std::basic_string_view<typename T::value_type, typename T::traits_type>>;
 
@@ -2162,7 +2107,7 @@ inline namespace cotasklib
 				SceneFactory nextSceneFactory = co_await start();
 				m_isFadingOut = true;
 				co_await fadeOut();
-				co_return std::move(nextSceneFactory);
+				co_return nextSceneFactory;
 			}
 
 		public:
@@ -2448,5 +2393,117 @@ inline namespace cotasklib
 				return !m_updater.has_value();
 			}
 		};
+
+		namespace detail
+		{
+			class [[nodiscard]] FadeSequenceBase : public SequenceBase<void>
+			{
+			private:
+				int32 m_drawIndex;
+				Timer m_timer;
+				double m_t = 0.0;
+
+			public:
+				explicit FadeSequenceBase(const Duration& duration, int32 drawIndex)
+					: m_drawIndex(drawIndex)
+					, m_timer(duration, StartImmediately::No)
+				{
+				}
+
+				virtual ~FadeSequenceBase() = default;
+
+				virtual Task<void> start() override final
+				{
+					if (m_timer.duration().count() <= 0.0)
+					{
+						// durationが0の場合は何もしない
+						co_return;
+					}
+
+					m_timer.start();
+					while (true)
+					{
+						m_t = m_timer.progress0_1();
+						if (m_t >= 1.0)
+						{
+							break;
+						}
+						co_await Yield{};
+					}
+
+					// 最後に必ずt=1.0で描画されるように
+					m_t = 1.0;
+					co_await Yield{};
+				}
+
+				virtual void draw() const override final
+				{
+					drawFade(m_t);
+				}
+
+				virtual int32 drawIndex() const override final
+				{
+					return m_drawIndex;
+				}
+
+				// tには時間が0.0～1.0で渡される
+				virtual void drawFade(double t) const = 0;
+			};
+
+			class [[nodiscard]] SimpleFadeInSequence : public FadeSequenceBase
+			{
+			private:
+				ColorF m_color;
+
+			public:
+				explicit SimpleFadeInSequence(const Duration& duration, const ColorF& color, int32 drawIndex)
+					: FadeSequenceBase(duration, drawIndex)
+					, m_color(color)
+				{
+				}
+
+				void drawFade(double t) const override
+				{
+					const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
+
+					Scene::Rect().draw(ColorF{ m_color, 1.0 - t });
+				}
+			};
+
+			class [[nodiscard]] SimpleFadeOutSequence : public FadeSequenceBase
+			{
+			private:
+				ColorF m_color;
+
+			public:
+				explicit SimpleFadeOutSequence(const Duration& duration, const ColorF& color, int32 drawIndex)
+					: FadeSequenceBase(duration, drawIndex)
+					, m_color(color)
+				{
+				}
+
+				void drawFade(double t) const override
+				{
+					const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
+
+					Scene::Rect().draw(ColorF{ m_color, t });
+				}
+			};
+		}
+
+		constexpr int32 FadeInDrawIndex = 10000000;
+		constexpr int32 FadeOutDrawIndex = 11000000;
+
+		[[nodiscard]]
+		inline Task<void> SimpleFadeIn(const Duration& duration, const ColorF& color = Palette::Black, int32 drawIndex = FadeInDrawIndex)
+		{
+			return AsTask<detail::SimpleFadeInSequence>(duration, color, drawIndex);
+		}
+
+		[[nodiscard]]
+		inline Task<void> SimpleFadeOut(const Duration& duration, const ColorF& color = Palette::Black, int32 drawIndex = FadeOutDrawIndex)
+		{
+			return AsTask<detail::SimpleFadeOutSequence>(duration, color, drawIndex);
+		}
 	}
 }

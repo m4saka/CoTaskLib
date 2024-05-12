@@ -1770,8 +1770,9 @@ inline namespace cotasklib
 			using result_type_void_replaced = detail::VoidResultTypeReplace<TResult>;
 
 		private:
-			bool m_onceStarted = false;
-			bool m_isFadingIn = true;
+			bool m_onceRun = false;
+			bool m_isPreStart = true;
+			bool m_isFadingIn = false;
 			bool m_isFadingOut = false;
 			std::optional<result_type_void_replaced> m_result;
 
@@ -1788,11 +1789,26 @@ inline namespace cotasklib
 				}
 				else
 				{
-					const TResult result = co_await start();
+					TResult result = co_await start();
 					m_result = result;
 					m_isFadingOut = true;
 					co_await fadeOut();
 					co_return result;
+				}
+			}
+
+		protected:
+			[[nodiscard]]
+			Task<void> waitForFadeIn()
+			{
+				if (m_isPreStart)
+				{
+					throw Error{ U"waitForFadeIn() must not be called in preStart()" };
+				}
+
+				while (m_isFadingIn)
+				{
+					co_await detail::Yield{};
 				}
 			}
 
@@ -1841,17 +1857,37 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
+			bool isPreStart() const
+			{
+				return m_isPreStart;
+			}
+
+			[[nodiscard]]
+			bool isFadingIn() const
+			{
+				return m_isFadingIn;
+			}
+
+			[[nodiscard]]
+			bool isFadingOut() const
+			{
+				return m_isFadingOut;
+			}
+
+			[[nodiscard]]
 			Task<TResult> asTask()&
 			{
-				if (m_onceStarted)
+				if (m_onceRun)
 				{
 					// 2回以上の実行は許可しないため例外を投げる
 					throw Error{ U"Cannot run the same Sequence multiple times" };
 				}
-				m_onceStarted = true;
+				m_onceRun = true;
 
 				const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
 				co_await preStart();
+				m_isPreStart = false;
+				m_isFadingIn = true;
 				co_return co_await startAndFadeOut()
 					.with(fadeIn().then([this] { m_isFadingIn = false; }));
 			}
@@ -2106,7 +2142,8 @@ inline namespace cotasklib
 		class [[nodiscard]] SceneBase
 		{
 		private:
-			bool m_isFadingIn = true;
+			bool m_isPreStart = true;
+			bool m_isFadingIn = false;
 			bool m_isFadingOut = false;
 
 			[[nodiscard]]
@@ -2116,6 +2153,21 @@ inline namespace cotasklib
 				m_isFadingOut = true;
 				co_await fadeOut();
 				co_return nextSceneFactory;
+			}
+
+		protected:
+			[[nodiscard]]
+			Task<void> waitForFadeIn()
+			{
+				if (m_isPreStart)
+				{
+					throw Error{ U"waitForFadeIn() must not be called in preStart()" };
+				}
+
+				while (m_isFadingIn)
+				{
+					co_await detail::Yield{};
+				}
 			}
 
 		public:
@@ -2164,12 +2216,9 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			Task<void> waitForFadeIn()
+			bool isPreStart() const
 			{
-				while (m_isFadingIn)
-				{
-					co_await detail::Yield{};
-				}
+				return m_isPreStart;
 			}
 
 			[[nodiscard]]
@@ -2190,6 +2239,8 @@ inline namespace cotasklib
 			{
 				const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
 				co_await preStart();
+				m_isPreStart = false;
+				m_isFadingIn = true;
 				co_return co_await startAndFadeOut()
 					.with(fadeIn().then([this] { m_isFadingIn = false; }));
 			}

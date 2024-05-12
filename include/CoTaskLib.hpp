@@ -1809,6 +1809,13 @@ inline namespace cotasklib
 
 			virtual ~SequenceBase() = default;
 
+			[[nodiscard]]
+			virtual Task<void> preStart()
+			{
+				co_return;
+			}
+
+			[[nodiscard]]
 			virtual Task<TResult> start() = 0;
 
 			virtual void draw() const
@@ -1844,6 +1851,7 @@ inline namespace cotasklib
 				m_onceStarted = true;
 
 				const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
+				co_await preStart();
 				co_return co_await startAndFadeOut()
 					.with(fadeIn().then([this] { m_isFadingIn = false; }));
 			}
@@ -2123,6 +2131,12 @@ inline namespace cotasklib
 
 			virtual ~SceneBase() = default;
 
+			[[nodiscard]]
+			virtual Task<void> preStart()
+			{
+				co_return;
+			}
+
 			// 戻り値は次シーンのSceneFactoryをCo::MakeSceneFactory<TScene>()で作成して返す
 			// もしくは、Co::SceneFinish()を返してシーン遷移を終了する
 			[[nodiscard]]
@@ -2175,6 +2189,7 @@ inline namespace cotasklib
 			Task<SceneFactory> asTaskInternal()&
 			{
 				const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
+				co_await preStart();
 				co_return co_await startAndFadeOut()
 					.with(fadeIn().then([this] { m_isFadingIn = false; }));
 			}

@@ -1702,6 +1702,16 @@ inline namespace cotasklib
 				co_return;
 			}
 
+			virtual void preStartDraw() const
+			{
+			}
+
+			[[nodiscard]]
+			virtual int32 preStartDrawIndex() const
+			{
+				return 0;
+			}
+
 			[[nodiscard]]
 			virtual Task<TResult> start() = 0;
 
@@ -1755,12 +1765,17 @@ inline namespace cotasklib
 				}
 				m_onceRun = true;
 
-				const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
-				co_await preStart();
+				{
+					const ScopedDrawer drawer{ [this] { preStartDraw(); }, [this] { return preStartDrawIndex(); } };
+					co_await preStart();
+				}
 				m_isPreStart = false;
 				m_isFadingIn = true;
-				co_return co_await startAndFadeOut()
-					.with(fadeIn().then([this] { m_isFadingIn = false; }));
+				{
+					const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
+					co_return co_await startAndFadeOut()
+						.with(fadeIn().then([this] { m_isFadingIn = false; }));
+				}
 			}
 
 			// 右辺値参照の場合はタスク実行中にthisがダングリングポインタになるため、使用しようとした場合はコンパイルエラーとする
@@ -2060,6 +2075,16 @@ inline namespace cotasklib
 				co_return;
 			}
 
+			virtual void preStartDraw() const
+			{
+			}
+
+			[[nodiscard]]
+			virtual int32 preStartDrawIndex() const
+			{
+				return 0;
+			}
+
 			// 戻り値は次シーンのSceneFactoryをCo::MakeSceneFactory<TScene>()で作成して返す
 			// もしくは、Co::SceneFinish()を返してシーン遷移を終了する
 			[[nodiscard]]
@@ -2108,12 +2133,17 @@ inline namespace cotasklib
 			[[nodiscard]]
 			Task<SceneFactory> asTaskInternal()&
 			{
-				const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
-				co_await preStart();
+				{
+					const ScopedDrawer drawer{ [this] { preStartDraw(); }, [this] { return preStartDrawIndex(); } };
+					co_await preStart();
+				}
 				m_isPreStart = false;
 				m_isFadingIn = true;
-				co_return co_await startAndFadeOut()
-					.with(fadeIn().then([this] { m_isFadingIn = false; }));
+				{
+					const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
+					co_return co_await startAndFadeOut()
+						.with(fadeIn().then([this] { m_isFadingIn = false; }));
+				}
 			}
 
 			// 右辺値参照の場合はタスク実行中にthisがダングリングポインタになるため、使用しようとした場合はコンパイルエラーとする

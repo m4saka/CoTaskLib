@@ -1469,6 +1469,12 @@ inline namespace cotasklib
 		[[nodiscard]]
 		inline Task<void> Linear(const Duration duration, std::function<void(double)> callback)
 		{
+			if (duration.count() <= 0.0)
+			{
+				// durationが0の場合は何もしない
+				co_return;
+			}
+
 			const Timer timer{ duration, StartImmediately::Yes };
 			while (!timer.reachedZero())
 			{
@@ -1479,9 +1485,35 @@ inline namespace cotasklib
 			co_await detail::Yield{};
 		}
 
+		template <typename T>
+		[[nodiscard]]
+		inline Task<void> Linear(const Duration duration, const T from, const T to, std::function<void(T)> callback)
+		{
+			if (duration.count() <= 0.0)
+			{
+				// durationが0の場合は何もしない
+				co_return;
+			}
+
+			const Timer timer{ duration, StartImmediately::Yes };
+			while (!timer.reachedZero())
+			{
+				callback(Lerp(from, to, timer.progress0_1()));
+				co_await detail::Yield{};
+			}
+			callback(to);
+			co_await detail::Yield{};
+		}
+
 		[[nodiscard]]
 		inline Task<void> Tween(const Duration duration, std::function<void(double)> callback)
 		{
+			if (duration.count() <= 0.0)
+			{
+				// durationが0の場合は何もしない
+				co_return;
+			}
+
 			const Timer timer{ duration, StartImmediately::Yes };
 			while (!timer.reachedZero())
 			{
@@ -1495,6 +1527,12 @@ inline namespace cotasklib
 		[[nodiscard]]
 		inline Task<void> Tween(const Duration duration, std::function<double(double)> easingFunc, std::function<void(double)> callback)
 		{
+			if (duration.count() <= 0.0)
+			{
+				// durationが0の場合は何もしない
+				co_return;
+			}
+
 			const Timer timer{ duration, StartImmediately::Yes };
 			while (!timer.reachedZero())
 			{
@@ -1509,6 +1547,12 @@ inline namespace cotasklib
 		[[nodiscard]]
 		inline Task<void> Tween(const Duration duration, const T from, const T to, std::function<void(T)> callback)
 		{
+			if (duration.count() <= 0.0)
+			{
+				// durationが0の場合は何もしない
+				co_return;
+			}
+
 			const Timer timer{ duration, StartImmediately::Yes };
 			while (!timer.reachedZero())
 			{
@@ -1523,6 +1567,12 @@ inline namespace cotasklib
 		[[nodiscard]]
 		inline Task<void> Tween(const Duration duration, const T from, const T to, std::function<double(double)> easingFunc, std::function<void(T)> callback)
 		{
+			if (duration.count() <= 0.0)
+			{
+				// durationが0の場合は何もしない
+				co_return;
+			}
+
 			const Timer timer{ duration, StartImmediately::Yes };
 			while (!timer.reachedZero())
 			{

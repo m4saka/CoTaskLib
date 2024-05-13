@@ -1310,17 +1310,6 @@ inline namespace cotasklib
 		}
 
 		[[nodiscard]]
-		inline Task<void> Delay(const Duration duration, std::function<void(const Timer&)> func)
-		{
-			const Timer timer{ duration, StartImmediately::Yes };
-			while (!timer.reachedZero())
-			{
-				func(timer);
-				co_await detail::Yield{};
-			}
-		}
-
-		[[nodiscard]]
 		inline Task<void> WaitUntil(std::function<bool()> predicate)
 		{
 			while (!predicate())
@@ -1475,6 +1464,73 @@ inline namespace cotasklib
 			{
 				co_await detail::Yield{};
 			}
+		}
+
+		[[nodiscard]]
+		inline Task<void> Linear(const Duration duration, std::function<void(double)> callback)
+		{
+			const Timer timer{ duration, StartImmediately::Yes };
+			while (!timer.reachedZero())
+			{
+				callback(timer.progress0_1());
+				co_await detail::Yield{};
+			}
+			callback(1.0);
+			co_await detail::Yield{};
+		}
+
+		[[nodiscard]]
+		inline Task<void> Tween(const Duration duration, std::function<void(double)> callback)
+		{
+			const Timer timer{ duration, StartImmediately::Yes };
+			while (!timer.reachedZero())
+			{
+				callback(EaseOutQuad(timer.progress0_1()));
+				co_await detail::Yield{};
+			}
+			callback(1.0);
+			co_await detail::Yield{};
+		}
+
+		[[nodiscard]]
+		inline Task<void> Tween(const Duration duration, std::function<double(double)> easingFunc, std::function<void(double)> callback)
+		{
+			const Timer timer{ duration, StartImmediately::Yes };
+			while (!timer.reachedZero())
+			{
+				callback(easingFunc(timer.progress0_1()));
+				co_await detail::Yield{};
+			}
+			callback(easingFunc(1.0));
+			co_await detail::Yield{};
+		}
+
+		template <typename T>
+		[[nodiscard]]
+		inline Task<void> Tween(const Duration duration, const T from, const T to, std::function<void(T)> callback)
+		{
+			const Timer timer{ duration, StartImmediately::Yes };
+			while (!timer.reachedZero())
+			{
+				callback(Lerp(from, to, EaseOutQuad(timer.progress0_1())));
+				co_await detail::Yield{};
+			}
+			callback(to);
+			co_await detail::Yield{};
+		}
+
+		template <typename T>
+		[[nodiscard]]
+		inline Task<void> Tween(const Duration duration, const T from, const T to, std::function<double(double)> easingFunc, std::function<void(T)> callback)
+		{
+			const Timer timer{ duration, StartImmediately::Yes };
+			while (!timer.reachedZero())
+			{
+				callback(Lerp(from, to, easingFunc(timer.progress0_1())));
+				co_await detail::Yield{};
+			}
+			callback(to);
+			co_await detail::Yield{};
 		}
 
 		namespace detail
@@ -2216,62 +2272,6 @@ inline namespace cotasklib
 			void forget()
 			{
 				m_runner.forget();
-			}
-		};
-
-		class ScopedTweener
-		{
-		private:
-			std::function<double(double)> m_easingFunc;
-			std::function<void(double)> m_callback;
-			Timer m_timer;
-			std::optional<ScopedUpdater> m_updater;
-
-			void update()
-			{
-				m_callback(m_easingFunc(m_timer.progress0_1()));
-				if (m_timer.reachedZero())
-				{
-					m_updater.reset();
-				}
-			}
-
-		public:
-			explicit ScopedTweener(Duration duration, std::function<void(double)> callback)
-				: m_easingFunc([] (double t) { return t; })
-				, m_callback(std::move(callback))
-				, m_timer(duration, StartImmediately::Yes)
-				, m_updater(std::make_optional<ScopedUpdater>([this] { update(); }))
-			{
-			}
-
-			explicit ScopedTweener(Duration duration, std::function<double(double)> easingFunc, std::function<void(double)> callback)
-				: m_easingFunc(std::move(easingFunc))
-				, m_callback(std::move(callback))
-				, m_timer(duration, StartImmediately::Yes)
-				, m_updater(std::make_optional<ScopedUpdater>([this] { update(); }))
-			{
-			}
-
-			ScopedTweener(const ScopedTweener&) = delete;
-
-			ScopedTweener& operator=(const ScopedTweener&) = delete;
-
-			ScopedTweener(ScopedTweener&&) = default;
-
-			ScopedTweener& operator=(ScopedTweener&&) = default;
-
-			~ScopedTweener() = default;
-
-			Task<void> waitForFinish() const
-			{
-				co_await WaitForTimer(&m_timer);
-			}
-
-			[[nodiscard]]
-			bool isFinished() const
-			{
-				return !m_updater.has_value();
 			}
 		};
 

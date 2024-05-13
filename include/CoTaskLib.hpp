@@ -1477,15 +1477,6 @@ inline namespace cotasklib
 			}
 		}
 
-		[[nodiscard]]
-		inline Task<void> WaitForever()
-		{
-			while (true)
-			{
-				co_await detail::Yield{};
-			}
-		}
-
 		namespace detail
 		{
 			template <typename TResult>

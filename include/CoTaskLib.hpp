@@ -768,6 +768,10 @@ inline namespace cotasklib
 		template <typename TResult>
 		class [[nodiscard]] Task : public ITask
 		{
+			static_assert(!std::is_reference_v<TResult>, "TResult must not be a reference type");
+			static_assert(std::is_copy_constructible_v<TResult> || std::is_void_v<TResult>, "TResult must be copy constructible");
+			static_assert(!std::is_const_v<TResult>, "TResult must not have 'const' qualifier");
+
 		private:
 			detail::CoroutineHandleWrapper<TResult> m_handle;
 			std::vector<std::unique_ptr<ITask>> m_concurrentTasksBefore;
@@ -878,6 +882,10 @@ inline namespace cotasklib
 			template <typename TResult>
 			class [[nodiscard]] TaskAwaiter : public detail::IAwaiter
 			{
+				static_assert(!std::is_reference_v<TResult>, "TResult must not be a reference type");
+				static_assert(std::is_copy_constructible_v<TResult> || std::is_void_v<TResult>, "TResult must be copy constructible");
+				static_assert(!std::is_const_v<TResult>, "TResult must not have 'const' qualifier");
+
 			private:
 				Task<TResult> m_task;
 
@@ -1006,6 +1014,10 @@ inline namespace cotasklib
 			template <typename TResult>
 			class Promise : public PromiseBase
 			{
+				static_assert(!std::is_reference_v<TResult>, "TResult must not be a reference type");
+				static_assert(std::is_copy_constructible_v<TResult> || std::is_void_v<TResult>, "TResult must be copy constructible");
+				static_assert(!std::is_const_v<TResult>, "TResult must not have 'const' qualifier");
+
 			private:
 				std::optional<TResult> m_value;
 
@@ -1085,6 +1097,10 @@ inline namespace cotasklib
 		template <typename TResult>
 		class [[nodiscard]] TaskFinishSource
 		{
+			static_assert(!std::is_reference_v<TResult>, "TResult must not be a reference type");
+			static_assert(std::is_copy_constructible_v<TResult> || std::is_void_v<TResult>, "TResult must be copy constructible");
+			static_assert(!std::is_const_v<TResult>, "TResult must not have 'const' qualifier");
+
 		private:
 			std::optional<TResult> m_result;
 
@@ -1686,6 +1702,10 @@ inline namespace cotasklib
 		template <typename TResult>
 		class [[nodiscard]] SequenceBase
 		{
+			static_assert(!std::is_reference_v<TResult>, "TResult must not be a reference type");
+			static_assert(std::is_copy_constructible_v<TResult> || std::is_void_v<TResult>, "TResult must be copy constructible");
+			static_assert(!std::is_const_v<TResult>, "TResult must not have 'const' qualifier");
+
 		public:
 			using result_type = TResult;
 			using result_type_void_replaced = detail::VoidResultTypeReplace<TResult>;

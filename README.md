@@ -445,6 +445,61 @@ void update() override
 
 結果の型(`TResult`)がvoid以外の場合は、`requestFinish()`関数のresult引数へ結果の値を渡します。
 
+## イージング
+`Co::Ease<T>()`関数を使うと、ある値からある値へ滑らかに値を推移させるタスクを実行できます。
+
+```cpp
+class EaseExample : public Co::SequenceBase<void>
+{
+private:
+	Vec2 m_position;
+
+public:
+	Co::Task<void> start() override
+	{
+		// 3秒かけて(100,100)から(700,500)へ推移させる。その値をm_positionへ代入
+		co_await Co::Ease<Vec2>(3s)
+			.from({ 100, 100 })
+			.to({ 700, 500 })
+			.assignTo(&m_position)
+			.asTask();
+	}
+
+	void draw() const override
+	{
+		Circle{ m_position, 100 }.draw();
+	}
+};
+```
+
+`Co::Ease<T>()`関数は、`Co::EaseTaskBuilder<T>`というクラスのインスタンスを返します。  
+これに対して、下記のメンバ関数をメソッドチェインで繋げて使用します。
+
+- `from(T)`/`to(T)` -> `Co::EaseTaskBuilder<T>&`
+    - 開始値・目標値を指定します。
+    - この関数の代わりに、from・toの値をそれぞれ`Co::Ease()`の第2・第3引数に指定することもできます。なお、その場合`Co::Ease<T>()`の`<T>`は記述を省略できます。
+    - Tが浮動小数点型(double、float等)の場合は、この関数を呼ばなくてもデフォルトでfromに0.0、toに1.0が指定されます。
+- `setEase(double(*)(double))` -> `Co::EaseTaskBuilder<T>&`
+    - 値の補間に使用するイージング関数を指定します。
+    - Siv3Dに用意されているイージング関数を関数名で指定できます(例:`.setEase(EaseInOutExpo)`)。
+    - デフォルトでは`EaseOutQuad`(目標値にやや早めに近づく曲線的な動き)が指定されています。
+    - この関数の代わりに、`Co::Ease()`の第4引数に指定することもできます。
+- `setEaseLinear()` -> `Co::EaseTaskBuilder<T>&`
+    - 値の補間に使用するイージング関数を線形補間(Linear、直線的な動き)に設定します。
+- `assignTo(T*)` -> `Co::EaseTaskBuilder<T>&`
+    - 値の代入先の変数をポインタで指定します。
+    - タスクの実行中に変数が破棄されると未定義動作を引き起こすため、必ずタスク実行よりも長いライフサイクルの変数を指定してください。
+    - 複数個の代入先を指定することはできません。`assignTo()`を複数回呼び出して指定した場合も、最後に指定したもののみが使用されます。
+- `withUpdater(std::function<void(T)>)` -> `Co::EaseTaskBuilder<T>&`
+    - 値を毎フレーム受け取って実行する関数を指定します。
+    - 複数個の関数を指定することはできません。`withUpdater()`を複数回呼び出して指定した場合も、最後に指定したもののみが使用されます。
+- `asTask() const` -> `Co::Task<void>`
+    - イージングを実行するタスクを生成します。
+    - シーケンスの`asTask()`関数とは異なり、こちらは複数回実行しても問題ありません。
+- `runScoped() const` -> `ScopedTaskRun`
+    - イージングを実行するタスクを生成し、実行します。
+    - `asTask().runScoped()`と記述した場合と同一のものです。
+
 ## 関数一覧
 - `Co::Init()`
     - `CoTaskLib`ライブラリを初期化します。

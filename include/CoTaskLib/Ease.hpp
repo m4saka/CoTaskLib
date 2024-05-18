@@ -68,7 +68,7 @@ inline namespace cotasklib
 
 			template <typename T>
 			[[nodiscard]]
-			Task<void> Ease(const Duration duration, double easeFunc(double), std::function<void(T)> callback) requires std::floating_point<T>
+			Task<void> EaseTask(const Duration duration, double easeFunc(double), std::function<void(T)> callback) requires std::floating_point<T>
 			{
 				if (duration.count() <= 0.0)
 				{
@@ -87,77 +87,113 @@ inline namespace cotasklib
 			}
 		}
 
-		#define DEFINE_EASE_FUNCTION(TYPE, EASE_FUNC) \
-			template <typename T> \
-			[[nodiscard]] \
-			Task<void> TYPE(Duration duration, std::function<void(T)> callback) requires std::floating_point<T> \
-			{ \
-				return detail::Ease<T>(duration, EASE_FUNC, std::move(callback)); \
-			} \
-			template <typename T> \
-			[[nodiscard]] \
-			Task<void> TYPE(Duration duration, T* pValue) requires std::floating_point<T> \
-			{ \
-				return detail::Ease<T>(duration, EASE_FUNC, [pValue](T value) { *pValue = value; }); \
-			} \
-			template <typename T> \
-			[[nodiscard]] \
-			Task<void> TYPE(Duration duration, T from, T to, std::function<void(T)> callback) requires detail::Lerpable<T> \
-			{ \
-				return detail::Ease<T>(duration, EASE_FUNC, [from = std::move(from), to = std::move(to), callback = std::move(callback)](double t) { callback(detail::GenericLerp(from, to, t)); }); \
-			} \
-			template <typename T> \
-			[[nodiscard]] \
-			Task<void> TYPE(Duration duration, T from, T to, T* pValue) requires detail::Lerpable<T> \
-			{ \
-				return detail::Ease<T>(duration, EASE_FUNC, [from = std::move(from), to = std::move(to), pValue](double t) { *pValue = detail::GenericLerp(from, to, t); }); \
+		template <detail::Lerpable T>
+		[[nodiscard]]
+		class EaseTaskBuilder
+		{
+		private:
+			Duration m_duration;
+			T m_from;
+			T m_to;
+			double(*m_easeFunc)(double);
+			T* m_pValue = nullptr;
+			std::function<void(T)> m_updateFunc = nullptr;
+
+		public:
+			explicit EaseTaskBuilder(Duration duration, T from, T to, double(*easeFunc)(double))
+				: m_duration(duration)
+				, m_from(std::move(from))
+				, m_to(std::move(to))
+				, m_easeFunc(easeFunc)
+			{
 			}
 
-		namespace EaseIn
+			EaseTaskBuilder(const EaseTaskBuilder&) = default;
+			EaseTaskBuilder(EaseTaskBuilder&&) = default;
+			EaseTaskBuilder& operator=(const EaseTaskBuilder&) = default;
+			EaseTaskBuilder& operator=(EaseTaskBuilder&&) = default;
+
+			EaseTaskBuilder& from(T from)
+			{
+				m_from = std::move(from);
+				return *this;
+			}
+
+			EaseTaskBuilder& to(T to)
+			{
+				m_to = std::move(to);
+				return *this;
+			}
+
+			EaseTaskBuilder& setEase(double(*easeFunc)(double))
+			{
+				m_easeFunc = easeFunc;
+				return *this;
+			}
+
+			EaseTaskBuilder& withUpdater(std::function<void(T)> updateFunc)
+			{
+				m_updateFunc = std::move(updateFunc);
+				return *this;
+			}
+
+			EaseTaskBuilder& assignTo(T* pValue)
+			{
+				m_pValue = pValue;
+				return *this;
+			}
+
+			[[nodiscard]]
+			Task<void> asTask() const
+			{
+				auto callback = [from = m_from, to = m_to, pValue = m_pValue, updateFunc = m_updateFunc](double t)
+					{
+						if (pValue)
+						{
+							*pValue = detail::GenericLerp(from, to, t);
+						}
+						if (updateFunc)
+						{
+							updateFunc(detail::GenericLerp(from, to, t));
+						}
+					};
+				return detail::EaseTask<T>(m_duration, m_easeFunc, std::move(callback));
+			}
+
+			[[nodiscard]]
+			ScopedTaskRunner runScoped() const
+			{
+				return asTask().runScoped();
+			}
+		};
+
+		template <detail::Lerpable T>
+		[[nodiscard]]
+		EaseTaskBuilder<T> Ease(Duration duration)
 		{
-			DEFINE_EASE_FUNCTION(Linear, EaseInLinear)
-			DEFINE_EASE_FUNCTION(Sine, EaseInSine)
-			DEFINE_EASE_FUNCTION(Quad, EaseInQuad)
-			DEFINE_EASE_FUNCTION(Cubic, EaseInCubic)
-			DEFINE_EASE_FUNCTION(Quart, EaseInQuart)
-			DEFINE_EASE_FUNCTION(Quint, EaseInQuint)
-			DEFINE_EASE_FUNCTION(Expo, EaseInExpo)
-			DEFINE_EASE_FUNCTION(Circ, EaseInCirc)
-			DEFINE_EASE_FUNCTION(Back, EaseInBack)
-			DEFINE_EASE_FUNCTION(Elastic, EaseInElastic)
-			DEFINE_EASE_FUNCTION(Bounce, EaseInBounce)
+			if constexpr (std::is_floating_point_v<T>)
+			{
+				// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
+				return EaseTaskBuilder<T>(duration, 0.0, 1.0, EaseOutQuad);
+			}
+			else
+			{
+				return EaseTaskBuilder<T>(duration, T{}, T{}, EaseOutQuad);
+			}
 		}
 
-		namespace EaseOut
+		template <detail::Lerpable T>
+		[[nodiscard]]
+		EaseTaskBuilder<T> Ease(Duration duration, T from, T to)
 		{
-			DEFINE_EASE_FUNCTION(Linear, EaseOutLinear)
-			DEFINE_EASE_FUNCTION(Sine, EaseOutSine)
-			DEFINE_EASE_FUNCTION(Quad, EaseOutQuad)
-			DEFINE_EASE_FUNCTION(Cubic, EaseOutCubic)
-			DEFINE_EASE_FUNCTION(Quart, EaseOutQuart)
-			DEFINE_EASE_FUNCTION(Quint, EaseOutQuint)
-			DEFINE_EASE_FUNCTION(Expo, EaseOutExpo)
-			DEFINE_EASE_FUNCTION(Circ, EaseOutCirc)
-			DEFINE_EASE_FUNCTION(Back, EaseOutBack)
-			DEFINE_EASE_FUNCTION(Elastic, EaseOutElastic)
-			DEFINE_EASE_FUNCTION(Bounce, EaseOutBounce)
+			return EaseTaskBuilder<T>(duration, std::move(from), std::move(to), EaseOutQuad);
 		}
 
-		namespace EaseInOut
+		template <detail::Lerpable T>
+		[[nodiscard]]
+		EaseTaskBuilder<T> Ease(Duration duration, T from, T to, double(*easeFunc)(double))
 		{
-			DEFINE_EASE_FUNCTION(Linear, EaseInOutLinear)
-			DEFINE_EASE_FUNCTION(Sine, EaseInOutSine)
-			DEFINE_EASE_FUNCTION(Quad, EaseInOutQuad)
-			DEFINE_EASE_FUNCTION(Cubic, EaseInOutCubic)
-			DEFINE_EASE_FUNCTION(Quart, EaseInOutQuart)
-			DEFINE_EASE_FUNCTION(Quint, EaseInOutQuint)
-			DEFINE_EASE_FUNCTION(Expo, EaseInOutExpo)
-			DEFINE_EASE_FUNCTION(Circ, EaseInOutCirc)
-			DEFINE_EASE_FUNCTION(Back, EaseInOutBack)
-			DEFINE_EASE_FUNCTION(Elastic, EaseInOutElastic)
-			DEFINE_EASE_FUNCTION(Bounce, EaseInOutBounce)
+			return EaseTaskBuilder<T>(duration, std::move(from), std::move(to), easeFunc);
 		}
-		
-		#undef DEFINE_EASE_FUNCTION
 	}
 }

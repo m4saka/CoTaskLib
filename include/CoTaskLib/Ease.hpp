@@ -132,6 +132,12 @@ inline namespace cotasklib
 				return *this;
 			}
 
+			EaseTaskBuilder& setEaseLinear()
+			{
+				m_easeFunc = Easing::Linear;
+				return *this;
+			}
+
 			EaseTaskBuilder& withUpdater(std::function<void(T)> updateFunc)
 			{
 				m_updateFunc = std::move(updateFunc);

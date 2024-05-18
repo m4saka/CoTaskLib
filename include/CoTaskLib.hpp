@@ -1482,6 +1482,36 @@ inline namespace cotasklib
 			}
 		}
 
+		namespace detail
+		{
+			template <typename T>
+			concept StdLerpable = requires(T a, T b, double t)
+			{
+				{ std::lerp(a, b, t) } -> std::convertible_to<T>;
+			};
+
+			template <typename T>
+			concept MemberFuncLerpable = requires(T a, T b, double t)
+			{
+				{ a.lerp(b, t) } -> std::convertible_to<T>;
+			};
+
+			template <typename T>
+			concept Lerpable = StdLerpable<T> || MemberFuncLerpable<T>;
+
+			template <typename T>
+			T GenericLerp(const T& a, const T& b, double t) requires StdLerpable<T>
+			{
+				return std::lerp(a, b, t);
+			}
+
+			template <typename T>
+			T GenericLerp(const T& a, const T& b, double t) requires MemberFuncLerpable<T>
+			{
+				return a.lerp(b, t);
+			}
+		}
+
 		[[nodiscard]]
 		inline Task<void> Linear(const Duration duration, std::function<void(double)> callback)
 		{
@@ -1501,9 +1531,8 @@ inline namespace cotasklib
 			co_await detail::Yield{};
 		}
 
-		template <typename T>
 		[[nodiscard]]
-		inline Task<void> Linear(const Duration duration, const T from, const T to, std::function<void(T)> callback)
+		inline Task<void> Linear(const Duration duration, double* pValue)
 		{
 			if (duration.count() <= 0.0)
 			{
@@ -1514,10 +1543,50 @@ inline namespace cotasklib
 			const Timer timer{ duration, StartImmediately::Yes };
 			while (!timer.reachedZero())
 			{
-				callback(Lerp(from, to, timer.progress0_1()));
+				*pValue = timer.progress0_1();
+				co_await detail::Yield{};
+			}
+			*pValue = 1.0;
+			co_await detail::Yield{};
+		}
+
+		template <typename T>
+		[[nodiscard]]
+		inline Task<void> Linear(const Duration duration, const T from, const T to, std::function<void(T)> callback) requires detail::Lerpable<T>
+		{
+			if (duration.count() <= 0.0)
+			{
+				// durationが0の場合は何もしない
+				co_return;
+			}
+
+			const Timer timer{ duration, StartImmediately::Yes };
+			while (!timer.reachedZero())
+			{
+				callback(detail::GenericLerp(from, to, timer.progress0_1()));
 				co_await detail::Yield{};
 			}
 			callback(to);
+			co_await detail::Yield{};
+		}
+
+		template <typename T>
+		[[nodiscard]]
+		inline Task<void> Linear(const Duration duration, const T from, const T to, T* pValue) requires detail::Lerpable<T>
+		{
+			if (duration.count() <= 0.0)
+			{
+				// durationが0の場合は何もしない
+				co_return;
+			}
+
+			const Timer timer{ duration, StartImmediately::Yes };
+			while (!timer.reachedZero())
+			{
+				*pValue = detail::GenericLerp(from, to, timer.progress0_1());
+				co_await detail::Yield{};
+			}
+			*pValue = to;
 			co_await detail::Yield{};
 		}
 
@@ -1541,6 +1610,25 @@ inline namespace cotasklib
 		}
 
 		[[nodiscard]]
+		inline Task<void> Tween(const Duration duration, double* pValue)
+		{
+			if (duration.count() <= 0.0)
+			{
+				// durationが0の場合は何もしない
+				co_return;
+			}
+
+			const Timer timer{ duration, StartImmediately::Yes };
+			while (!timer.reachedZero())
+			{
+				*pValue = EaseOutQuad(timer.progress0_1());
+				co_await detail::Yield{};
+			}
+			*pValue = 1.0;
+			co_await detail::Yield{};
+		}
+
+		[[nodiscard]]
 		inline Task<void> Tween(const Duration duration, std::function<double(double)> easingFunc, std::function<void(double)> callback)
 		{
 			if (duration.count() <= 0.0)
@@ -1559,9 +1647,8 @@ inline namespace cotasklib
 			co_await detail::Yield{};
 		}
 
-		template <typename T>
 		[[nodiscard]]
-		inline Task<void> Tween(const Duration duration, const T from, const T to, std::function<void(T)> callback)
+		inline Task<void> Tween(const Duration duration, std::function<double(double)> easingFunc, double* pValue)
 		{
 			if (duration.count() <= 0.0)
 			{
@@ -1572,7 +1659,27 @@ inline namespace cotasklib
 			const Timer timer{ duration, StartImmediately::Yes };
 			while (!timer.reachedZero())
 			{
-				callback(Lerp(from, to, EaseOutQuad(timer.progress0_1())));
+				*pValue = easingFunc(timer.progress0_1());
+				co_await detail::Yield{};
+			}
+			*pValue = easingFunc(1.0);
+			co_await detail::Yield{};
+		}
+
+		template <typename T>
+		[[nodiscard]]
+		inline Task<void> Tween(const Duration duration, const T from, const T to, std::function<void(T)> callback) requires detail::Lerpable<T>
+		{
+			if (duration.count() <= 0.0)
+			{
+				// durationが0の場合は何もしない
+				co_return;
+			}
+
+			const Timer timer{ duration, StartImmediately::Yes };
+			while (!timer.reachedZero())
+			{
+				callback(detail::GenericLerp(from, to, EaseOutQuad(timer.progress0_1())));
 				co_await detail::Yield{};
 			}
 			callback(to);
@@ -1581,7 +1688,7 @@ inline namespace cotasklib
 
 		template <typename T>
 		[[nodiscard]]
-		inline Task<void> Tween(const Duration duration, const T from, const T to, std::function<double(double)> easingFunc, std::function<void(T)> callback)
+		inline Task<void> Tween(const Duration duration, const T from, const T to, T* pValue) requires detail::Lerpable<T>
 		{
 			if (duration.count() <= 0.0)
 			{
@@ -1592,10 +1699,50 @@ inline namespace cotasklib
 			const Timer timer{ duration, StartImmediately::Yes };
 			while (!timer.reachedZero())
 			{
-				callback(Lerp(from, to, easingFunc(timer.progress0_1())));
+				*pValue = detail::GenericLerp(from, to, EaseOutQuad(timer.progress0_1()));
+				co_await detail::Yield{};
+			}
+			*pValue = to;
+			co_await detail::Yield{};
+		}
+
+		template <typename T>
+		[[nodiscard]]
+		inline Task<void> Tween(const Duration duration, const T from, const T to, std::function<double(double)> easingFunc, std::function<void(T)> callback) requires detail::Lerpable<T>
+		{
+			if (duration.count() <= 0.0)
+			{
+				// durationが0の場合は何もしない
+				co_return;
+			}
+
+			const Timer timer{ duration, StartImmediately::Yes };
+			while (!timer.reachedZero())
+			{
+				callback(detail::GenericLerp(from, to, easingFunc(timer.progress0_1())));
 				co_await detail::Yield{};
 			}
 			callback(to);
+			co_await detail::Yield{};
+		}
+
+		template <typename T>
+		[[nodiscard]]
+		inline Task<void> Tween(const Duration duration, const T from, const T to, std::function<double(double)> easingFunc, T* pValue) requires detail::Lerpable<T>
+		{
+			if (duration.count() <= 0.0)
+			{
+				// durationが0の場合は何もしない
+				co_return;
+			}
+
+			const Timer timer{ duration, StartImmediately::Yes };
+			while (!timer.reachedZero())
+			{
+				*pValue = detail::GenericLerp(from, to, easingFunc(timer.progress0_1()));
+				co_await detail::Yield{};
+			}
+			*pValue = to;
 			co_await detail::Yield{};
 		}
 

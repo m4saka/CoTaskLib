@@ -28,4 +28,5 @@
 
 #pragma once
 #include "CoTaskLib/Core.hpp"
+#include "CoTaskLib/Scene.hpp"
 #include "CoTaskLib/Ease.hpp"

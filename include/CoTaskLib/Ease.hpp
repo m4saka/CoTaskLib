@@ -46,7 +46,7 @@ inline namespace cotasklib
 			};
 
 			template <typename T>
-			concept MemberFuncLerpable = requires(T a, T b, double t)
+			concept MemberFuncLerpable = requires(T a, const T& b, double t)
 			{
 				{ a.lerp(b, t) } -> std::convertible_to<T>;
 			};
@@ -54,21 +54,20 @@ inline namespace cotasklib
 			template <typename T>
 			concept Lerpable = StdLerpable<T> || MemberFuncLerpable<T>;
 
-			template <typename T>
-			T GenericLerp(const T& a, const T& b, double t) requires StdLerpable<T>
+			template <StdLerpable T>
+			T GenericLerp(const T& a, const T& b, double t)
 			{
 				return std::lerp(a, b, t);
 			}
 
-			template <typename T>
-			T GenericLerp(const T& a, const T& b, double t) requires MemberFuncLerpable<T>
+			template <MemberFuncLerpable T>
+			T GenericLerp(const T& a, const T& b, double t)
 			{
 				return a.lerp(b, t);
 			}
 
-			template <typename T>
 			[[nodiscard]]
-			Task<void> EaseTask(const Duration duration, double easeFunc(double), std::function<void(T)> callback) requires std::floating_point<T>
+			inline Task<void> EaseTask(const Duration duration, double easeFunc(double), std::function<void(double)> callback)
 			{
 				if (duration.count() <= 0.0)
 				{
@@ -79,10 +78,12 @@ inline namespace cotasklib
 				const Timer timer{ duration, StartImmediately::Yes };
 				while (!timer.reachedZero())
 				{
-					callback(T{ easeFunc(timer.progress0_1()) });
+					callback(easeFunc(timer.progress0_1()));
 					co_await detail::Yield{};
 				}
-				callback(T{ 1.0 });
+
+				// 最後は必ず1.0になるようにする
+				callback(1.0);
 				co_await detail::Yield{};
 			}
 		}
@@ -157,7 +158,7 @@ inline namespace cotasklib
 							updateFunc(detail::GenericLerp(from, to, t));
 						}
 					};
-				return detail::EaseTask<T>(m_duration, m_easeFunc, std::move(callback));
+				return detail::EaseTask(m_duration, m_easeFunc, std::move(callback));
 			}
 
 			[[nodiscard]]

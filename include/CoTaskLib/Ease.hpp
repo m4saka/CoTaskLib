@@ -119,9 +119,23 @@ inline namespace cotasklib
 				return *this;
 			}
 
+			template <typename... Args>
+			EaseTaskBuilder& from(Args&&... args)
+			{
+				m_from = T{ std::forward<Args>(args)... };
+				return *this;
+			}
+
 			EaseTaskBuilder& to(T to)
 			{
 				m_to = std::move(to);
+				return *this;
+			}
+
+			template <typename... Args>
+			EaseTaskBuilder& to(Args&&... args)
+			{
+				m_to = T{ std::forward<Args>(args)... };
 				return *this;
 			}
 

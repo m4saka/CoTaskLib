@@ -131,12 +131,6 @@ inline namespace cotasklib
 				return *this;
 			}
 
-			EaseTaskBuilder& setEaseLinear()
-			{
-				m_easeFunc = Easing::Linear;
-				return *this;
-			}
-
 			Co::Task<void> updating(std::function<void(T)> updateFunc)
 			{
 				auto callback = [from = m_from, to = m_to, updateFunc](double t)
@@ -188,6 +182,13 @@ inline namespace cotasklib
 		EaseTaskBuilder<T> Ease(Duration duration, T from, T to, double(*easeFunc)(double))
 		{
 			return EaseTaskBuilder<T>(duration, std::move(from), std::move(to), easeFunc);
+		}
+
+		template <detail::Lerpable T>
+		[[nodiscard]]
+		EaseTaskBuilder<T> LinearEase(Duration duration, T from, T to)
+		{
+			return EaseTaskBuilder<T>(duration, std::move(from), std::move(to), Easing::Linear);
 		}
 	}
 }

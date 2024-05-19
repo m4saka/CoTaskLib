@@ -77,59 +77,8 @@ inline namespace cotasklib
 					ScreenFill(m_color);
 				}
 			};
-
-			class [[nodiscard]] ScreenFillSequence : public SequenceBase<void>
-			{
-			private:
-				Duration m_duration;
-				ColorF m_color;
-				int32 m_drawIndex;
-
-			public:
-				explicit ScreenFillSequence(Duration duration, const ColorF& color, int32 drawIndex)
-					: m_duration(duration)
-					, m_color(color)
-					, m_drawIndex(drawIndex)
-				{
-				}
-
-				Task<void> start() override
-				{
-					return Delay(m_duration);
-				}
-
-				void draw() const override
-				{
-					ScreenFill(m_color);
-				}
-			};
-
-			class [[nodiscard]] EndlessScreenFillSequence : public SequenceBase<void>
-			{
-			private:
-				ColorF m_color;
-				int32 m_drawIndex;
-
-			public:
-				explicit EndlessScreenFillSequence(const ColorF& color, int32 drawIndex)
-					: m_color(color)
-					, m_drawIndex(drawIndex)
-				{
-				}
-
-				Task<void> start() override
-				{
-					return WaitForever();
-				}
-
-				void draw() const override
-				{
-					ScreenFill(m_color);
-				}
-			};
 		}
 
-		constexpr int32 ScreenFillDrawIndex = 0; // 通常の描画と同じ
 		constexpr int32 ScreenFadeInDrawIndex = 10500000;
 		constexpr int32 ScreenFadeOutDrawIndex = 10600000;
 
@@ -143,18 +92,6 @@ inline namespace cotasklib
 		inline Task<void> ScreenFadeOut(const Duration& duration, const ColorF& color = Palette::Black, double easeFunc(double) = Easing::Linear, int32 drawIndex = ScreenFadeOutDrawIndex)
 		{
 			return AsTask<detail::ScreenFadeSequence>(duration, color.withA(0.0), color, easeFunc, drawIndex);
-		}
-
-		[[nodiscard]]
-		inline Task<void> ScreenFill(const ColorF& color, int32 drawIndex = ScreenFillDrawIndex)
-		{
-			return AsTask<detail::EndlessScreenFillSequence>(color, drawIndex);
-		}
-
-		[[nodiscard]]
-		inline Task<void> ScreenFill(const Duration& duration, const ColorF& color, int32 drawIndex = ScreenFillDrawIndex)
-		{
-			return AsTask<detail::ScreenFillSequence>(duration, color, drawIndex);
 		}
 	}
 }

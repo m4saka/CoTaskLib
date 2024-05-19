@@ -87,10 +87,9 @@ inline namespace cotasklib
 				co_await detail::Yield{};
 			}
 		}
-
-		template <detail::Lerpable T>
-		[[nodiscard]]
-		class EaseTaskBuilder
+		
+		template <typename T>
+		class [[nodiscard]] EaseTaskBuilder
 		{
 		private:
 			Duration m_duration;
@@ -138,39 +137,27 @@ inline namespace cotasklib
 				return *this;
 			}
 
-			EaseTaskBuilder& withUpdater(std::function<void(T)> updateFunc)
+			Co::Task<void> updating(std::function<void(T)> updateFunc)
 			{
-				m_updateFunc = std::move(updateFunc);
-				return *this;
-			}
-
-			EaseTaskBuilder& assignTo(T* pValue)
-			{
-				m_pValue = pValue;
-				return *this;
-			}
-
-			[[nodiscard]]
-			Task<void> asTask() const
-			{
-				auto callback = [from = m_from, to = m_to, pValue = m_pValue, updateFunc = m_updateFunc](double t)
+				auto callback = [from = m_from, to = m_to, updateFunc](double t)
 					{
-						if (pValue)
-						{
-							*pValue = detail::GenericLerp(from, to, t);
-						}
-						if (updateFunc)
-						{
-							updateFunc(detail::GenericLerp(from, to, t));
-						}
+						updateFunc(detail::GenericLerp(from, to, t));
 					};
 				return detail::EaseTask(m_duration, m_easeFunc, std::move(callback));
 			}
 
-			[[nodiscard]]
-			ScopedTaskRunner runScoped() const
+			Co::Task<void> assigning(T* pValue)
 			{
-				return asTask().runScoped();
+				if (pValue == nullptr)
+				{
+					throw Error{ U"EaseTaskBuilder::assigning received nullptr" };
+				}
+
+				auto callback = [from = m_from, to = m_to, pValue](double t)
+					{
+						*pValue = detail::GenericLerp(from, to, t);
+					};
+				return detail::EaseTask(m_duration, m_easeFunc, std::move(callback));
 			}
 		};
 

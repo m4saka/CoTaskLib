@@ -62,7 +62,7 @@ inline namespace cotasklib
 
 				Task<void> start() override
 				{
-					co_await Ease(m_duration, m_color, m_toColor, m_easeFunc).assignTo(&m_color).asTask();
+					co_await Ease(m_duration, m_color, m_toColor, m_easeFunc).assigning(&m_color);
 				}
 
 				void draw() const override

@@ -103,7 +103,7 @@ inline namespace cotasklib
 				while (!timer.reachedZero())
 				{
 					const double t = timer.progress0_1();
-					const std::size_t length = std::min(static_cast<std::size_t>(text.length() * t), text.length());
+					const std::size_t length = std::min(static_cast<std::size_t>(1 + text.length() * t), text.length());
 					if (length != prevLength)
 					{
 						updateFunc(text.substr(0, length));

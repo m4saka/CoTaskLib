@@ -96,8 +96,6 @@ inline namespace cotasklib
 			T m_from;
 			T m_to;
 			double(*m_easeFunc)(double);
-			T* m_pValue = nullptr;
-			std::function<void(T)> m_updateFunc = nullptr;
 
 		public:
 			explicit EaseTaskBuilder(Duration duration, T from, T to, double(*easeFunc)(double))

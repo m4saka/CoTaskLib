@@ -91,7 +91,41 @@ Co::Task<void> ExampleTask()
 
 シーケンス同士は`co_await`を利用して入れ子構造にできます。そのため、単純なシーケンスを複数組み合わせて複雑なシーケンスを作成することができます。
 
+```cpp
+class ExampleSequence : public Co::SequenceBase<void>
+{
+public:
+	Co::Task<void> start() override
+	{
+        // ここに処理をコルーチンで記述
+        co_return;
+	}
+
+	void draw() const override
+	{
+        // ここに毎フレームの描画処理を記述
+	}
+
+	Co::Task<void> fadeIn() override
+	{
+        // 必要に応じて、フェードイン処理をコルーチンで記述(startと同時に実行される)
+	}
+
+	Co::Task<void> fadeOut() override
+	{
+        // 必要に応じて、フェードアウト処理をコルーチンで記述(startの完了後に実行される)
+	}
+
+    Co::Task<void> preStart() override
+    {
+        // 必要に応じて、fadeIn・startより前に実行すべき処理(ローディングなど)があればコルーチンで記述
+        co_return;
+    }
+};
+```
+
 ### 仮想関数
+下記の仮想関数をオーバーライドできます。`start()`のみ必須で、それ以外は必要な場合のみオーバーライドしてください。
 
 - `start()` -> `Co::Task<TResult>`
     - シーケンス開始時に実行されるコルーチンです。
@@ -194,7 +228,45 @@ Co::Task<void> ExampleTask()
 
 なお、`Co::UpdaterSequenceBase`は`Co::SequenceBase`の派生クラスです。`Co::UpdaterSequenceBase`を継承した場合でもシーケンスの実行方法に違いはありません。
 
+```cpp
+class ExampleUpdaterSequence : public Co::UpdaterSequenceBase<void>
+{
+public:
+	void update() override
+	{
+        // ここに毎フレームの処理を記述
+
+        // シーケンスを終了させたい場合はrequestFinish関数を呼ぶ
+        requestFinish();
+	}
+
+	void draw() const override
+	{
+        // ここに毎フレームの描画処理を記述
+	}
+
+	Co::Task<void> fadeIn() override
+	{
+        // 必要に応じて、フェードイン処理をコルーチンで記述(updateと同時に実行される)
+		co_await Co::SimpleFadeIn(1s, Palette::Black);
+	}
+
+	Co::Task<void> fadeOut() override
+	{
+        // 必要に応じて、フェードアウト処理をコルーチンで記述(updateの完了後に実行される)
+		co_await Co::SimpleFadeOut(1s, Palette::Black);
+	}
+
+    Co::Task<void> preStart() override
+    {
+        // 必要に応じて、fadeIn・startより前に実行すべき処理(ローディングなど)があればコルーチンで記述
+        co_return;
+    }
+};
+```
+
 ### 仮想関数
+下記の仮想関数をオーバーライドできます。`update()`のみ必須で、それ以外は必要な場合のみオーバーライドしてください。
 
 - `update()`
     - 毎フレームの処理を記述します。
@@ -256,7 +328,58 @@ void update() override
 
 大まかにはシーケンスにシーン遷移のための機能が付いたもので、基本的な使用方法はシーケンスと同じです。
 
+```cpp
+class ExampleScene : public Co::SceneBase
+{
+public:
+	Co::Task<Co::SceneFactory> start() override
+	{
+        // ここに処理をコルーチンで記述
+
+        // EnterキーかEscキーを押すまで待機
+        const auto [isEnter, isEsc] = co_await Co::Any(
+            Co::WaitForDown(KeyEnter),
+            Co::WaitForDown(KeyEsc));
+
+        if (isEnter)
+        {
+            // Enterキーを押したらゲームシーンへ遷移
+            co_return Co::MakeSceneFactory<GameScene>();
+        }
+        else
+        {
+            // Escキーを押したらシーン遷移を終了
+            co_return Co::SceneFinish();
+        }
+	}
+
+	void draw() const override
+	{
+        // ここに毎フレームの描画処理を記述
+	}
+
+	Co::Task<void> fadeIn() override
+	{
+        // 必要に応じて、フェードイン処理をコルーチンで記述(startと同時に実行される)
+		co_await Co::ScreenFadeIn(1s, Palette::Black);
+	}
+
+	Co::Task<void> fadeOut() override
+	{
+        // 必要に応じて、フェードアウト処理をコルーチンで記述(startの完了後に実行される)
+		co_await Co::ScreenFadeOut(1s, Palette::Black);
+	}
+
+    Co::Task<void> preStart() override
+    {
+        // 必要に応じて、fadeIn・startより前に実行すべき処理(ローディングなど)があればコルーチンで記述
+        co_return;
+    }
+};
+```
+
 ### 仮想関数
+下記の仮想関数をオーバーライドできます。`start()`のみ必須で、それ以外は必要な場合のみオーバーライドしてください。
 
 - `start()` -> `Co::Task<SceneFactory>`
     - シーン開始時に実行されるコルーチンです。
@@ -375,7 +498,56 @@ Siv3D標準のシーン機能を使用して作成したシーンをなるべく
 
 なお、`Co::UpdaterSceneBase`は`Co::SceneBase`の派生クラスです。`Co::UpdaterSceneBase`を継承した場合でもシーンの実行方法に違いはありません。
 
+```cpp
+class ExampleUpdaterScene : public Co::SceneBase
+{
+public:
+	void update() override
+	{
+        // ここに毎フレームの処理を記述
+
+        if (KeyEnter.down())
+        {
+            // Enterキーを押したらゲームシーンへ遷移
+            requestNextScene<GameScene>();
+            return;
+        }
+
+        if (KeyEsc.down())
+        {
+            // Escキーを押したらシーン遷移を終了
+            requestSceneFinish();
+            return;
+        }
+	}
+
+	void draw() const override
+	{
+        // ここに毎フレームの描画処理を記述
+	}
+
+	Co::Task<void> fadeIn() override
+	{
+        // 必要に応じて、フェードイン処理をコルーチンで記述(updateと同時に実行される)
+		co_await Co::ScreenFadeIn(1s, Palette::Black);
+	}
+
+	Co::Task<void> fadeOut() override
+	{
+        // 必要に応じて、フェードアウト処理をコルーチンで記述(updateの完了後に実行される)
+		co_await Co::ScreenFadeOut(1s, Palette::Black);
+	}
+
+    Co::Task<void> preStart() override
+    {
+        // 必要に応じて、fadeIn・startより前に実行すべき処理(ローディングなど)があればコルーチンで記述
+        co_return;
+    }
+};
+```
+
 ### 仮想関数
+下記の仮想関数をオーバーライドできます。`update()`のみ必須で、それ以外は必要な場合のみオーバーライドしてください。
 
 - `update()`
     - 毎フレームの処理を記述します。
@@ -459,8 +631,8 @@ public:
     {
         // 3秒かけて(100,100)から(700,500)へ推移させる。その値を毎フレームm_positionへ代入
         co_await Co::Ease<Vec2>(3s)
-            .from({ 100, 100 })
-            .to({ 700, 500 })
+            .from(100, 100)
+            .to(700, 500)
             .assigning(&m_position);
     }
 
@@ -476,6 +648,7 @@ public:
 
 - `from(T)`/`to(T)` -> `Co::EaseTaskBuilder<T>&`
     - 開始値・目標値を指定します。
+    - 引数には、T型の値を指定するか、T型のコンストラクタ引数を指定します。
     - この関数の代わりに、from・toの値をそれぞれ`Co::Ease()`の第2・第3引数に指定することもできます。なお、その場合`Co::Ease<T>()`の`<T>`は記述を省略できます。
     - Tが浮動小数点型(double、float等)の場合は、この関数を呼ばなくてもデフォルトでfromに0.0、toに1.0が指定されます。
 - `setEase(double(*)(double))` -> `Co::EaseTaskBuilder<T>&`
@@ -530,10 +703,20 @@ public:
     - マウスの右ボタンが指定領域でクリックされてから離されるまで待機します。
 - `Co::WaitForMouseOver(TArea)` -> `Co::Task<void>`
     - マウスカーソルが指定領域内に侵入するまで待機します。
-- `Co::SimpleFadeIn(Duration, ColorF)` -> `Co::Task<void>`
-    - 指定色からのフェードインを開始し、完了まで待機します。
-- `Co::SimpleFadeOut(Duration, ColorF)` -> `Co::Task<void>`
-    - 指定色へのフェードアウトを開始し、完了まで待機します。
+- `Co::ScreenFadeIn(Duration, ColorF)` -> `Co::Task<void>`
+    - 指定色からの画面フェードインを開始し、完了まで待機します。
+    - 任意で、第3引数にint32型で描画順序のソート値(drawIndex)を指定することもできます。
+        - デフォルト値は`Co::ScreenFadeInDrawIndex`(=10500000)で、通常描画(0)よりも手前に表示されるようになっています。
+- `Co::ScreenFadeOut(Duration, ColorF)` -> `Co::Task<void>`
+    - 指定色への画面フェードアウトを開始し、完了まで待機します。
+    - 任意で、第3引数にint32型で描画順序のソート値(drawIndex)を指定することもできます。
+        - デフォルト値は`Co::ScreenFadeOutDrawIndex`(=10600000)で、通常描画(0)よりも手前に表示されるようになっています。
+- `Co::ScreenFill(Duration, ColorF)` -> `Co::Task<void>`
+    - 指定色で画面を塗りつぶしします。
+    - Durationの引数を省略することで、永久に塗りつぶすことができます。
+        - 例えば、他の`Co::Task`の`with()`関数に`Co::ScreenFill(ColorF{ 0.0, 0.5 })`(半透明の黒色での塗りつぶし)を指定することで、あるタスクの実行中は画面全体を暗くするといったことが実現できます。
+    - 任意で、第3引数にint32型でdrawIndexを指定することもできます。
+        - デフォルト値は`Co::ScreenFillDrawIndex`(=0)で、通常描画と同じdrawIndexになっています。
 - `Co::All(TTasks&&...)` -> `Co::Task<std::tuple<...>>`
     - 全ての`Co::Task`が完了するまで待機します。各`Co::Task`の結果が`std::tuple`で返されます。
     - `Co::Task`の結果が`void`型の場合、`Co::VoidResult`型(空の構造体)に置換して返されます。

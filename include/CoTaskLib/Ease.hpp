@@ -71,7 +71,8 @@ inline namespace cotasklib
 			{
 				if (duration.count() <= 0.0)
 				{
-					// durationが0の場合は何もしない
+					// durationが0の場合は1.0を設定するが、フレームを待たずに終了
+					callback(1.0);
 					co_return;
 				}
 
@@ -85,6 +86,38 @@ inline namespace cotasklib
 				// 最後は必ず1.0になるようにする
 				callback(1.0);
 				co_await detail::Yield{};
+			}
+
+			[[nodiscard]]
+			inline Task<void> TypewriterTask(const Duration duration, const String& text, std::function<void(const String&)> updateFunc)
+			{
+				if (duration.count() <= 0.0)
+				{
+					// durationが0の場合はそのまま出力するが、フレームを待たずに終了
+					updateFunc(text);
+					co_return;
+				}
+
+				std::optional<std::size_t> prevLength = std::nullopt;
+				const Timer timer{ duration, StartImmediately::Yes };
+				while (!timer.reachedZero())
+				{
+					const double t = timer.progress0_1();
+					const std::size_t length = std::min(static_cast<std::size_t>(text.length() * t), text.length());
+					if (length != prevLength)
+					{
+						updateFunc(text.substr(0, length));
+						prevLength = length;
+					}
+					co_await detail::Yield{};
+				}
+
+				// 最後は必ず全て表示
+				if (prevLength != text.length())
+				{
+					updateFunc(text);
+					co_await detail::Yield{};
+				}
 			}
 		}
 		
@@ -110,6 +143,12 @@ inline namespace cotasklib
 			EaseTaskBuilder(EaseTaskBuilder&&) = default;
 			EaseTaskBuilder& operator=(const EaseTaskBuilder&) = default;
 			EaseTaskBuilder& operator=(EaseTaskBuilder&&) = default;
+
+			EaseTaskBuilder& duration(Duration duration)
+			{
+				m_duration = duration;
+				return *this;
+			}
 
 			EaseTaskBuilder& from(T from)
 			{
@@ -143,7 +182,7 @@ inline namespace cotasklib
 				return *this;
 			}
 
-			Co::Task<void> updating(std::function<void(T)> updateFunc)
+			Task<void> updating(std::function<void(T)> updateFunc)
 			{
 				auto callback = [from = m_from, to = m_to, updateFunc](double t)
 					{
@@ -152,7 +191,7 @@ inline namespace cotasklib
 				return detail::EaseTask(m_duration, m_easeFunc, std::move(callback));
 			}
 
-			Co::Task<void> assigning(T* pValue)
+			Task<void> assigning(T* pValue)
 			{
 				if (pValue == nullptr)
 				{
@@ -166,6 +205,21 @@ inline namespace cotasklib
 				return detail::EaseTask(m_duration, m_easeFunc, std::move(callback));
 			}
 		};
+
+		template <detail::Lerpable T>
+		[[nodiscard]]
+		EaseTaskBuilder<T> Ease()
+		{
+			if constexpr (std::is_floating_point_v<T>)
+			{
+				// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
+				return EaseTaskBuilder<T>(0s, 0.0, 1.0, EaseOutQuad);
+			}
+			else
+			{
+				return EaseTaskBuilder<T>(0s, T{}, T{}, EaseOutQuad);
+			}
+		}
 
 		template <detail::Lerpable T>
 		[[nodiscard]]
@@ -201,6 +255,85 @@ inline namespace cotasklib
 		EaseTaskBuilder<T> LinearEase(Duration duration, T from, T to)
 		{
 			return EaseTaskBuilder<T>(duration, std::move(from), std::move(to), Easing::Linear);
+		}
+
+		class [[nodiscard]] TypewriterTaskBuilder
+		{
+		private:
+			Duration m_duration;
+			bool m_isOneLetterDuration;
+			String m_text;
+
+			Duration calcTotalDuration() const
+			{
+				return m_isOneLetterDuration ? m_duration * m_text.length() : m_duration;
+			}
+
+		public:
+			explicit TypewriterTaskBuilder(Duration oneLetterDuration, StringView text)
+				: m_duration(oneLetterDuration)
+				, m_isOneLetterDuration(true)
+				, m_text(text)
+			{
+			}
+
+			TypewriterTaskBuilder(const TypewriterTaskBuilder&) = default;
+			TypewriterTaskBuilder(TypewriterTaskBuilder&&) = default;
+			TypewriterTaskBuilder& operator=(const TypewriterTaskBuilder&) = default;
+			TypewriterTaskBuilder& operator=(TypewriterTaskBuilder&&) = default;
+
+			TypewriterTaskBuilder& oneLetterDuration(Duration oneLetterDuration)
+			{
+				m_duration = oneLetterDuration;
+				m_isOneLetterDuration = true;
+				return *this;
+			}
+
+			TypewriterTaskBuilder& totalDuration(Duration duration)
+			{
+				m_duration = duration;
+				m_isOneLetterDuration = false;
+				return *this;
+			}
+
+			TypewriterTaskBuilder& text(StringView text)
+			{
+				m_text = text;
+				return *this;
+			}
+
+			Task<void> updating(std::function<void(const String&)> updateFunc)
+			{
+				return detail::TypewriterTask(calcTotalDuration(), m_text, std::move(updateFunc));
+			}
+
+			Task<void> assigning(String* pValue)
+			{
+				if (pValue == nullptr)
+				{
+					throw Error{ U"TypewriterTaskBuilder::assigning received nullptr" };
+				}
+
+				return detail::TypewriterTask(calcTotalDuration(), m_text, [pValue](const String& text) { *pValue = text; });
+			}
+		};
+
+		[[nodiscard]]
+		inline TypewriterTaskBuilder Typewriter()
+		{
+			return TypewriterTaskBuilder(1s, U"");
+		}
+
+		[[nodiscard]]
+		inline TypewriterTaskBuilder Typewriter(Duration oneLetterDuration)
+		{
+			return TypewriterTaskBuilder(oneLetterDuration, U"");
+		}
+
+		[[nodiscard]]
+		inline TypewriterTaskBuilder Typewriter(Duration oneLetterDuration, StringView text)
+		{
+			return TypewriterTaskBuilder(oneLetterDuration, text);
 		}
 	}
 }

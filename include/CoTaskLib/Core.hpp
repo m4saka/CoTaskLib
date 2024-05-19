@@ -1326,6 +1326,15 @@ inline namespace cotasklib
 		}
 
 		[[nodiscard]]
+		inline Task<void> WaitForever()
+		{
+			while (true)
+			{
+				co_await detail::Yield{};
+			}
+		}
+
+		[[nodiscard]]
 		inline Task<void> WaitUntil(std::function<bool()> predicate)
 		{
 			while (!predicate())

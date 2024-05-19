@@ -7,6 +7,36 @@ C++20の`co_await`/`co_return`キーワードを利用して、複数フレー�
 コルーチンで実行するタスクのクラスです。結果の型をテンプレートパラメータ`TResult`で指定します。  
 結果を返す必要がない場合、`Co::Task<void>`を使用します。
 
+```cpp
+// 戻り値がない場合の例
+Co::Task<void> ExampleTask()
+{
+    // クリックされるまで待機
+    co_await Co::WaitForDown(MouseL);
+
+    Print << U"クリックされました！";
+}
+
+// 戻り値がある場合の例
+Co::Task<String> ExampleTaskWithResult()
+{
+    // クリックまたは右クリックされるまで待機
+    const auto [isMouseL, isMouseR] = co_await Co::Any(
+        Co::WaitForDown(MouseL),
+        Co::WaitForDown(MouseR));
+
+    // どちらが押されたかに応じて、文字列を返す
+    if (isMouseL)
+    {
+        co_return U"クリックされました！";
+    }
+    else
+    {
+        co_return U"右クリックされました！";
+    }
+}
+```
+
 ### コルーチン制御
 `Co::Task`を戻り値とするコルーチン関数内では、下記のキーワードでコルーチンを制御できます。  
 ※本ライブラリでは`co_yield`は使用しません。
@@ -44,12 +74,7 @@ const auto taskRunner = ExampleTask().runScoped();
 `co_await`へ渡すことで、`Co::Task`を実行して完了まで待機できます。
 
 ```cpp
-Co::Task<void> ExampleTask()
-{
-    co_await Co::Delay(1s); // 1秒間待機するコルーチンを実行し、完了まで待機します
-
-    co_await AnotherTask(); // 別に定義したAnotherTask関数のコルーチンを実行し、完了まで待機します
-}
+co_await ExampleTask();
 ```
 
 完了を待つ必要がない場合は`runScoped`関数を併用することもできます。
@@ -95,26 +120,26 @@ Co::Task<void> ExampleTask()
 class ExampleSequence : public Co::SequenceBase<void>
 {
 public:
-	Co::Task<void> start() override
-	{
+    Co::Task<void> start() override
+    {
         // ここに処理をコルーチンで記述
         co_return;
-	}
+    }
 
-	void draw() const override
-	{
+    void draw() const override
+    {
         // ここに毎フレームの描画処理を記述
-	}
+    }
 
-	Co::Task<void> fadeIn() override
-	{
+    Co::Task<void> fadeIn() override
+    {
         // 必要に応じて、フェードイン処理をコルーチンで記述(startと同時に実行される)
-	}
+    }
 
-	Co::Task<void> fadeOut() override
-	{
+    Co::Task<void> fadeOut() override
+    {
         // 必要に応じて、フェードアウト処理をコルーチンで記述(startの完了後に実行される)
-	}
+    }
 
     Co::Task<void> preStart() override
     {
@@ -232,30 +257,30 @@ Co::Task<void> ExampleTask()
 class ExampleUpdaterSequence : public Co::UpdaterSequenceBase<void>
 {
 public:
-	void update() override
-	{
+    void update() override
+    {
         // ここに毎フレームの処理を記述
 
         // シーケンスを終了させたい場合はrequestFinish関数を呼ぶ
         requestFinish();
-	}
+    }
 
-	void draw() const override
-	{
+    void draw() const override
+    {
         // ここに毎フレームの描画処理を記述
-	}
+    }
 
-	Co::Task<void> fadeIn() override
-	{
+    Co::Task<void> fadeIn() override
+    {
         // 必要に応じて、フェードイン処理をコルーチンで記述(updateと同時に実行される)
-		co_await Co::SimpleFadeIn(1s, Palette::Black);
-	}
+        co_await Co::SimpleFadeIn(1s, Palette::Black);
+    }
 
-	Co::Task<void> fadeOut() override
-	{
+    Co::Task<void> fadeOut() override
+    {
         // 必要に応じて、フェードアウト処理をコルーチンで記述(updateの完了後に実行される)
-		co_await Co::SimpleFadeOut(1s, Palette::Black);
-	}
+        co_await Co::SimpleFadeOut(1s, Palette::Black);
+    }
 
     Co::Task<void> preStart() override
     {
@@ -332,8 +357,8 @@ void update() override
 class ExampleScene : public Co::SceneBase
 {
 public:
-	Co::Task<Co::SceneFactory> start() override
-	{
+    Co::Task<Co::SceneFactory> start() override
+    {
         // ここに処理をコルーチンで記述
 
         // EnterキーかEscキーを押すまで待機
@@ -351,24 +376,24 @@ public:
             // Escキーを押したらシーン遷移を終了
             co_return Co::SceneFinish();
         }
-	}
+    }
 
-	void draw() const override
-	{
+    void draw() const override
+    {
         // ここに毎フレームの描画処理を記述
-	}
+    }
 
-	Co::Task<void> fadeIn() override
-	{
+    Co::Task<void> fadeIn() override
+    {
         // 必要に応じて、フェードイン処理をコルーチンで記述(startと同時に実行される)
-		co_await Co::ScreenFadeIn(1s, Palette::Black);
-	}
+        co_await Co::ScreenFadeIn(1s, Palette::Black);
+    }
 
-	Co::Task<void> fadeOut() override
-	{
+    Co::Task<void> fadeOut() override
+    {
         // 必要に応じて、フェードアウト処理をコルーチンで記述(startの完了後に実行される)
-		co_await Co::ScreenFadeOut(1s, Palette::Black);
-	}
+        co_await Co::ScreenFadeOut(1s, Palette::Black);
+    }
 
     Co::Task<void> preStart() override
     {
@@ -502,8 +527,8 @@ Siv3D標準のシーン機能を使用して作成したシーンをなるべく
 class ExampleUpdaterScene : public Co::SceneBase
 {
 public:
-	void update() override
-	{
+    void update() override
+    {
         // ここに毎フレームの処理を記述
 
         if (KeyEnter.down())
@@ -519,24 +544,24 @@ public:
             requestSceneFinish();
             return;
         }
-	}
+    }
 
-	void draw() const override
-	{
+    void draw() const override
+    {
         // ここに毎フレームの描画処理を記述
-	}
+    }
 
-	Co::Task<void> fadeIn() override
-	{
+    Co::Task<void> fadeIn() override
+    {
         // 必要に応じて、フェードイン処理をコルーチンで記述(updateと同時に実行される)
-		co_await Co::ScreenFadeIn(1s, Palette::Black);
-	}
+        co_await Co::ScreenFadeIn(1s, Palette::Black);
+    }
 
-	Co::Task<void> fadeOut() override
-	{
+    Co::Task<void> fadeOut() override
+    {
         // 必要に応じて、フェードアウト処理をコルーチンで記述(updateの完了後に実行される)
-		co_await Co::ScreenFadeOut(1s, Palette::Black);
-	}
+        co_await Co::ScreenFadeOut(1s, Palette::Black);
+    }
 
     Co::Task<void> preStart() override
     {
@@ -646,6 +671,9 @@ public:
 `Co::Ease<T>()`および`Co::LinearEase<T>()`関数は、`Co::EaseTaskBuilder<T>`というクラスのインスタンスを返します。  
 これに対して、下記のメンバ関数をメソッドチェインで繋げて使用します。
 
+- `duration(Duration)` -> `Co::EaseTaskBuilder<T>&`
+    - 時間の長さを指定します。
+    - この関数の代わりに、`Co::Ease()`の第1引数に指定することもできます。
 - `from(T)`/`to(T)` -> `Co::EaseTaskBuilder<T>&`
     - 開始値・目標値を指定します。
     - 引数には、T型の値を指定するか、T型のコンストラクタ引数を指定します。
@@ -663,6 +691,50 @@ public:
     - 引数には必ずタスク実行よりも寿命が長い変数のポインタを指定してください。
 - `updating(std::function<void(T)>)` -> `Co::Task<void>`
     - 毎フレーム値を受け取って実行する関数を指定し、イージングのタスクを生成します。
+
+## 文字送り
+`Co::Typewriter()`関数を使うと、1文字ずつ文字表示する処理が簡単に実装できます。
+
+```cpp
+class TypewriterExample : public Co::SequenceBase<void>
+{
+private:
+    Font m_font{ 30 };
+    String m_text;
+
+public:
+    Co::Task<void> start() override
+    {
+        // テキストを1文字ずつ表示
+        co_await Co::Typewriter(50ms, U"Hello, CoTaskLib!")
+            .assigning(&m_text);
+
+        // クリックされるまで待つ
+        co_await Co::WaitForDown(MouseL);
+    }
+
+    void draw() const override
+    {
+        m_font(m_text).draw();
+    }
+};
+```
+
+`Co::Typewriter()`関数は、`Co::TypewriterTaskBuilder`というクラスのインスタンスを返します。これに対して、下記のメンバ関数をメソッドチェインで繋げて使用します。
+
+- `oneLetterDuration(Duration)` -> `Co::TypewriterTaskBuilder&`
+    - 表示時間を1文字あたりの時間で指定します。
+    - この関数の代わりに、`Co::Typewriter()`の第1引数に指定することもできます。
+- `totalDuration(Duration)` -> `Co::TypewriterTaskBuilder&`
+    - 表示時間を文字列全体の時間で指定します。
+- `text(StringView)` -> `Co::TypewriterTaskBuilder&`
+    - 表示するテキストを指定します。
+    - この関数の代わりに、`Co::Typewriter()`の第2引数に指定することもできます。
+- `assigning(String*)` -> `Co::Task<void>`
+    - 表示するテキストを代入する変数をポインタで指定し、文字送りのタスクを生成します。
+    - 引数には必ずタスク実行よりも寿命が長い変数のポインタを指定してください。
+- `updating(std::function<void(const String&)>)` -> `Co::Task<void>`
+    - テキストが更新されるごとに実行される関数を指定し、文字送りのタスクを生成します。
 
 ## 関数一覧
 - `Co::Init()`

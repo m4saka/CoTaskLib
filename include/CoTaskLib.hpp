@@ -31,4 +31,4 @@
 #include "CoTaskLib/Scene.hpp"
 #include "CoTaskLib/Ease.hpp"
 #include "CoTaskLib/Sequence.hpp"
-#include "CoTaskLib/SimpleFade.hpp"
+#include "CoTaskLib/ScreenFade.hpp"

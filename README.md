@@ -676,6 +676,9 @@ public:
     - 指定された時間だけ待機します。
 - `Co::Delay(Duration, std::function<void(const Timer&)>)` -> `Co::Task<void>`
     - 指定された時間だけ待機し、待機中に毎フレーム指定された関数を実行します。
+- `Co::WaitForever()` -> `Co::Task<void>`
+    - 永久に待機します。
+    - Tips: 終了しないシーケンスの`start()`関数に使用できます。
 - `Co::WaitUntil(std::function<bool()>)` -> `Co::Task<void>`
     - 指定された関数を毎フレーム実行し、結果がfalseの間、待機します。
 - `Co::WaitWhile(std::function<bool()>)` -> `Co::Task<void>`
@@ -711,12 +714,6 @@ public:
     - 指定色への画面フェードアウトを開始し、完了まで待機します。
     - 任意で、第3引数にint32型で描画順序のソート値(drawIndex)を指定することもできます。
         - デフォルト値は`Co::ScreenFadeOutDrawIndex`(=10600000)で、通常描画(0)よりも手前に表示されるようになっています。
-- `Co::ScreenFill(Duration, ColorF)` -> `Co::Task<void>`
-    - 指定色で画面を塗りつぶしします。
-    - Durationの引数を省略することで、永久に塗りつぶすことができます。
-        - 例えば、他の`Co::Task`の`with()`関数に`Co::ScreenFill(ColorF{ 0.0, 0.5 })`(半透明の黒色での塗りつぶし)を指定することで、あるタスクの実行中は画面全体を暗くするといったことが実現できます。
-    - 任意で、第3引数にint32型でdrawIndexを指定することもできます。
-        - デフォルト値は`Co::ScreenFillDrawIndex`(=0)で、通常描画と同じdrawIndexになっています。
 - `Co::All(TTasks&&...)` -> `Co::Task<std::tuple<...>>`
     - 全ての`Co::Task`が完了するまで待機します。各`Co::Task`の結果が`std::tuple`で返されます。
     - `Co::Task`の結果が`void`型の場合、`Co::VoidResult`型(空の構造体)に置換して返されます。

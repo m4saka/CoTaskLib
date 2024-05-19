@@ -452,23 +452,22 @@ void update() override
 class EaseExample : public Co::SequenceBase<void>
 {
 private:
-	Vec2 m_position;
+    Vec2 m_position;
 
 public:
-	Co::Task<void> start() override
-	{
-		// 3秒かけて(100,100)から(700,500)へ推移させる。その値をm_positionへ代入
-		co_await Co::Ease<Vec2>(3s)
-			.from({ 100, 100 })
-			.to({ 700, 500 })
-			.assignTo(&m_position)
-			.asTask();
-	}
+    Co::Task<void> start() override
+    {
+        // 3秒かけて(100,100)から(700,500)へ推移させる。その値を毎フレームm_positionへ代入
+        co_await Co::Ease<Vec2>(3s)
+            .from({ 100, 100 })
+            .to({ 700, 500 })
+            .assigning(&m_position);
+    }
 
-	void draw() const override
-	{
-		Circle{ m_position, 100 }.draw();
-	}
+    void draw() const override
+    {
+        Circle{ m_position, 100 }.draw();
+    }
 };
 ```
 
@@ -486,19 +485,11 @@ public:
     - この関数の代わりに、`Co::Ease()`の第4引数に指定することもできます。
 - `setEaseLinear()` -> `Co::EaseTaskBuilder<T>&`
     - 値の補間に使用するイージング関数を線形補間(Linear、直線的な動き)に設定します。
-- `assignTo(T*)` -> `Co::EaseTaskBuilder<T>&`
-    - 値の代入先の変数をポインタで指定します。
-    - タスクの実行中に変数が破棄されると未定義動作を引き起こすため、必ずタスク実行よりも長いライフサイクルの変数を指定してください。
-    - 複数個の代入先を指定することはできません。`assignTo()`を複数回呼び出して指定した場合も、最後に指定したもののみが使用されます。
-- `withUpdater(std::function<void(T)>)` -> `Co::EaseTaskBuilder<T>&`
-    - 値を毎フレーム受け取って実行する関数を指定します。
-    - 複数個の関数を指定することはできません。`withUpdater()`を複数回呼び出して指定した場合も、最後に指定したもののみが使用されます。
-- `asTask() const` -> `Co::Task<void>`
-    - イージングを実行するタスクを生成します。
-    - シーケンスの`asTask()`関数とは異なり、こちらは複数回実行しても問題ありません。
-- `runScoped() const` -> `ScopedTaskRun`
-    - イージングを実行するタスクを生成し、実行します。
-    - `asTask().runScoped()`と記述した場合と同一のものです。
+- `assigning(T*)` -> `Co::Task<void>`
+    - 値の代入先の変数をポインタで指定し、イージングのタスクを生成します。
+    - タスクの実行中に変数が破棄されると未定義動作を引き起こすため、引数には必ずタスク実行よりも長いライフサイクルの変数のポインタを指定してください。
+- `updating(std::function<void(T)>)` -> `Co::Task<void>`
+    - 毎フレーム値を受け取って実行する関数を指定し、イージングのタスクを生成します。
 
 ## 関数一覧
 - `Co::Init()`

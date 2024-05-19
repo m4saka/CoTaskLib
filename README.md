@@ -446,7 +446,7 @@ void update() override
 結果の型(`TResult`)がvoid以外の場合は、`requestFinish()`関数のresult引数へ結果の値を渡します。
 
 ## イージング
-`Co::Ease<T>()`関数を使うと、ある値からある値へ滑らかに値を推移させるタスクを実行できます。
+`Co::Ease<T>()`および`Co::LinearEase<T>()`関数を使うと、ある値からある値へ滑らかに値を推移させるタスクを実行できます。
 
 ```cpp
 class EaseExample : public Co::SequenceBase<void>
@@ -471,7 +471,7 @@ public:
 };
 ```
 
-`Co::Ease<T>()`関数は、`Co::EaseTaskBuilder<T>`というクラスのインスタンスを返します。  
+`Co::Ease<T>()`および`Co::LinearEase<T>()`関数は、`Co::EaseTaskBuilder<T>`というクラスのインスタンスを返します。  
 これに対して、下記のメンバ関数をメソッドチェインで繋げて使用します。
 
 - `from(T)`/`to(T)` -> `Co::EaseTaskBuilder<T>&`
@@ -481,13 +481,13 @@ public:
 - `setEase(double(*)(double))` -> `Co::EaseTaskBuilder<T>&`
     - 値の補間に使用するイージング関数を指定します。
     - Siv3Dに用意されているイージング関数を関数名で指定できます(例:`.setEase(EaseInOutExpo)`)。
-    - デフォルトでは`EaseOutQuad`(目標値にやや早めに近づく曲線的な動き)が指定されています。
+    - デフォルトでは下記のイージング関数が指定されています。
+        - `Co::Ease()`: `EaseOutQuad`(目標値にやや早めに近づく曲線的な動き)
+        - `Co::LinearEase()`: `Easing::Linear`(直線的な動き)
     - この関数の代わりに、`Co::Ease()`の第4引数に指定することもできます。
-- `setEaseLinear()` -> `Co::EaseTaskBuilder<T>&`
-    - 値の補間に使用するイージング関数を線形補間(Linear、直線的な動き)に設定します。
 - `assigning(T*)` -> `Co::Task<void>`
     - 値の代入先の変数をポインタで指定し、イージングのタスクを生成します。
-    - タスクの実行中に変数が破棄されると未定義動作を引き起こすため、引数には必ずタスク実行よりも長いライフサイクルの変数のポインタを指定してください。
+    - 引数には必ずタスク実行よりも寿命が長い変数のポインタを指定してください。
 - `updating(std::function<void(T)>)` -> `Co::Task<void>`
     - 毎フレーム値を受け取って実行する関数を指定し、イージングのタスクを生成します。
 

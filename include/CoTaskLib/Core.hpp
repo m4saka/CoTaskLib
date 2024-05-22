@@ -223,7 +223,6 @@ inline namespace cotasklib
 				class BackendAddon : public IAddon
 				{
 				private:
-					bool m_isFirstUpdated = false;
 					std::unique_ptr<Backend> m_instance;
 
 				public:
@@ -247,18 +246,12 @@ inline namespace cotasklib
 
 					virtual bool update() override
 					{
-						m_isFirstUpdated = true;
 						m_instance->update();
 						return true;
 					}
 
 					virtual void draw() const override
 					{
-						if (!m_isFirstUpdated)
-						{
-							// Addonの初回drawがupdateより先に実行される挙動を回避
-							return;
-						}
 						m_instance->draw();
 					}
 
@@ -461,15 +454,8 @@ inline namespace cotasklib
 
 			template <typename TResult>
 			[[nodiscard]]
-			std::optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(TaskAwaiter<TResult>&& awaiter)
+			std::optional<AwaiterID> RegisterAwaiterIfNotDone(TaskAwaiter<TResult>&& awaiter)
 			{
-				if (awaiter.isFinished())
-				{
-					// 既に終了済み
-					return std::nullopt;
-				}
-
-				awaiter.resume();
 				if (awaiter.isFinished())
 				{
 					// フレーム待ちなしで終了した場合は登録不要
@@ -479,7 +465,7 @@ inline namespace cotasklib
 			}
 
 			template <typename TResult>
-			std::optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(const TaskAwaiter<TResult>& awaiter) = delete;
+			std::optional<AwaiterID> RegisterAwaiterIfNotDone(const TaskAwaiter<TResult>& awaiter) = delete;
 		}
 
 		class ScopedTaskRunner
@@ -490,7 +476,7 @@ inline namespace cotasklib
 		public:
 			template <typename TResult>
 			explicit ScopedTaskRunner(Task<TResult>&& task)
-				: m_lifetime(detail::ResumeAwaiterOnceAndRegisterIfNotDone(detail::TaskAwaiter<TResult>{ std::move(task) }))
+				: m_lifetime(detail::RegisterAwaiterIfNotDone(detail::TaskAwaiter<TResult>{ std::move(task) }))
 			{
 			}
 
@@ -917,7 +903,6 @@ inline namespace cotasklib
 				[[nodiscard]]
 				bool await_ready()
 				{
-					resume();
 					return m_task.isFinished();
 				}
 
@@ -962,7 +947,7 @@ inline namespace cotasklib
 				[[nodiscard]]
 				auto initial_suspend()
 				{
-					return std::suspend_always{};
+					return std::suspend_never{};
 				}
 
 				[[nodiscard]]

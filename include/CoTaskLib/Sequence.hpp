@@ -330,7 +330,7 @@ inline namespace cotasklib
 #endif
 
 		template <detail::SequenceConcept TSequence>
-		class [[nodiscard]] ScopedSequenceRunner
+		class [[nodiscard]] ScopedSequenceRunner : public detail::IScoped
 		{
 		public:
 			using result_type = typename TSequence::result_type;

@@ -322,7 +322,7 @@ inline namespace cotasklib
 #endif
 
 		template <detail::SceneConcept TScene>
-		class [[nodiscard]] ScopedSceneRunner
+		class [[nodiscard]] ScopedSceneRunner : public detail::IScoped
 		{
 		private:
 			ScopedTaskRunner m_runner;

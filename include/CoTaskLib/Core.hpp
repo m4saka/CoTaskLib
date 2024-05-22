@@ -468,7 +468,60 @@ inline namespace cotasklib
 			std::optional<AwaiterID> RegisterAwaiterIfNotDone(const TaskAwaiter<TResult>& awaiter) = delete;
 		}
 
-		class ScopedTaskRunner
+		class MultiScoped;
+
+		namespace detail
+		{
+			class IScoped
+			{
+			public:
+				IScoped() = default;
+				virtual ~IScoped() = default;
+				IScoped(const IScoped&) = delete;
+				IScoped& operator=(const IScoped&) = delete;
+				IScoped(IScoped&&) = default;
+				IScoped& operator=(IScoped&&) = default;
+
+				virtual void addTo(MultiScoped& ms) && = 0;
+			};
+		}
+
+		class MultiScoped
+		{
+		private:
+			std::vector<std::unique_ptr<detail::IScoped>> m_scopedInstances;
+
+		public:
+			MultiScoped() = default;
+
+			MultiScoped(const MultiScoped&) = delete;
+
+			MultiScoped& operator=(const MultiScoped&) = delete;
+
+			MultiScoped(MultiScoped&&) = default;
+
+			MultiScoped& operator=(MultiScoped&&) = default;
+
+			~MultiScoped() = default;
+
+			template <typename TScoped>
+			void add(TScoped&& runner) requires std::derived_from<TScoped, detail::IScoped>
+			{
+				m_scopedInstances.push_back(std::make_unique<TScoped>(std::forward<TScoped>(runner)));
+			}
+
+			void reserve(std::size_t size)
+			{
+				m_scopedInstances.reserve(size);
+			}
+
+			void clear()
+			{
+				m_scopedInstances.clear();
+			}
+		};
+
+		class ScopedTaskRunner : public detail::IScoped
 		{
 		private:
 			detail::ScopedTaskRunLifetime m_lifetime;
@@ -500,9 +553,14 @@ inline namespace cotasklib
 			{
 				m_lifetime.forget();
 			}
+
+			void addTo(MultiScoped& ms) && override
+			{
+				ms.add(std::move(*this));
+			}
 		};
 
-		class ScopedDrawer
+		class ScopedDrawer : public detail::IScoped
 		{
 		private:
 			std::optional<detail::DrawerID> m_id;
@@ -553,6 +611,11 @@ inline namespace cotasklib
 				{
 					detail::Backend::RemoveDrawer(*m_id);
 				}
+			}
+
+			void addTo(MultiScoped& ms)&& override
+			{
+				ms.add(std::move(*this));
 			}
 		};
 
@@ -860,6 +923,12 @@ inline namespace cotasklib
 			ScopedTaskRunner runScoped()&&
 			{
 				return ScopedTaskRunner{ std::move(*this) };
+			}
+
+			[[nodiscard]]
+			void runAddTo(MultiScoped& ms)&&
+			{
+				ms.add(ScopedTaskRunner{ std::move(*this) });
 			}
 		};
 
@@ -1249,7 +1318,7 @@ inline namespace cotasklib
 			}
 		}
 
-		class ScopedUpdater
+		class ScopedUpdater : public detail::IScoped
 		{
 		private:
 			ScopedTaskRunner m_runner;
@@ -1269,6 +1338,11 @@ inline namespace cotasklib
 			ScopedUpdater& operator=(ScopedUpdater&&) = default;
 
 			~ScopedUpdater() = default;
+
+			void addTo(MultiScoped& ms)&&
+			{
+				ms.add(std::move(m_runner));
+			}
 		};
 
 		template <typename TResult>

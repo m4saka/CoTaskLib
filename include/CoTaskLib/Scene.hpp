@@ -77,7 +77,7 @@ inline namespace cotasklib
 			bool m_isFadingOut = false;
 			bool m_isPostFadeOut = false;
 
-			std::optional<SceneFactory> m_nextSceneFactory = nullptr;
+			std::optional<SceneFactory> m_nextSceneFactory = std::nullopt;
 
 			[[nodiscard]]
 			Task<void> startAndFadeOut()
@@ -124,9 +124,9 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			const std::optional<SceneFactory>& requestedNextSceneFactory() const
+			bool isRequested() const
 			{
-				return m_nextSceneFactory;
+				return m_nextSceneFactory.has_value();
 			}
 
 		public:
@@ -279,7 +279,7 @@ inline namespace cotasklib
 			virtual Task<void> start() override final
 			{
 				// requestNextSceneかrequestSceneFinishが呼ばれるまでループ
-				while (!requestedNextSceneFactory().has_value())
+				while (!isRequested())
 				{
 					update();
 					co_await detail::Yield{};

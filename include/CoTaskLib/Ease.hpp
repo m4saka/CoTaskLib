@@ -89,7 +89,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			inline Task<void> TypewriterTask(const Duration duration, const String& text, std::function<void(const String&)> updateFunc)
+			inline Task<void> TypewriterTask(const Duration duration, const String text, std::function<void(const String&)> updateFunc)
 			{
 				if (duration.count() <= 0.0)
 				{

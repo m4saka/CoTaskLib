@@ -1597,57 +1597,62 @@ inline namespace cotasklib
 		}
 
 		template <class... TTasks>
-		auto All(TTasks&&... args) -> Task<std::tuple<detail::VoidResultTypeReplace<typename TTasks::result_type>...>>
+		concept AllTasksConcept = (std::is_same_v<TTasks, Task<typename TTasks::result_type>> && ...);
+
+		template <class... TTasks>
+		auto All(TTasks... args) -> Task<std::tuple<detail::VoidResultTypeReplace<typename TTasks::result_type>...>>
+			requires AllTasksConcept<TTasks...>
 		{
-			if constexpr ((!std::is_same_v<TTasks, Task<typename TTasks::result_type>> || ...))
+			if ((args.isFinished() && ...))
 			{
-				// TTasksの中にTaskでないものが1つでも含まれる場合は、ToTaskで変換して呼び出し直す
-				co_return co_await All(ToTask(std::forward<TTasks>(args))...);
+				co_return std::make_tuple(detail::ConvertVoidResult(args)...);
 			}
-			else
+
+			while (true)
 			{
+				(args.resume(), ...);
 				if ((args.isFinished() && ...))
 				{
 					co_return std::make_tuple(detail::ConvertVoidResult(args)...);
 				}
-
-				while (true)
-				{
-					(args.resume(), ...);
-					if ((args.isFinished() && ...))
-					{
-						co_return std::make_tuple(detail::ConvertVoidResult(args)...);
-					}
-					co_await detail::Yield{};
-				}
+				co_await detail::Yield{};
 			}
 		}
 
 		template <class... TTasks>
-		auto Any(TTasks&&... args) -> Task<std::tuple<Optional<detail::VoidResultTypeReplace<typename TTasks::result_type>>...>>
+		auto All(TTasks&&... args) -> Task<std::tuple<Optional<detail::VoidResultTypeReplace<typename TTasks::result_type>>...>>
+			requires (!AllTasksConcept<TTasks...>)
 		{
-			if constexpr ((!std::is_same_v<TTasks, Task<typename TTasks::result_type>> || ...))
+			// TTasksの中にTaskでないものが1つでも含まれる場合は、ToTaskで変換して呼び出し直す
+			return All(ToTask(std::forward<TTasks>(args))...);
+		}
+
+		template <class... TTasks>
+		auto Any(TTasks... args) -> Task<std::tuple<Optional<detail::VoidResultTypeReplace<typename TTasks::result_type>>...>>
+			requires AllTasksConcept<TTasks...>
+		{
+			if ((args.isFinished() || ...))
 			{
-				// TTasksの中にTaskでないものが1つでも含まれる場合は、ToTaskで変換して呼び出し直す
-				co_return co_await Any(ToTask(std::forward<TTasks>(args))...);
+				co_return std::make_tuple(detail::ConvertOptionalVoidResult(args)...);
 			}
-			else
+
+			while (true)
 			{
+				(args.resume(), ...);
 				if ((args.isFinished() || ...))
 				{
 					co_return std::make_tuple(detail::ConvertOptionalVoidResult(args)...);
 				}
-
-				while (true)
-				{
-					(args.resume(), ...);
-					if ((args.isFinished() || ...))
-					{
-						co_return std::make_tuple(detail::ConvertOptionalVoidResult(args)...);
-					}
-					co_await detail::Yield{};
-				}
+				co_await detail::Yield{};
 			}
+		}
+
+		template <class... TTasks>
+		auto Any(TTasks&&... args) -> Task<std::tuple<detail::VoidResultTypeReplace<typename TTasks::result_type>...>>
+			requires (!AllTasksConcept<TTasks...>)
+		{
+			// TTasksの中にTaskでないものが1つでも含まれる場合は、ToTaskで変換して呼び出し直す
+			return Any(ToTask(std::forward<TTasks>(args))...);
 		}
 	}
 }

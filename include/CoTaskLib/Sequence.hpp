@@ -53,10 +53,11 @@ inline namespace cotasklib
 			bool m_isPreStart = true;
 			bool m_isFadingIn = false;
 			bool m_isFadingOut = false;
+			bool m_isPostFadeOut = false;
 			std::optional<result_type_void_replaced> m_result;
 
 			[[nodiscard]]
-			Task<TResult> startAndFadeOut()
+			Task<void> startAndFadeOut()
 			{
 				if constexpr (std::is_void_v<TResult>)
 				{
@@ -64,15 +65,12 @@ inline namespace cotasklib
 					m_result.emplace();
 					m_isFadingOut = true;
 					co_await fadeOut();
-					co_return;
 				}
 				else
 				{
-					TResult result = co_await start();
-					m_result = result;
+					m_result = co_await start();
 					m_isFadingOut = true;
 					co_await fadeOut();
-					co_return result;
 				}
 			}
 
@@ -83,6 +81,11 @@ inline namespace cotasklib
 				if (m_isPreStart)
 				{
 					throw Error{ U"waitForFadeIn() must not be called in preStart()" };
+				}
+
+				if (m_isPostFadeOut)
+				{
+					throw Error{ U"waitForFadeIn() must not be called in postFadeOut()" };
 				}
 
 				while (m_isFadingIn)
@@ -146,6 +149,22 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
+			virtual Task<void> postFadeOut()
+			{
+				co_return;
+			}
+
+			virtual void postFadeOutDraw() const
+			{
+			}
+
+			[[nodiscard]]
+			virtual int32 postFadeOutDrawIndex() const
+			{
+				return 0;
+			}
+
+			[[nodiscard]]
 			bool isPreStart() const
 			{
 				return m_isPreStart;
@@ -164,6 +183,12 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
+			bool isPostFadeOut() const
+			{
+				return m_isPostFadeOut;
+			}
+
+			[[nodiscard]]
 			Task<TResult> asTask()&
 			{
 				if (m_onceRun)
@@ -174,15 +199,37 @@ inline namespace cotasklib
 				m_onceRun = true;
 
 				{
-					const ScopedDrawer drawer{ [this] { preStartDraw(); }, [this] { return preStartDrawIndex(); } };
+					ScopedDrawer drawer{ [this] { preStartDraw(); }, [this] { return preStartDrawIndex(); } };
 					co_await preStart();
 				}
+
 				m_isPreStart = false;
 				m_isFadingIn = true;
+
 				{
-					const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
-					co_return co_await startAndFadeOut()
+					ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
+					co_await startAndFadeOut()
 						.with(fadeIn().then([this] { m_isFadingIn = false; }));
+				}
+
+				m_isFadingOut = false;
+				m_isPostFadeOut = true;
+
+				{
+					ScopedDrawer drawer{ [this] { postFadeOutDraw(); }, [this] { return postFadeOutDrawIndex(); } };
+					co_await postFadeOut();
+				}
+
+				m_isPostFadeOut = false;
+
+				if constexpr (std::is_void_v<TResult>)
+				{
+					co_return;
+				}
+				else
+				{
+					// m_resultにはstartAndFadeOut内で結果が代入済みなのでそれを返す
+					co_return *m_result;
 				}
 			}
 

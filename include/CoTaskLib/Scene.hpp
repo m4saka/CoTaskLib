@@ -82,6 +82,7 @@ inline namespace cotasklib
 			bool m_isPreStart = true;
 			bool m_isFadingIn = false;
 			bool m_isFadingOut = false;
+			bool m_isPostFadeOut = false;
 
 			[[nodiscard]]
 			Task<SceneFactory> startAndFadeOut()
@@ -99,6 +100,11 @@ inline namespace cotasklib
 				if (m_isPreStart)
 				{
 					throw Error{ U"waitForFadeIn() must not be called in preStart()" };
+				}
+
+				if (m_isPostFadeOut)
+				{
+					throw Error{ U"waitForFadeIn() must not be called in postFadeOut()" };
 				}
 
 				while (m_isFadingIn)
@@ -145,6 +151,7 @@ inline namespace cotasklib
 			{
 			}
 
+			[[nodiscard]]
 			virtual int32 drawIndex() const
 			{
 				return 0;
@@ -160,6 +167,22 @@ inline namespace cotasklib
 			virtual Task<void> fadeOut()
 			{
 				co_return;
+			}
+
+			[[nodiscard]]
+			virtual Task<void> postFadeOut()
+			{
+				co_return;
+			}
+
+			virtual void postFadeOutDraw() const
+			{
+			}
+
+			[[nodiscard]]
+			virtual int32 postFadeOutDrawIndex() const
+			{
+				return 0;
 			}
 
 			[[nodiscard]]
@@ -188,13 +211,28 @@ inline namespace cotasklib
 					const ScopedDrawer drawer{ [this] { preStartDraw(); }, [this] { return preStartDrawIndex(); } };
 					co_await preStart();
 				}
+
 				m_isPreStart = false;
 				m_isFadingIn = true;
+
+				SceneFactory nextSceneFactory;
 				{
 					const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
-					co_return co_await startAndFadeOut()
+					nextSceneFactory = co_await startAndFadeOut()
 						.with(fadeIn().then([this] { m_isFadingIn = false; }));
 				}
+
+				m_isFadingOut = false;
+				m_isPostFadeOut = true;
+
+				{
+					const ScopedDrawer drawer{ [this] { postFadeOutDraw(); }, [this] { return postFadeOutDrawIndex(); } };
+					co_await postFadeOut();
+				}
+
+				m_isPostFadeOut = false;
+
+				co_return nextSceneFactory;
 			}
 
 			// 右辺値参照の場合はタスク実行中にthisがダングリングポインタになるため、使用しようとした場合はコンパイルエラーとする

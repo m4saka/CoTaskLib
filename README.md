@@ -7,8 +7,8 @@ C++20の`co_await`/`co_return`キーワードを利用して、複数フレー�
 コルーチンで実行するタスクのクラスです。結果の型をテンプレートパラメータ`TResult`で指定します。  
 結果を返す必要がない場合、`Co::Task<void>`を使用します。
 
+#### 戻り値がない場合の例:
 ```cpp
-// 戻り値がない場合の例
 Co::Task<void> ExampleTask()
 {
     // クリックされるまで待機
@@ -16,8 +16,10 @@ Co::Task<void> ExampleTask()
 
     Print << U"クリックされました！";
 }
+```
 
-// 戻り値がある場合の例
+#### 戻り値がある場合の例:
+```cpp
 Co::Task<String> ExampleTaskWithResult()
 {
     // クリックまたは右クリックされるまで待機
@@ -179,7 +181,7 @@ public:
 - `preStart()` -> `Co::Task<void>`
     - `start()`および`fadeIn()`より前に呼び出されるコルーチンです。
     - ローディング処理を複数フレームにわたって実行する場合など、フェードイン開始より前に何か処理を実行したい場合に使用します。
-    - Tips: コルーチンで実装する必要がない処理は、`preStart()`関数を使用せずシーケンスクラスのコンストラクタ内に処理を記述するのが良いでしょう。
+    - Tips: 変数の初期化等のコルーチンで実装する必要がない処理は、`preStart()`関数を使用せずシーケンスクラスのコンストラクタ内に処理を記述するのが良いでしょう。
 
 - `preStartDraw() const`
     - `preStart()`の実行中に毎フレーム呼び出される描画処理です。
@@ -191,11 +193,11 @@ public:
 ### シーケンスの実行方法
 
 #### 通常の関数内から実行開始する場合
-`Co::AsTask`関数を使用することで、シーケンスを生成した上でそれを実行する`Co::Task`を取得できます。これに対して通常通り、`runScoped`関数を使用します。  
-もしシーケンスクラスのコンストラクタに引数が必要な場合、`Co::AsTask`関数の引数として渡すことができます。
+`Co::Play`関数を使用することで、シーケンスを再生する`Co::Task`を取得できます。これに対して通常通り、`runScoped`関数を使用します。  
+もしシーケンスクラスのコンストラクタに引数が必要な場合、`Co::Play`関数の引数として渡すことができます。
 
 ```cpp
-const auto taskRunner = Co::AsTask<ExampleSequence>().runScoped();
+const auto taskRunner = Co::Play<ExampleSequence>().runScoped();
 ```
 
 上記の書き方では、シーケンスのインスタンスへ外部からアクセスすることはできません。  
@@ -217,30 +219,30 @@ const Co::ScopedSequenceRunner<ExampleSequence> sequenceRunner{};
 ```
 
 ### コルーチン内から実行する場合
-通常の関数の場合と同様に`Co::AsTask`関数で`Co::Task`を取得し、これに対して通常通り`co_await`を使用します。
+通常の関数での書き方と同様に`Co::Play`関数で`Co::Task`を取得し、これに対して通常通り`co_await`を使用します。
 
 ```cpp
 Co::Task<void> ExampleTask()
 {
-    co_await Co::AsTask<ExampleSequence>(); // ExampleSequenceを実行し、完了まで待機します
+    co_await Co::Play<ExampleSequence>(); // ExampleSequenceを実行し、完了まで待機します
 }
 ```
 
 上記の書き方では、シーケンスのインスタンスへ外部からアクセスすることはできません。  
-もしタスク実行中に外部からシーケンスのインスタンスへ操作が必要な場合は、下記のようにシーケンスから`Co::Task`を取得するための`asTask()`関数を使用して記述します。
+もしタスク実行中に外部からシーケンスのインスタンスへ操作が必要な場合は、下記のようにシーケンスのインスタンスを生成した上で`play()`関数を使用して`Co::Task`を取得し、それをco_awaitに渡します。
 
 ```cpp
 Co::Task<void> ExampleTask()
 {
     ExampleSequence exampleSequence{};
-    co_await exampleSequence.asTask();
+    co_await exampleSequence.play();
 
     // シーケンスクラスのインスタンスへ操作可能(※一例)
     exampleSequence.setText(U"テキスト");
 }
 ```
 
-なお、シーケンスクラスのインスタンスに対してタスクを実行できるのは1回のみです。同一インスタンスに対して複数回`asTask()`を呼び出してタスク実行することは許可されていません。2回目を実行しようとすると`s3d::Error`例外を送出します。
+なお、シーケンスクラスのインスタンスに対してタスクを実行できるのは1回のみです。同一インスタンスに対して複数回`play()`を呼び出してタスク実行することは許可されていません。2回目を実行しようとすると`s3d::Error`例外を送出します。
 
 ### 注意点
 シーケンス実行の際、シーケンスクラスの`start`関数を外部から直接呼び出すことは想定されていません。  
@@ -318,7 +320,7 @@ public:
 - `preStart()` -> `Co::Task<void>`
     - `update()`および`fadeIn()`より前に呼び出されるコルーチンです。
     - ローディング処理を複数フレームにわたって実行する場合など、フェードイン開始より前に何か処理を実行したい場合に使用します。
-    - Tips: コルーチンで実装する必要がない処理は、`preStart()`関数を使用せずシーケンスクラスのコンストラクタ内に処理を記述するのが良いでしょう。
+    - Tips: 変数の初期化等のコルーチンで実装する必要がない処理は、`preStart()`関数を使用せずシーケンスクラスのコンストラクタ内に処理を記述するのが良いでしょう。
 
 - `preStartDraw() const`
     - `preStart()`の実行中に毎フレーム呼び出される描画処理です。
@@ -357,7 +359,7 @@ void update() override
 class ExampleScene : public Co::SceneBase
 {
 public:
-    Co::Task<Co::SceneFactory> start() override
+    Co::Task<void> start() override
     {
         // ここに処理をコルーチンで記述
 
@@ -369,12 +371,13 @@ public:
         if (isEnter)
         {
             // Enterキーを押したらゲームシーンへ遷移
-            co_return Co::MakeSceneFactory<GameScene>();
+            requestNextScene<GameScene>();
+            co_return;
         }
         else
         {
             // Escキーを押したらシーン遷移を終了
-            co_return Co::SceneFinish();
+            co_return;
         }
     }
 
@@ -394,29 +397,14 @@ public:
         // 必要に応じて、フェードアウト処理をコルーチンで記述(startの完了後に実行される)
         co_await Co::ScreenFadeOut(1s, Palette::Black);
     }
-
-    Co::Task<void> preStart() override
-    {
-        // 必要に応じて、fadeIn・startより前に実行すべき処理(ローディングなど)があればコルーチンで記述
-        co_return;
-    }
 };
 ```
 
 ### 仮想関数
 下記の仮想関数をオーバーライドできます。`start()`のみ必須で、それ以外は必要な場合のみオーバーライドしてください。
 
-- `start()` -> `Co::Task<SceneFactory>`
+- `start()` -> `Co::Task<void>`
     - シーン開始時に実行されるコルーチンです。
-    - シーンは`start`関数の実行が終了したタイミングで終了し、次のシーンへ遷移します。
-    - 次のシーンは下記のいずれかで指定します。
-        - `co_return Co::MakeSceneFactory<TScene>(...)`
-            - シーンクラスを指定し、次のシーンを生成するための`SceneFactory`を返します。
-            - `TScene`には次のシーンのクラスを指定します。`TScene`は`Co::SceneBase`の派生クラスである必要があります。
-            - 引数には、`TScene`のコンストラクタの引数を指定します。
-                - 指定した引数はそれぞれコピーされます。引数にコピー構築できない型が含まれる場合、コンパイルエラーとなります。
-        - `co_return Co::SceneFinish()`
-            - シーンを完了し、次のシーンへ遷移しません。
 
 - `draw() const`
     - シーンの描画処理を記述します。
@@ -440,7 +428,7 @@ public:
 - `preStart()` -> `Co::Task<void>`
     - `start()`および`fadeIn()`より前に呼び出されるコルーチンです。
     - ローディング処理を複数フレームにわたって実行する場合など、フェードイン開始より前に何か処理を実行したい場合に使用します。
-    - Tips: コルーチンで実装する必要がない処理は、`preStart()`関数を使用せずシーンクラスのコンストラクタ内に処理を記述するのが良いでしょう。
+    - Tips: 変数の初期化等のコルーチンで実装する必要がない処理は、`preStart()`関数を使用せずシーンクラスのコンストラクタ内に処理を記述するのが良いでしょう。
 
 - `preStartDraw() const`
     - `preStart()`の実行中に毎フレーム呼び出される描画処理です。
@@ -450,30 +438,16 @@ public:
     - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番で描画されます。
 
 ### シーンの実行方法
-`Co::AsTask`関数を使用することで、シーンを生成した上でそれを実行する`Co::Task`を取得できます。これに対して通常通り、`runScoped`関数を使用します。  
-もしシーンクラスのコンストラクタに引数が必要な場合、`Co::AsTask`関数の引数として渡すことができます。
+`Co::EntryScene`関数を開始シーンの型を指定して呼び出すことで、最初のシーンから最後のシーンまでの一連の動作を実行する`Co::Task`を取得できます。これに対して通常通り、`runScoped`関数を使用します。  
+もし開始シーンのクラスのコンストラクタに引数が必要な場合、`Co::EntryScene`関数の引数として渡すことができます。
 
 全てのシーンが終了した場合にプログラムを終了するためには、下記のように`isFinished()`関数でタスクの完了を確認してwhileループを抜けます。
 
 ```cpp
-const auto taskRunner = Co::AsTask<ExampleScene>().runScoped();
+const auto taskRunner = Co::EntryScene<ExampleScene>().runScoped();
 while (System::Update())
 {
     if (taskRunner.isFinished())
-    {
-        break;
-    }
-}
-```
-
-なお、`Co::ScopedSceneRunner`クラスを使用して下記のようにも記述できます。  
-もしシーンクラスのコンストラクタに引数が必要な場合、`Co::ScopedSceneRunner`クラスのコンストラクタ引数として渡すことができます。
-
-```cpp
-const ScopedSceneRunner<ExampleScene> sceneRunner{};
-while (System::Update())
-{
-    if (sceneRunner.isFinished())
     {
         break;
     }
@@ -484,33 +458,41 @@ while (System::Update())
 
 下記の点が異なります。
 
-- CoTaskLibのシーン機能には、SceneManagerのようなマネージャークラスがありません。遷移先シーンのクラスは直接`Co::MakeSceneFactory`のテンプレート引数として指定するため、シーン名の登録などが必要ありません。
+- CoTaskLibのシーン機能には、SceneManagerのようなマネージャークラスがありません。遷移先シーンのクラスは直接`Co::EntryScene()`関数または`requestNextScene()`関数のテンプレート引数として指定するため、シーン名の登録などが必要ありません。
 - CoTaskLibでは、シーンクラスのコンストラクタに引数を持たせることができます。そのため、遷移元のシーンから必要なデータを受け渡すことができます。
     - Siv3D標準のシーン機能にある`getData()`のような、シーン間でグローバルにデータを受け渡すための機能は提供していません。代わりに、シーンクラスのコンストラクタに引数を用意して受け渡してください。
 - CoTaskLibのシーンクラスでは、毎フレーム実行されるupdate関数の代わりに、`start()`関数というコルーチン関数を実装します。
-    - update関数を使用したい場合、`SceneBase`クラスの代わりに`UpdaterSceneBase`クラスを基底クラスとして使用するか(詳細は後述)、`Co::ScopedUpdater updater{ [this] { update(); } };`のように記述して毎フレーム実行されるようにしてください。※`ScopedUpdater`/`ScopedDrawer`について加筆予定
+    - update関数を使用したい場合、`SceneBase`クラスの代わりに`UpdaterSceneBase`クラスを基底クラスとして使用するか(詳細は後述)、自前で`update()`関数を用意した上で`start()`関数内に`Co::ScopedUpdater updater{ [this] { update(); } };`のように記述して`update()`関数が毎フレーム実行されるようにするかのいずれかの方法を取ってください。※`ScopedUpdater`/`ScopedDrawer`について加筆予定
 
 ### 次のシーンの指定方法
 
-`start()`関数から、次のシーンへ遷移する場合は`Co::MakeSceneFactory<TScene>()`、次のシーンへ遷移せずにシーン実行のタスクを終了するには`Co::SceneFinish()`を返します。  
-`TScene`には次のシーンのクラスを指定します。`TScene`は`Co::SceneBase`の派生クラスである必要があります。  
-もしシーンクラスのコンストラクタに引数が必要な場合、`Co::MakeSceneFactory<TScene>()`関数の引数として渡すことができます。
+次のシーンへ遷移するには、基底クラスに実装されている`requestNextScene()`関数を実行します。  
+`requestNextScene()`関数は、`start()`関数をはじめ、それ以外のタイミングのコルーチン関数内やコンストラクタ内でも実行可能です。
+
+- `requestNextScene<TScene>(...)`関数
+    - シーンクラスを指定し、次のシーンへ遷移します。
+    - `TScene`には次のシーンのクラスを指定します。`TScene`は`Co::SceneBase`の派生クラスである必要があります。
+    - 引数には、`TScene`のコンストラクタの引数を指定します。
+        - 指定した引数はそれぞれコピーされます。引数にコピー構築できない型が含まれる場合、コンパイルエラーとなります。
 
 ```cpp
-Co::Task<Co::SceneFactory> start() override
+Co::Task<void> start() override
 {
     // ... (何らかの処理)
 
     switch (selectedMenuItem)
     {
     case MenuItem::Start:
-        co_return Co::MakeSceneFactory<GameScene>();
+        requestNextScene<GameScene>();
+        co_return;
     
     case MenuItem::Option:
-        co_return Co::MakeSceneFactory<OptionScene>();
+        requestNextScene<OptionScene>();
+        co_return;
 
     case MenuItem::Exit:
-        co_return Co::SceneFinish();
+        // 何も指定しなかった場合は最終シーンとして扱われる
+        co_return;
     }
 }
 ```
@@ -598,7 +580,7 @@ public:
 - `preStart()` -> `Co::Task<void>`
     - `update()`および`fadeIn()`より前に呼び出されるコルーチンです。
     - ローディング処理を複数フレームにわたって実行する場合など、フェードイン開始より前に何か処理を実行したい場合に使用します。
-    - Tips: コルーチンで実装する必要がない処理は、`preStart()`関数を使用せずシーンクラスのコンストラクタ内に処理を記述するのが良いでしょう。
+    - Tips: 変数の初期化等のコルーチンで実装する必要がない処理は、`preStart()`関数を使用せずシーンクラスのコンストラクタ内に処理を記述するのが良いでしょう。
 
 - `preStartDraw() const`
     - `preStart()`の実行中に毎フレーム呼び出される描画処理です。
@@ -610,6 +592,7 @@ public:
 
 ### シーンを完了するには
 シーンを終了して次のシーンへ遷移するには、基底クラスに実装されている下記のいずれかの関数を実行します。
+
 - `requestNextScene<TScene>(...)`関数
     - シーンクラスを指定し、次のシーンへ遷移します。
     - `TScene`には次のシーンのクラスを指定します。`TScene`は`Co::SceneBase`の派生クラスである必要があります。
@@ -617,6 +600,8 @@ public:
         - 指定した引数はそれぞれコピーされます。引数にコピー構築できない型が含まれる場合、コンパイルエラーとなります。
 - `requestSceneFinish()`関数
     - シーンを完了し、次のシーンへ遷移しません。
+
+これらの関数は、`update()`関数(またはコンストラクタ)内で呼び出されることが想定されています。それ以降のタイミング(`fadeOut()`関数等)で呼び出すことにより次シーンを上書きすることも可能ですが、その前提として`update()`のループ実行を終了させておく必要があるため、一度`update()`関数(またはコンストラクタ)内で呼び出しておく必要があります。
 
 ```cpp
 void update() override
@@ -639,8 +624,6 @@ void update() override
     }
 }
 ```
-
-結果の型(`TResult`)がvoid以外の場合は、`requestFinish()`関数のresult引数へ結果の値を渡します。
 
 ## イージング
 `Co::Ease<T>()`および`Co::LinearEase<T>()`関数を使うと、ある値からある値へ滑らかに値を推移させるタスクを実行できます。
@@ -792,21 +775,14 @@ public:
 - `Co::Any(TTasks&&...)` -> `Co::Task<std::tuple<Optional<...>>>`
     - いずれかの `Co::Task` が完了した時点で進行し、各`Co::Task`の結果が`Optional<T>`型の`std::tuple`で返されます。
     - `Co::Task`の結果が`void`型の場合、`Co::VoidResult`型(空の構造体)に置換して返されます。
-- `Co::MakeSceneFactory<TScene>(...)` -> `Co::Task<void>`
-    - シーンを生成するための情報を持つオブジェクトを生成します。
-    - `TScene`クラスは`Co::SceneBase`の派生クラスである必要があります。
-    - 引数には、`TScene`のコンストラクタの引数を指定します。
-    - シーンクラスの`start()`関数内で次のシーンを指定する際に使用します。
-- `Co::AsTask<TSequence>(...)` -> `Co::Task<TResult>`
+- `Co::Play<TSequence>(...)` -> `Co::Task<TResult>`
     - `TSequence`クラスのインスタンスを構築し、それを実行するタスクを返します。
     - `TSequence`クラスは`Co::SequenceBase<TResult>`の派生クラスである必要があります。
     - 引数には、`TSequence`のコンストラクタの引数を指定します。
-- `Co::AsTask<TScene>(...)` -> `Co::Task<void>`
-    - `TScene`クラスのインスタンスを構築し、それを実行するタスクを返します。
+- `Co::EntryScene<TScene>(...)` -> `Co::Task<void>`
+    - `TScene`クラスのインスタンスを構築し、それを開始シーンとした一連のシーン実行のタスクを返します。
     - `TScene`クラスは`Co::SceneBase`の派生クラスである必要があります。
     - 引数には、`TScene`のコンストラクタの引数を指定します。
-- `Co::AsTask(SceneFactory)` -> `Co::Task<void>`
-    - `SceneFactory`をもとにシーンのインスタンスを構築し、それを実行するタスクを返します。
 
 ## サンプル
 

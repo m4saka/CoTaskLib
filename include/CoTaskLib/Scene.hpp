@@ -219,7 +219,7 @@ inline namespace cotasklib
 
 			// ライブラリ内部で使用するためのタスク実行関数
 			[[nodiscard]]
-			Task<SceneFactory> asTaskInternal()&
+			Task<SceneFactory> playInternal()&
 			{
 				{
 					const ScopedDrawer drawer{ [this] { preStartDraw(); }, [this] { return preStartDrawIndex(); } };
@@ -256,7 +256,7 @@ inline namespace cotasklib
 			}
 
 			// 右辺値参照の場合はタスク実行中にthisがダングリングポインタになるため、使用しようとした場合はコンパイルエラーとする
-			Task<SceneFactory> asTaskInternal() && = delete;
+			Task<SceneFactory> playInternal() && = delete;
 		};
 
 		// 毎フレーム呼ばれるupdate関数を記述するタイプのシーン基底クラス
@@ -298,7 +298,7 @@ inline namespace cotasklib
 
 				while (true)
 				{
-					const SceneFactory nextSceneFactory = co_await currentScene->asTaskInternal();
+					const SceneFactory nextSceneFactory = co_await currentScene->playInternal();
 
 					// 次シーンがなければ抜ける
 					if (nextSceneFactory == nullptr)
@@ -329,12 +329,12 @@ inline namespace cotasklib
 
 		template <detail::SceneConcept TScene, class... Args>
 		[[nodiscard]]
-		Task<void> AsTask(Args&&... args)
+		Task<void> EntryScene(Args&&... args)
 		{
 			return detail::ScenePtrToTask(std::make_unique<TScene>(std::forward<Args>(args)...));
 		}
 
-		inline Task<void> AsTask(SceneFactory sceneFactory)
+		inline Task<void> EntryScene(SceneFactory sceneFactory)
 		{
 			auto scenePtr = sceneFactory();
 			return detail::ScenePtrToTask(std::move(scenePtr));
@@ -342,12 +342,12 @@ inline namespace cotasklib
 
 #ifdef __cpp_deleted_function_with_reason
 		template <detail::SceneConcept TScene>
-		auto operator co_await(TScene&& scene) = delete("To co_await a Scene, use Co::AsTask<TScene>() instead.");
+		auto operator co_await(TScene&& scene) = delete("To co_await a Scene, use Co::EntryScene<TScene>() instead.");
 
 		template <detail::SceneConcept TScene>
-		auto operator co_await(TScene& scene) = delete("To co_await a Scene, use Co::AsTask<TScene>() instead.");
+		auto operator co_await(TScene& scene) = delete("To co_await a Scene, use Co::EntryScene<TScene>() instead.");
 
-		auto operator co_await(SceneFactory sceneFactory) = delete("To co_await a Scene created by a SceneFactory, use Co::AsTask(SceneFactory) instead.");
+		auto operator co_await(SceneFactory sceneFactory) = delete("To co_await a Scene created by a SceneFactory, use Co::EntryScene(SceneFactory) instead.");
 #else
 		template <detail::SceneConcept TScene>
 		auto operator co_await(TScene&& scene) = delete;
@@ -367,7 +367,7 @@ inline namespace cotasklib
 		public:
 			template <typename... Args>
 			explicit ScopedSceneRunner(Args&&... args)
-				: m_runner(AsTask<TScene>(std::forward<Args>(args)...))
+				: m_runner(Play<TScene>(std::forward<Args>(args)...))
 			{
 			}
 

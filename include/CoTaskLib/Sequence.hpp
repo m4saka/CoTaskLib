@@ -189,12 +189,12 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			Task<TResult> asTask()&
+			Task<TResult> play()&
 			{
 				if (m_onceRun)
 				{
 					// 2回以上の実行は許可しないため例外を投げる
-					throw Error{ U"Cannot run the same Sequence multiple times" };
+					throw Error{ U"Cannot play the same Sequence multiple times" };
 				}
 				m_onceRun = true;
 
@@ -234,12 +234,12 @@ inline namespace cotasklib
 			}
 
 			// 右辺値参照の場合はタスク実行中にthisがダングリングポインタになるため、使用しようとした場合はコンパイルエラーとする
-			Task<TResult> asTask() && = delete;
+			Task<TResult> play() && = delete;
 
 			[[nodiscard]]
 			ScopedTaskRunner runScoped()&
 			{
-				return ScopedTaskRunner{ asTask() };
+				return ScopedTaskRunner{ play() };
 			}
 
 			[[nodiscard]]
@@ -273,7 +273,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			Task<TResult> SequencePtrToTask(std::unique_ptr<SequenceBase<TResult>> sequence)
 			{
-				co_return co_await sequence->asTask();
+				co_return co_await sequence->play();
 			}
 		}
 
@@ -287,7 +287,7 @@ inline namespace cotasklib
 
 		template <detail::SequenceConcept TSequence, class... Args>
 		[[nodiscard]]
-		Task<typename TSequence::result_type> AsTask(Args&&... args)
+		Task<typename TSequence::result_type> Play(Args&&... args)
 		{
 			std::unique_ptr<SequenceBase<typename TSequence::result_type>> sequence = std::make_unique<TSequence>(std::forward<Args>(args)...);
 			return detail::SequencePtrToTask(std::move(sequence));
@@ -364,10 +364,10 @@ inline namespace cotasklib
 
 #ifdef __cpp_deleted_function_with_reason
 		template <detail::SequenceConcept TSequence>
-		auto operator co_await(TSequence&& sequence) = delete("To co_await a Sequence, use Co::AsTask<TSequence>() instead.");
+		auto operator co_await(TSequence&& sequence) = delete("To co_await a Sequence, use Co::Play<TSequence>() instead.");
 
 		template <detail::SequenceConcept TSequence>
-		auto operator co_await(TSequence& sequence) = delete("To co_await a Sequence, use Co::AsTask<TSequence>() instead.");
+		auto operator co_await(TSequence& sequence) = delete("To co_await a Sequence, use Co::Play<TSequence>() instead.");
 #else
 		template <detail::SequenceConcept TSequence>
 		auto operator co_await(TSequence&& sequence) = delete;
@@ -391,7 +391,7 @@ inline namespace cotasklib
 		public:
 			template <typename... Args>
 			explicit ScopedSequenceRunner(Args&&... args)
-				: m_runner(AsTask<TSequence>(std::forward<Args>(args)...).then([this](const result_type_void_replaced& result) { m_taskFinishSource.requestFinish(result); }))
+				: m_runner(Play<TSequence>(std::forward<Args>(args)...).then([this](const result_type_void_replaced& result) { m_taskFinishSource.requestFinish(result); }))
 			{
 			}
 

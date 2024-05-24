@@ -69,13 +69,6 @@ inline namespace cotasklib
 			return [=] { return std::make_unique<TScene>(args...); };
 		}
 
-		[[nodiscard]]
-		inline SceneFactory SceneFinish()
-		{
-			// SceneFactoryがnullptrの場合はシーン遷移を終了する
-			return nullptr;
-		}
-
 		class [[nodiscard]] SceneBase
 		{
 		private:
@@ -84,13 +77,14 @@ inline namespace cotasklib
 			bool m_isFadingOut = false;
 			bool m_isPostFadeOut = false;
 
+			std::optional<SceneFactory> m_nextSceneFactory = nullptr;
+
 			[[nodiscard]]
-			Task<SceneFactory> startAndFadeOut()
+			Task<void> startAndFadeOut()
 			{
-				SceneFactory nextSceneFactory = co_await start();
+				co_await start();
 				m_isFadingOut = true;
 				co_await fadeOut();
-				co_return nextSceneFactory;
 			}
 
 		protected:
@@ -111,6 +105,28 @@ inline namespace cotasklib
 				{
 					co_await detail::Yield{};
 				}
+			}
+
+			template <class TScene, typename... Args>
+			void requestNextScene(Args&&... args)
+			{
+				m_nextSceneFactory = MakeSceneFactory<TScene>(std::forward<Args>(args)...);
+			}
+
+			void requestNextScene(SceneFactory sceneFactory)
+			{
+				m_nextSceneFactory = std::move(sceneFactory);
+			}
+
+			void requestSceneFinish()
+			{
+				m_nextSceneFactory = nullptr;
+			}
+
+			[[nodiscard]]
+			const std::optional<SceneFactory>& requestedNextSceneFactory() const
+			{
+				return m_nextSceneFactory;
 			}
 
 		public:
@@ -142,10 +158,8 @@ inline namespace cotasklib
 				return 0;
 			}
 
-			// 戻り値は次シーンのSceneFactoryをCo::MakeSceneFactory<TScene>()で作成して返す
-			// もしくは、Co::SceneFinish()を返してシーン遷移を終了する
 			[[nodiscard]]
-			virtual Task<SceneFactory> start() = 0;
+			virtual Task<void> start() = 0;
 
 			virtual void draw() const
 			{
@@ -215,10 +229,9 @@ inline namespace cotasklib
 				m_isPreStart = false;
 				m_isFadingIn = true;
 
-				SceneFactory nextSceneFactory;
 				{
 					const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
-					nextSceneFactory = co_await startAndFadeOut()
+					co_await startAndFadeOut()
 						.with(fadeIn().then([this] { m_isFadingIn = false; }));
 				}
 
@@ -232,7 +245,14 @@ inline namespace cotasklib
 
 				m_isPostFadeOut = false;
 
-				co_return nextSceneFactory;
+				if (m_nextSceneFactory.has_value())
+				{
+					co_return *m_nextSceneFactory;
+				}
+				else
+				{
+					co_return nullptr;
+				}
 			}
 
 			// 右辺値参照の場合はタスク実行中にthisがダングリングポインタになるため、使用しようとした場合はコンパイルエラーとする
@@ -242,26 +262,6 @@ inline namespace cotasklib
 		// 毎フレーム呼ばれるupdate関数を記述するタイプのシーン基底クラス
 		class [[nodiscard]] UpdaterSceneBase : public SceneBase
 		{
-		private:
-			std::optional<SceneFactory> m_nextSceneFactory;
-
-		protected:
-			template <class TScene, typename... Args>
-			void requestNextScene(Args&&... args)
-			{
-				m_nextSceneFactory = MakeSceneFactory<TScene>(std::forward<Args>(args)...);
-			}
-
-			void requestNextScene(SceneFactory sceneFactory)
-			{
-				m_nextSceneFactory = std::move(sceneFactory);
-			}
-
-			void requestSceneFinish()
-			{
-				m_nextSceneFactory = SceneFinish();
-			}
-
 		public:
 			UpdaterSceneBase() = default;
 
@@ -276,15 +276,14 @@ inline namespace cotasklib
 			virtual ~UpdaterSceneBase() = default;
 
 			[[nodiscard]]
-			virtual Task<SceneFactory> start() override final
+			virtual Task<void> start() override final
 			{
-				while (!m_nextSceneFactory.has_value())
+				// requestNextSceneかrequestSceneFinishが呼ばれるまでループ
+				while (!requestedNextSceneFactory().has_value())
 				{
 					update();
 					co_await detail::Yield{};
 				}
-
-				co_return std::move(*m_nextSceneFactory);
 			}
 
 			virtual void update() = 0;

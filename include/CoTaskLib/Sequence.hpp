@@ -237,13 +237,20 @@ inline namespace cotasklib
 			Task<TResult> play() && = delete;
 
 			[[nodiscard]]
-			ScopedTaskRunner runScoped()&
+			ScopedTaskRunner playScoped()&
 			{
 				return ScopedTaskRunner{ play() };
 			}
 
 			[[nodiscard]]
-			ScopedTaskRunner runScoped() && = delete;
+			ScopedTaskRunner playScoped() && = delete;
+
+			void playAddTo(MultiScoped& ms)&
+			{
+				play().runAddTo(ms);
+			}
+
+			void playAddTo(MultiScoped& ms) && = delete;
 
 			[[nodiscard]]
 			bool hasResult() const
@@ -275,14 +282,6 @@ inline namespace cotasklib
 			{
 				co_return co_await sequence->play();
 			}
-		}
-
-		template <detail::SequenceConcept TSequence>
-		[[nodiscard]]
-		Task<typename TSequence::result_type> ToTask(TSequence&& sequence)
-		{
-			std::unique_ptr<SequenceBase<typename TSequence::result_type>> sequence = std::make_unique<TSequence>(std::move(sequence));
-			return detail::SequencePtrToTask(std::move(sequence));
 		}
 
 		template <detail::SequenceConcept TSequence, class... Args>
@@ -377,7 +376,7 @@ inline namespace cotasklib
 #endif
 
 		template <detail::SequenceConcept TSequence>
-		class [[nodiscard]] ScopedSequenceRunner : public detail::IScoped
+		class [[nodiscard]] ScopedSequencePlayer : public detail::IScoped
 		{
 		public:
 			using result_type = typename TSequence::result_type;
@@ -390,26 +389,26 @@ inline namespace cotasklib
 
 		public:
 			template <typename... Args>
-			explicit ScopedSequenceRunner(Args&&... args) requires !std::is_void_v<result_type>
+			explicit ScopedSequencePlayer(Args&&... args) requires !std::is_void_v<result_type>
 				: m_runner(Play<TSequence>(std::forward<Args>(args)...).then([this](const result_type& result) { m_taskFinishSource.requestFinish(result); }))
 			{
 			}
 
 			template <typename... Args>
-			explicit ScopedSequenceRunner(Args&&... args) requires std::is_void_v<result_type>
+			explicit ScopedSequencePlayer(Args&&... args) requires std::is_void_v<result_type>
 				: m_runner(Play<TSequence>(std::forward<Args>(args)...).then([this] { m_taskFinishSource.requestFinish(); }))
 			{
 			}
 
-			ScopedSequenceRunner(const ScopedSequenceRunner&) = delete;
+			ScopedSequencePlayer(const ScopedSequencePlayer&) = delete;
 
-			ScopedSequenceRunner& operator=(const ScopedSequenceRunner&) = delete;
+			ScopedSequencePlayer& operator=(const ScopedSequencePlayer&) = delete;
 
-			ScopedSequenceRunner(ScopedSequenceRunner&&) = default;
+			ScopedSequencePlayer(ScopedSequencePlayer&&) = default;
 
-			ScopedSequenceRunner& operator=(ScopedSequenceRunner&&) = default;
+			ScopedSequencePlayer& operator=(ScopedSequencePlayer&&) = default;
 
-			~ScopedSequenceRunner() = default;
+			~ScopedSequencePlayer() = default;
 
 			[[nodiscard]]
 			bool isFinished() const

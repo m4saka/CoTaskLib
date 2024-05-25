@@ -320,13 +320,6 @@ inline namespace cotasklib
 			}
 		}
 
-		template <detail::SceneConcept TScene>
-		[[nodiscard]]
-		Task<void> ToTask(TScene&& scene)
-		{
-			return detail::ScenePtrToTask(std::make_unique<TScene>(std::move(scene)));
-		}
-
 		template <detail::SceneConcept TScene, class... Args>
 		[[nodiscard]]
 		Task<void> EntryScene(Args&&... args)
@@ -357,45 +350,5 @@ inline namespace cotasklib
 
 		auto operator co_await(SceneFactory sceneFactory) = delete;
 #endif
-
-		template <detail::SceneConcept TScene>
-		class [[nodiscard]] ScopedSceneRunner : public detail::IScoped
-		{
-		private:
-			ScopedTaskRunner m_runner;
-
-		public:
-			template <typename... Args>
-			explicit ScopedSceneRunner(Args&&... args)
-				: m_runner(EntryScene<TScene>(std::forward<Args>(args)...))
-			{
-			}
-
-			ScopedSceneRunner(const ScopedSceneRunner&) = delete;
-
-			ScopedSceneRunner& operator=(const ScopedSceneRunner&) = delete;
-
-			ScopedSceneRunner(ScopedSceneRunner&&) = default;
-
-			ScopedSceneRunner& operator=(ScopedSceneRunner&&) = default;
-
-			~ScopedSceneRunner() = default;
-
-			[[nodiscard]]
-			bool isFinished() const
-			{
-				return m_runner.isFinished();
-			}
-
-			void forget()
-			{
-				m_runner.forget();
-			}
-
-			void addTo(MultiScoped& ms) && override
-			{
-				ms.add(std::move(*this));
-			}
-		};
 	}
 }

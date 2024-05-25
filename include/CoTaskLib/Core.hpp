@@ -1585,23 +1585,15 @@ inline namespace cotasklib
 				}
 			}
 
+			template <typename TTask>
+			concept TaskConcept = std::is_same_v<TTask, Task<typename TTask::result_type>>;
+
 			template <typename TScene>
 			concept SceneConcept = std::derived_from<TScene, SceneBase>;
 		}
 
-		template <typename TResult>
-		[[nodiscard]]
-		Task<TResult> ToTask(Task<TResult>&& task)
-		{
-			return task;
-		}
-
-		template <class... TTasks>
-		concept AllTasksConcept = (std::is_same_v<TTasks, Task<typename TTasks::result_type>> && ...);
-
-		template <class... TTasks>
+		template <detail::TaskConcept... TTasks>
 		auto All(TTasks... args) -> Task<std::tuple<detail::VoidResultTypeReplace<typename TTasks::result_type>...>>
-			requires AllTasksConcept<TTasks...>
 		{
 			if ((args.isFinished() && ...))
 			{
@@ -1619,17 +1611,8 @@ inline namespace cotasklib
 			}
 		}
 
-		template <class... TTasks>
-		auto All(TTasks&&... args) -> Task<std::tuple<Optional<detail::VoidResultTypeReplace<typename TTasks::result_type>>...>>
-			requires (!AllTasksConcept<TTasks...>)
-		{
-			// TTasksの中にTaskでないものが1つでも含まれる場合は、ToTaskで変換して呼び出し直す
-			return All(ToTask(std::forward<TTasks>(args))...);
-		}
-
-		template <class... TTasks>
+		template <detail::TaskConcept... TTasks>
 		auto Any(TTasks... args) -> Task<std::tuple<Optional<detail::VoidResultTypeReplace<typename TTasks::result_type>>...>>
-			requires AllTasksConcept<TTasks...>
 		{
 			if ((args.isFinished() || ...))
 			{
@@ -1645,14 +1628,6 @@ inline namespace cotasklib
 				}
 				co_await detail::Yield{};
 			}
-		}
-
-		template <class... TTasks>
-		auto Any(TTasks&&... args) -> Task<std::tuple<detail::VoidResultTypeReplace<typename TTasks::result_type>...>>
-			requires (!AllTasksConcept<TTasks...>)
-		{
-			// TTasksの中にTaskでないものが1つでも含まれる場合は、ToTaskで変換して呼び出し直す
-			return Any(ToTask(std::forward<TTasks>(args))...);
 		}
 	}
 }

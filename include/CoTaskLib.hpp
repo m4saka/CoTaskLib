@@ -30,5 +30,6 @@
 #include "CoTaskLib/Core.hpp"
 #include "CoTaskLib/Scene.hpp"
 #include "CoTaskLib/Ease.hpp"
+#include "CoTaskLib/Tween.hpp"
 #include "CoTaskLib/Sequence.hpp"
 #include "CoTaskLib/ScreenFade.hpp"

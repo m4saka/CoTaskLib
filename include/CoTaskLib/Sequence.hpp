@@ -76,38 +76,6 @@ inline namespace cotasklib
 
 		protected:
 			[[nodiscard]]
-			Task<void> waitForFadeIn()
-			{
-				if (m_isPreStart)
-				{
-					throw Error{ U"waitForFadeIn() must not be called in preStart()" };
-				}
-
-				if (m_isPostFadeOut)
-				{
-					throw Error{ U"waitForFadeIn() must not be called in postFadeOut()" };
-				}
-
-				while (m_isFadingIn)
-				{
-					co_await detail::Yield{};
-				}
-			}
-
-		public:
-			SequenceBase() = default;
-
-			SequenceBase(const SequenceBase&) = delete;
-
-			SequenceBase& operator=(const SequenceBase&) = delete;
-
-			SequenceBase(SequenceBase&&) = default;
-
-			SequenceBase& operator=(SequenceBase&&) = default;
-
-			virtual ~SequenceBase() = default;
-
-			[[nodiscard]]
 			virtual Task<void> preStart()
 			{
 				co_return;
@@ -163,6 +131,38 @@ inline namespace cotasklib
 			{
 				return 0;
 			}
+
+			[[nodiscard]]
+			Task<void> waitForFadeIn()
+			{
+				if (m_isPreStart)
+				{
+					throw Error{ U"waitForFadeIn() must not be called in preStart()" };
+				}
+
+				if (m_isPostFadeOut)
+				{
+					throw Error{ U"waitForFadeIn() must not be called in postFadeOut()" };
+				}
+
+				while (m_isFadingIn)
+				{
+					co_await detail::Yield{};
+				}
+			}
+
+		public:
+			SequenceBase() = default;
+
+			SequenceBase(const SequenceBase&) = delete;
+
+			SequenceBase& operator=(const SequenceBase&) = delete;
+
+			SequenceBase(SequenceBase&&) = default;
+
+			SequenceBase& operator=(SequenceBase&&) = default;
+
+			virtual ~SequenceBase() = default;
 
 			[[nodiscard]]
 			bool isPreStart() const

@@ -89,60 +89,6 @@ inline namespace cotasklib
 
 		protected:
 			[[nodiscard]]
-			Task<void> waitForFadeIn()
-			{
-				if (m_isPreStart)
-				{
-					throw Error{ U"waitForFadeIn() must not be called in preStart()" };
-				}
-
-				if (m_isPostFadeOut)
-				{
-					throw Error{ U"waitForFadeIn() must not be called in postFadeOut()" };
-				}
-
-				while (m_isFadingIn)
-				{
-					co_await detail::Yield{};
-				}
-			}
-
-			template <class TScene, typename... Args>
-			void requestNextScene(Args&&... args)
-			{
-				m_nextSceneFactory = MakeSceneFactory<TScene>(std::forward<Args>(args)...);
-			}
-
-			void requestNextScene(SceneFactory sceneFactory)
-			{
-				m_nextSceneFactory = std::move(sceneFactory);
-			}
-
-			void requestSceneFinish()
-			{
-				m_nextSceneFactory = nullptr;
-			}
-
-			[[nodiscard]]
-			bool isRequested() const
-			{
-				return m_nextSceneFactory.has_value();
-			}
-
-		public:
-			SceneBase() = default;
-
-			SceneBase(const SceneBase&) = delete;
-
-			SceneBase& operator=(const SceneBase&) = delete;
-
-			SceneBase(SceneBase&&) = default;
-
-			SceneBase& operator=(SceneBase&&) = default;
-
-			virtual ~SceneBase() = default;
-
-			[[nodiscard]]
 			virtual Task<void> preStart()
 			{
 				co_return;
@@ -198,6 +144,60 @@ inline namespace cotasklib
 			{
 				return 0;
 			}
+
+			[[nodiscard]]
+			Task<void> waitForFadeIn()
+			{
+				if (m_isPreStart)
+				{
+					throw Error{ U"waitForFadeIn() must not be called in preStart()" };
+				}
+
+				if (m_isPostFadeOut)
+				{
+					throw Error{ U"waitForFadeIn() must not be called in postFadeOut()" };
+				}
+
+				while (m_isFadingIn)
+				{
+					co_await detail::Yield{};
+				}
+			}
+
+			template <class TScene, typename... Args>
+			void requestNextScene(Args&&... args)
+			{
+				m_nextSceneFactory = MakeSceneFactory<TScene>(std::forward<Args>(args)...);
+			}
+
+			void requestNextScene(SceneFactory sceneFactory)
+			{
+				m_nextSceneFactory = std::move(sceneFactory);
+			}
+
+			void requestSceneFinish()
+			{
+				m_nextSceneFactory = nullptr;
+			}
+
+			[[nodiscard]]
+			bool isRequested() const
+			{
+				return m_nextSceneFactory.has_value();
+			}
+
+		public:
+			SceneBase() = default;
+
+			SceneBase(const SceneBase&) = delete;
+
+			SceneBase& operator=(const SceneBase&) = delete;
+
+			SceneBase(SceneBase&&) = default;
+
+			SceneBase& operator=(SceneBase&&) = default;
+
+			virtual ~SceneBase() = default;
 
 			[[nodiscard]]
 			bool isPreStart() const

@@ -1,4 +1,4 @@
-﻿//----------------------------------------------------------------------------------------
+﻿	//----------------------------------------------------------------------------------------
 //
 //  CoTaskLib
 //
@@ -264,7 +264,7 @@ inline namespace cotasklib
 
 				AwaiterID m_nextAwaiterID = 1;
 
-				std::optional<AwaiterID> m_currentAwaiterID = std::nullopt;
+				Optional<AwaiterID> m_currentAwaiterID = none;
 
 				bool m_currentAwaiterRemovalNeeded = false;
 
@@ -400,10 +400,10 @@ inline namespace cotasklib
 			class ScopedTaskRunLifetime
 			{
 			private:
-				std::optional<AwaiterID> m_id;
+				Optional<AwaiterID> m_id;
 
 			public:
-				explicit ScopedTaskRunLifetime(const std::optional<AwaiterID>& id)
+				explicit ScopedTaskRunLifetime(const Optional<AwaiterID>& id)
 					: m_id(id)
 				{
 				}
@@ -454,18 +454,18 @@ inline namespace cotasklib
 
 			template <typename TResult>
 			[[nodiscard]]
-			std::optional<AwaiterID> RegisterAwaiterIfNotDone(TaskAwaiter<TResult>&& awaiter)
+			Optional<AwaiterID> RegisterAwaiterIfNotDone(TaskAwaiter<TResult>&& awaiter)
 			{
 				if (awaiter.isFinished())
 				{
 					// フレーム待ちなしで終了した場合は登録不要
-					return std::nullopt;
+					return none;
 				}
 				return Backend::Add(std::make_unique<TaskAwaiter<TResult>>(std::move(awaiter)));
 			}
 
 			template <typename TResult>
-			std::optional<AwaiterID> RegisterAwaiterIfNotDone(const TaskAwaiter<TResult>& awaiter) = delete;
+			Optional<AwaiterID> RegisterAwaiterIfNotDone(const TaskAwaiter<TResult>& awaiter) = delete;
 		}
 
 		class MultiScoped;
@@ -563,7 +563,7 @@ inline namespace cotasklib
 		class ScopedDrawer : public detail::IScoped
 		{
 		private:
-			std::optional<detail::DrawerID> m_id;
+			Optional<detail::DrawerID> m_id;
 
 		public:
 			ScopedDrawer(std::function<void()> func)
@@ -1073,7 +1073,7 @@ inline namespace cotasklib
 				static_assert(!std::is_const_v<TResult>, "TResult must not have 'const' qualifier");
 
 			private:
-				std::optional<TResult> m_value;
+				Optional<TResult> m_value;
 
 			public:
 				Promise() = default;
@@ -1156,7 +1156,7 @@ inline namespace cotasklib
 			static_assert(!std::is_const_v<TResult>, "TResult must not have 'const' qualifier");
 
 		private:
-			std::optional<TResult> m_result;
+			Optional<TResult> m_result;
 
 		public:
 			TaskFinishSource() = default;
@@ -1210,7 +1210,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			const std::optional<TResult>& resultOpt() const
+			const Optional<TResult>& resultOpt() const
 			{
 				return m_result;
 			}
@@ -1220,7 +1220,7 @@ inline namespace cotasklib
 		class [[nodiscard]] TaskFinishSource<void>
 		{
 		private:
-			std::optional<VoidResult> m_result;
+			Optional<VoidResult> m_result;
 
 		public:
 			TaskFinishSource() = default;
@@ -1268,7 +1268,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			const std::optional<VoidResult>& resultOpt() const
+			const Optional<VoidResult>& resultOpt() const
 			{
 				return m_result;
 			}

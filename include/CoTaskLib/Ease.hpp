@@ -98,7 +98,7 @@ inline namespace cotasklib
 					co_return;
 				}
 
-				std::optional<std::size_t> prevLength = std::nullopt;
+				Optional<std::size_t> prevLength = none;
 				const Timer timer{ duration, StartImmediately::Yes };
 				while (!timer.reachedZero())
 				{

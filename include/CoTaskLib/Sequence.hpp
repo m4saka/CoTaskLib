@@ -54,7 +54,7 @@ inline namespace cotasklib
 			bool m_isFadingIn = false;
 			bool m_isFadingOut = false;
 			bool m_isPostFadeOut = false;
-			std::optional<result_type_void_replaced> m_result;
+			Optional<result_type_void_replaced> m_result;
 
 			[[nodiscard]]
 			Task<void> startAndFadeOut()
@@ -258,7 +258,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			const std::optional<result_type_void_replaced>& resultOpt() const
+			const Optional<result_type_void_replaced>& resultOpt() const
 			{
 				return m_result;
 			}
@@ -298,7 +298,7 @@ inline namespace cotasklib
 		class [[nodiscard]] UpdaterSequenceBase : public SequenceBase<TResult>
 		{
 		private:
-			std::optional<TResult> m_result;
+			Optional<TResult> m_result;
 
 		protected:
 			void finish(const TResult& result)
@@ -390,8 +390,14 @@ inline namespace cotasklib
 
 		public:
 			template <typename... Args>
-			explicit ScopedSequenceRunner(Args&&... args)
-				: m_runner(Play<TSequence>(std::forward<Args>(args)...).then([this](const result_type_void_replaced& result) { m_taskFinishSource.requestFinish(result); }))
+			explicit ScopedSequenceRunner(Args&&... args) requires !std::is_void_v<result_type>
+				: m_runner(Play<TSequence>(std::forward<Args>(args)...).then([this](const result_type& result) { m_taskFinishSource.requestFinish(result); }))
+			{
+			}
+
+			template <typename... Args>
+			explicit ScopedSequenceRunner(Args&&... args) requires std::is_void_v<result_type>
+				: m_runner(Play<TSequence>(std::forward<Args>(args)...).then([this] { m_taskFinishSource.requestFinish(); }))
 			{
 			}
 
@@ -429,7 +435,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			const std::optional<result_type_void_replaced>& resultOpt() const
+			const Optional<result_type_void_replaced>& resultOpt() const
 			{
 				return m_taskFinishSource.resultOpt();
 			}
@@ -438,6 +444,11 @@ inline namespace cotasklib
 			Task<result_type_void_replaced> waitForFinish() const
 			{
 				return m_taskFinishSource.waitForFinish();
+			}
+
+			void addTo(MultiScoped& ms) && override
+			{
+				ms.add(std::move(*this));
 			}
 		};
 	}

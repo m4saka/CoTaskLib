@@ -77,7 +77,7 @@ inline namespace cotasklib
 			bool m_isFadingOut = false;
 			bool m_isPostFadeOut = false;
 
-			std::optional<SceneFactory> m_nextSceneFactory = std::nullopt;
+			Optional<SceneFactory> m_nextSceneFactory = none;
 
 			[[nodiscard]]
 			Task<void> startAndFadeOut()
@@ -367,7 +367,7 @@ inline namespace cotasklib
 		public:
 			template <typename... Args>
 			explicit ScopedSceneRunner(Args&&... args)
-				: m_runner(Play<TScene>(std::forward<Args>(args)...))
+				: m_runner(EntryScene<TScene>(std::forward<Args>(args)...))
 			{
 			}
 
@@ -390,6 +390,11 @@ inline namespace cotasklib
 			void forget()
 			{
 				m_runner.forget();
+			}
+
+			void addTo(MultiScoped& ms) && override
+			{
+				ms.add(std::move(*this));
 			}
 		};
 	}

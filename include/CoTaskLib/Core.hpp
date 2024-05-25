@@ -53,7 +53,7 @@ inline namespace cotasklib
 			struct AwaiterEntry
 			{
 				std::unique_ptr<IAwaiter> awaiter;
-				std::function<void(IAwaiter*)> finishCallback;
+				std::function<void(const IAwaiter*)> finishCallback;
 				std::function<void()> cancelCallback;
 
 				void callEndCallback() const
@@ -363,18 +363,22 @@ inline namespace cotasklib
 						throw Error{ U"Backend is not initialized" };
 					}
 					const AwaiterID id = s_pInstance->m_nextAwaiterID++;
-					auto finishCallbackTypeErased = [finishCallback = std::move(finishCallback)]([[maybe_unused]] IAwaiter* awaiter)
-						{
-							if constexpr (std::is_void_v<TResult>)
+					std::function<void(const IAwaiter*)> finishCallbackTypeErased = nullptr;
+					if (finishCallback)
+					{
+						finishCallbackTypeErased = [finishCallback = std::move(finishCallback)]([[maybe_unused]] const IAwaiter* awaiter)
 							{
-								finishCallback();
-							}
-							else
-							{
-								// awaiterの型がTaskAwaiter<TResult>であることは保証されるため、static_castでキャストして問題ない
-								finishCallback(static_cast<TaskAwaiter<TResult>*>(awaiter)->value());
-							}
-						};
+								if constexpr (std::is_void_v<TResult>)
+								{
+									finishCallback();
+								}
+								else
+								{
+									// awaiterの型がTaskAwaiter<TResult>であることは保証されるため、static_castでキャストして問題ない
+									finishCallback(static_cast<const TaskAwaiter<TResult>*>(awaiter)->value());
+								}
+							};
+					}
 					s_pInstance->m_awaiterEntries.emplace(id,
 						AwaiterEntry
 						{

@@ -47,6 +47,7 @@ inline namespace cotasklib
 		public:
 			using result_type = TResult;
 			using result_type_void_replaced = detail::VoidResultTypeReplace<TResult>;
+			using finish_callback_type = FinishCallbackType<TResult>;
 
 		private:
 			bool m_onceRun = false;
@@ -65,13 +66,23 @@ inline namespace cotasklib
 					m_result.emplace();
 					m_isFadingOut = true;
 					co_await fadeOut();
+					m_isFadingOut = false;
 				}
 				else
 				{
 					m_result = co_await start();
 					m_isFadingOut = true;
 					co_await fadeOut();
+					m_isFadingOut = false;
 				}
+			}
+
+			[[nodiscard]]
+			Task<void> fadeInInternal()
+			{
+				m_isFadingIn = true;
+				co_await fadeIn();
+				m_isFadingIn = false;
 			}
 
 		protected:
@@ -199,28 +210,26 @@ inline namespace cotasklib
 				m_onceRun = true;
 
 				{
-					ScopedDrawer drawer{ [this] { preStartDraw(); }, [this] { return preStartDrawIndex(); } };
+					const ScopedDrawer drawer{ [this] { preStartDraw(); }, [this] { return preStartDrawIndex(); } };
+					m_isPreStart = true;
 					co_await preStart();
+					m_isPreStart = false;
 				}
 
-				m_isPreStart = false;
-				m_isFadingIn = true;
-
 				{
-					ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
-					co_await startAndFadeOut()
-						.with(fadeIn().then([this] { m_isFadingIn = false; }));
+					const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
+
+					// start内の先頭でwaitForFadeInを呼んだ場合に正常に待てるよう、先にfadeInTaskを生成して初回resumeでm_isFadingInをtrueにしている点に注意
+					auto fadeInTask = fadeInInternal();
+					co_await startAndFadeOut().with(std::move(fadeInTask), WithTiming::Before);
 				}
 
-				m_isFadingOut = false;
-				m_isPostFadeOut = true;
-
 				{
-					ScopedDrawer drawer{ [this] { postFadeOutDraw(); }, [this] { return postFadeOutDrawIndex(); } };
+					const ScopedDrawer drawer{ [this] { postFadeOutDraw(); }, [this] { return postFadeOutDrawIndex(); } };
+					m_isPostFadeOut = true;
 					co_await postFadeOut();
+					m_isPostFadeOut = false;
 				}
-
-				m_isPostFadeOut = false;
 
 				if constexpr (std::is_void_v<TResult>)
 				{
@@ -239,18 +248,50 @@ inline namespace cotasklib
 			[[nodiscard]]
 			ScopedTaskRunner playScoped()&
 			{
-				return ScopedTaskRunner{ play() };
+				return play().runScoped();
+			}
+
+			[[nodiscard]]
+			ScopedTaskRunner playScoped(FinishCallbackType<TResult> finishCallback)&
+			{
+				return play().runScoped(std::move(finishCallback));
+			}
+
+			[[nodiscard]]
+			ScopedTaskRunner playScoped(FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)&
+			{
+				return play().runScoped(std::move(finishCallback), std::move(cancelCallback));
 			}
 
 			[[nodiscard]]
 			ScopedTaskRunner playScoped() && = delete;
+
+			[[nodiscard]]
+			ScopedTaskRunner playScoped(FinishCallbackType<TResult> finishCallback) && = delete;
+
+			[[nodiscard]]
+			ScopedTaskRunner playScoped(FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback) && = delete;
 
 			void playAddTo(MultiScoped& ms)&
 			{
 				play().runAddTo(ms);
 			}
 
+			void playAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback)&
+			{
+				play().runAddTo(ms, std::move(finishCallback));
+			}
+
+			void playAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)&
+			{
+				play().runAddTo(ms, std::move(finishCallback), std::move(cancelCallback));
+			}
+
 			void playAddTo(MultiScoped& ms) && = delete;
+
+			void playAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback) && = delete;
+
+			void playAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback) && = delete;
 
 			[[nodiscard]]
 			bool hasResult() const
@@ -390,13 +431,13 @@ inline namespace cotasklib
 		public:
 			template <typename... Args>
 			explicit ScopedSequencePlayer(Args&&... args) requires !std::is_void_v<result_type>
-				: m_runner(Play<TSequence>(std::forward<Args>(args)...).then([this](const result_type& result) { m_taskFinishSource.requestFinish(result); }))
+				: m_runner(Play<TSequence>(std::forward<Args>(args)...).runScoped([this](const result_type& result) { m_taskFinishSource.requestFinish(result); }))
 			{
 			}
 
 			template <typename... Args>
 			explicit ScopedSequencePlayer(Args&&... args) requires std::is_void_v<result_type>
-				: m_runner(Play<TSequence>(std::forward<Args>(args)...).then([this] { m_taskFinishSource.requestFinish(); }))
+				: m_runner(Play<TSequence>(std::forward<Args>(args)...).runScoped([this] { m_taskFinishSource.requestFinish(); }))
 			{
 			}
 

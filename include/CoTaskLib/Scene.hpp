@@ -85,6 +85,15 @@ inline namespace cotasklib
 				co_await start();
 				m_isFadingOut = true;
 				co_await fadeOut();
+				m_isFadingOut = false;
+			}
+
+			[[nodiscard]]
+			Task<void> fadeInInternal()
+			{
+				m_isFadingIn = true;
+				co_await fadeIn();
+				m_isFadingIn = false;
 			}
 
 		protected:
@@ -223,27 +232,25 @@ inline namespace cotasklib
 			{
 				{
 					const ScopedDrawer drawer{ [this] { preStartDraw(); }, [this] { return preStartDrawIndex(); } };
+					m_isPreStart = true;
 					co_await preStart();
+					m_isPreStart = false;
 				}
-
-				m_isPreStart = false;
-				m_isFadingIn = true;
 
 				{
 					const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
-					co_await startAndFadeOut()
-						.with(fadeIn().then([this] { m_isFadingIn = false; }));
-				}
 
-				m_isFadingOut = false;
-				m_isPostFadeOut = true;
+					// start内の先頭でwaitForFadeInを呼んだ場合に正常に待てるよう、先にfadeInTaskを生成して初回resumeでm_isFadingInをtrueにしている点に注意
+					auto fadeInTask = fadeInInternal();
+					co_await startAndFadeOut().with(std::move(fadeInTask), WithTiming::Before);
+				}
 
 				{
 					const ScopedDrawer drawer{ [this] { postFadeOutDraw(); }, [this] { return postFadeOutDrawIndex(); } };
+					m_isPostFadeOut = true;
 					co_await postFadeOut();
+					m_isPostFadeOut = false;
 				}
-
-				m_isPostFadeOut = false;
 
 				if (m_nextSceneFactory.has_value())
 				{

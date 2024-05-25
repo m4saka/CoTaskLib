@@ -88,7 +88,7 @@ inline namespace cotasklib
 
 			EaseTaskBuilder<Vec2> tweenPosition(Duration duration)
 			{
-				return Ease(&m_position, duration, m_position, m_position, m_easeFuncPosition);
+				return Ease(&m_position, duration, m_easeFuncPosition).fromTo(m_position, m_position);
 			}
 
 			void setPosition(const Vec2& position)
@@ -103,7 +103,7 @@ inline namespace cotasklib
 
 			EaseTaskBuilder<Vec2> tweenScale(Duration duration)
 			{
-				return Ease(&m_scale, duration, m_scale, m_scale, m_easeFuncScale);
+				return Ease(&m_scale, duration, m_easeFuncScale).fromTo(m_scale, m_scale);
 			}
 
 			void setScale(const Vec2& scale)
@@ -123,7 +123,7 @@ inline namespace cotasklib
 
 			EaseTaskBuilder<double> tweenRotation(Duration duration)
 			{
-				return Ease(&m_rotation, duration, m_rotation, m_rotation, m_easeFuncRotation);
+				return Ease(&m_rotation, duration, m_easeFuncRotation).fromTo(m_rotation, m_rotation);
 			}
 
 			void setRotation(double rotation)
@@ -138,7 +138,7 @@ inline namespace cotasklib
 
 			EaseTaskBuilder<ColorF> tweenColor(Duration duration)
 			{
-				return Ease(&m_color, duration, m_color, m_color, m_easeFuncColor);
+				return Ease(&m_color, duration, m_easeFuncColor).fromTo(m_color, m_color);
 			}
 
 			void setColor(const ColorF& color)
@@ -153,7 +153,7 @@ inline namespace cotasklib
 
 			EaseTaskBuilder<ColorF> tweenColorAdd(Duration duration)
 			{
-				return Ease(&m_colorAdd, duration, m_colorAdd, m_colorAdd, m_easeFuncColorAdd);
+				return Ease(&m_colorAdd, duration, m_easeFuncColorAdd).fromTo(m_colorAdd, m_colorAdd);
 			}
 
 			void setColorAdd(const ColorF& colorAdd)
@@ -168,7 +168,7 @@ inline namespace cotasklib
 
 			EaseTaskBuilder<double> tweenAlpha(Duration duration)
 			{
-				return Ease(&m_alpha, duration, m_alpha, m_alpha, m_easeFuncAlpha);
+				return Ease(&m_alpha, duration, m_easeFuncAlpha).fromTo(m_alpha, m_alpha);
 			}
 
 			void setAlpha(double alpha)

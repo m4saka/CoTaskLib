@@ -77,7 +77,7 @@ inline namespace cotasklib
 
 			EaseTaskBuilder<Vec3> tweenPosition(Duration duration)
 			{
-				return Ease(&m_position, duration, m_position, m_position, m_easeFuncPosition);
+				return Ease(&m_position, duration, m_easeFuncPosition).fromTo(m_position, m_position);
 			}
 
 			void setPosition(const Vec3& position)
@@ -92,7 +92,7 @@ inline namespace cotasklib
 
 			EaseTaskBuilder<Vec3> tweenScale(Duration duration)
 			{
-				return Ease(&m_scale, duration, m_scale, m_scale, m_easeFuncScale);
+				return Ease(&m_scale, duration, m_easeFuncScale).fromTo(m_scale, m_scale);
 			}
 
 			void setScale(const Vec3& scale)
@@ -107,22 +107,22 @@ inline namespace cotasklib
 
 			EaseTaskBuilder<Vec3> tweenRollPitchYaw(Duration duration)
 			{
-				return Ease(&m_rollPitchYaw, duration, m_rollPitchYaw, m_rollPitchYaw, m_easeFuncRotation);
+				return Ease(&m_rollPitchYaw, duration, m_easeFuncRotation).fromTo(m_rollPitchYaw, m_rollPitchYaw);
 			}
 
 			EaseTaskBuilder<double> tweenRoll(Duration duration)
 			{
-				return Ease(&m_rollPitchYaw.x, duration, m_rollPitchYaw.x, m_rollPitchYaw.x, m_easeFuncRotation);
+				return Ease(&m_rollPitchYaw.x, duration, m_easeFuncRotation).fromTo(m_rollPitchYaw.x, m_rollPitchYaw.x);
 			}
 
 			EaseTaskBuilder<double> tweenPitch(Duration duration)
 			{
-				return Ease(&m_rollPitchYaw.y, duration, m_rollPitchYaw.y, m_rollPitchYaw.y, m_easeFuncRotation);
+				return Ease(&m_rollPitchYaw.y, duration, m_easeFuncRotation).fromTo(m_rollPitchYaw.y, m_rollPitchYaw.y);
 			}
 
 			EaseTaskBuilder<double> tweenYaw(Duration duration)
 			{
-				return Ease(&m_rollPitchYaw.z, duration, m_rollPitchYaw.z, m_rollPitchYaw.z, m_easeFuncRotation);
+				return Ease(&m_rollPitchYaw.z, duration, m_easeFuncRotation).fromTo(m_rollPitchYaw.z, m_rollPitchYaw.z);
 			}
 
 			void setRoll(double roll)

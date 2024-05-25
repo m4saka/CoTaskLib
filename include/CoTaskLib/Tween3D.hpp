@@ -70,6 +70,11 @@ inline namespace cotasklib
 			Tweener3D(Tweener3D&&) = default;
 			Tweener3D& operator=(Tweener3D&&) = default;
 
+			const Vec3& pivot() const
+			{
+				return m_pivot;
+			}
+
 			void setPivot(const Vec3& pivot)
 			{
 				m_pivot = pivot;
@@ -78,6 +83,11 @@ inline namespace cotasklib
 			EaseTaskBuilder<Vec3> tweenPosition(Duration duration)
 			{
 				return Ease(&m_position, duration, m_easeFuncPosition).fromTo(m_position, m_position);
+			}
+
+			const Vec3& position() const
+			{
+				return m_position;
 			}
 
 			void setPosition(const Vec3& position)
@@ -93,6 +103,11 @@ inline namespace cotasklib
 			EaseTaskBuilder<Vec3> tweenScale(Duration duration)
 			{
 				return Ease(&m_scale, duration, m_easeFuncScale).fromTo(m_scale, m_scale);
+			}
+
+			const Vec3& scale() const
+			{
+				return m_scale;
 			}
 
 			void setScale(const Vec3& scale)
@@ -123,6 +138,26 @@ inline namespace cotasklib
 			EaseTaskBuilder<double> tweenYaw(Duration duration)
 			{
 				return Ease(&m_rollPitchYaw.z, duration, m_easeFuncRotation).fromTo(m_rollPitchYaw.z, m_rollPitchYaw.z);
+			}
+
+			const Vec3& rollPitchYaw() const
+			{
+				return m_rollPitchYaw;
+			}
+
+			double roll() const
+			{
+				return m_rollPitchYaw.x;
+			}
+
+			double pitch() const
+			{
+				return m_rollPitchYaw.y;
+			}
+
+			double yaw() const
+			{
+				return m_rollPitchYaw.z;
 			}
 
 			void setRoll(double roll)

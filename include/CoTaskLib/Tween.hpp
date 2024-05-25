@@ -81,6 +81,11 @@ inline namespace cotasklib
 			Tweener(Tweener&&) = default;
 			Tweener& operator=(Tweener&&) = default;
 
+			const Vec2& pivot() const
+			{
+				return m_pivot;
+			}
+
 			void setPivot(const Vec2& pivot)
 			{
 				m_pivot = pivot;
@@ -89,6 +94,11 @@ inline namespace cotasklib
 			EaseTaskBuilder<Vec2> tweenPosition(Duration duration)
 			{
 				return Ease(&m_position, duration, m_easeFuncPosition).fromTo(m_position, m_position);
+			}
+
+			const Vec2& position() const
+			{
+				return m_position;
 			}
 
 			void setPosition(const Vec2& position)
@@ -104,6 +114,11 @@ inline namespace cotasklib
 			EaseTaskBuilder<Vec2> tweenScale(Duration duration)
 			{
 				return Ease(&m_scale, duration, m_easeFuncScale).fromTo(m_scale, m_scale);
+			}
+
+			const Vec2& scale() const
+			{
+				return m_scale;
 			}
 
 			void setScale(const Vec2& scale)
@@ -126,6 +141,11 @@ inline namespace cotasklib
 				return Ease(&m_rotation, duration, m_easeFuncRotation).fromTo(m_rotation, m_rotation);
 			}
 
+			double rotation() const
+			{
+				return m_rotation;
+			}
+
 			void setRotation(double rotation)
 			{
 				m_rotation = rotation;
@@ -139,6 +159,11 @@ inline namespace cotasklib
 			EaseTaskBuilder<ColorF> tweenColor(Duration duration)
 			{
 				return Ease(&m_color, duration, m_easeFuncColor).fromTo(m_color, m_color);
+			}
+
+			const ColorF& color() const
+			{
+				return m_color;
 			}
 
 			void setColor(const ColorF& color)
@@ -156,6 +181,11 @@ inline namespace cotasklib
 				return Ease(&m_colorAdd, duration, m_easeFuncColorAdd).fromTo(m_colorAdd, m_colorAdd);
 			}
 
+			const ColorF& colorAdd() const
+			{
+				return m_colorAdd;
+			}
+
 			void setColorAdd(const ColorF& colorAdd)
 			{
 				m_colorAdd = colorAdd;
@@ -169,6 +199,21 @@ inline namespace cotasklib
 			EaseTaskBuilder<double> tweenAlpha(Duration duration)
 			{
 				return Ease(&m_alpha, duration, m_easeFuncAlpha).fromTo(m_alpha, m_alpha);
+			}
+
+			Co::Task<void> fadeInAlpha(Duration duration)
+			{
+				return Ease(&m_alpha, duration, m_easeFuncAlpha).fromTo(0.0, 1.0).play();
+			}
+
+			Co::Task<void> fadeOutAlpha(Duration duration)
+			{
+				return Ease(&m_alpha, duration, m_easeFuncAlpha).fromTo(m_alpha, 0.0).play();
+			}
+
+			double alpha() const
+			{
+				return m_alpha;
 			}
 
 			void setAlpha(double alpha)

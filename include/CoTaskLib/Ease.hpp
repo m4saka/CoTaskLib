@@ -216,7 +216,6 @@ inline namespace cotasklib
 			}
 		}
 
-
 		template <detail::Lerpable T>
 		[[nodiscard]]
 		EaseTaskBuilder<T> Ease(std::function<T> callback, Duration duration = 0s, double easeFunc(double) = EaseOutQuad)

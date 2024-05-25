@@ -57,7 +57,7 @@ inline namespace cotasklib
 			template <StdLerpable T>
 			T GenericLerp(const T& a, const T& b, double t)
 			{
-				return std::lerp(a, b, t);
+				return static_cast<T>(std::lerp(a, b, t));
 			}
 
 			template <MemberFuncLerpable T>

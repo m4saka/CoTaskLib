@@ -67,7 +67,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			inline Task<void> EaseTask(const Duration duration, double easeFunc(double), std::function<void(double)> callback)
+			inline Task<void> EaseTask(std::function<void(double)> callback, const Duration duration, double easeFunc(double))
 			{
 				if (duration.count() <= 0.0)
 				{
@@ -89,24 +89,24 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			inline Task<void> TypewriterTask(const Duration duration, const String text, std::function<void(const String&)> updateFunc)
+			inline Task<void> TypewriterTask(std::function<void(const String&)> callback, const Duration totalDuration, const String text)
 			{
-				if (duration.count() <= 0.0)
+				if (totalDuration.count() <= 0.0)
 				{
-					// durationが0の場合はそのまま出力するが、フレームを待たずに終了
-					updateFunc(text);
+					// totalDurationが0の場合はそのまま出力するが、フレームを待たずに終了
+					callback(text);
 					co_return;
 				}
 
 				Optional<std::size_t> prevLength = none;
-				const Timer timer{ duration, StartImmediately::Yes };
+				const Timer timer{ totalDuration, StartImmediately::Yes };
 				while (!timer.reachedZero())
 				{
 					const double t = timer.progress0_1();
 					const std::size_t length = std::min(static_cast<std::size_t>(1 + text.length() * t), text.length());
 					if (length != prevLength)
 					{
-						updateFunc(text.substr(0, length));
+						callback(text.substr(0, length));
 						prevLength = length;
 					}
 					co_await detail::Yield{};
@@ -115,7 +115,7 @@ inline namespace cotasklib
 				// 最後は必ず全て表示
 				if (prevLength != text.length())
 				{
-					updateFunc(text);
+					callback(text);
 					co_await detail::Yield{};
 				}
 			}
@@ -197,7 +197,7 @@ inline namespace cotasklib
 					{
 						callback(detail::GenericLerp(from, to, t));
 					};
-				return detail::EaseTask(m_duration, m_easeFunc, std::move(lerpedCallback));
+				return detail::EaseTask(std::move(lerpedCallback), m_duration, m_easeFunc);
 			}
 		};
 
@@ -366,6 +366,7 @@ inline namespace cotasklib
 		class [[nodiscard]] TypewriterTaskBuilder
 		{
 		private:
+			std::function<void(const String&)> m_callback;
 			Duration m_duration;
 			bool m_isOneLetterDuration;
 			String m_text;
@@ -376,8 +377,9 @@ inline namespace cotasklib
 			}
 
 		public:
-			explicit TypewriterTaskBuilder(Duration oneLetterDuration, StringView text)
-				: m_duration(oneLetterDuration)
+			explicit TypewriterTaskBuilder(std::function<void(const String&)> callback, Duration oneLetterDuration, StringView text)
+				: m_callback(std::move(callback))
+				, m_duration(oneLetterDuration)
 				, m_isOneLetterDuration(true)
 				, m_text(text)
 			{
@@ -408,38 +410,46 @@ inline namespace cotasklib
 				return *this;
 			}
 
-			Task<void> updating(std::function<void(const String&)> updateFunc)
+			Task<void> play()
 			{
-				return detail::TypewriterTask(calcTotalDuration(), m_text, std::move(updateFunc));
-			}
-
-			Task<void> assigning(String* pValue)
-			{
-				if (pValue == nullptr)
-				{
-					throw Error{ U"TypewriterTaskBuilder::assigning received nullptr" };
-				}
-
-				return detail::TypewriterTask(calcTotalDuration(), m_text, [pValue](const String& text) { *pValue = text; });
+				return detail::TypewriterTask(m_callback, calcTotalDuration(), m_text);
 			}
 		};
 
 		[[nodiscard]]
-		inline TypewriterTaskBuilder Typewriter()
+		inline TypewriterTaskBuilder Typewriter(String* pText)
 		{
-			return TypewriterTaskBuilder(1s, U"");
+			return TypewriterTaskBuilder([pText](const String& text) { *pText = text; }, 1s, U"");
 		}
 
 		[[nodiscard]]
-		inline TypewriterTaskBuilder Typewriter(Duration oneLetterDuration)
+		inline TypewriterTaskBuilder Typewriter(String* pText, Duration oneLetterDuration)
 		{
-			return TypewriterTaskBuilder(oneLetterDuration, U"");
+			return TypewriterTaskBuilder([pText](const String& text) { *pText = text; }, oneLetterDuration, U"");
 		}
 
 		[[nodiscard]]
-		inline TypewriterTaskBuilder Typewriter(Duration oneLetterDuration, StringView text)
+		inline TypewriterTaskBuilder Typewriter(String* pText, Duration oneLetterDuration, StringView text)
 		{
-			return TypewriterTaskBuilder(oneLetterDuration, text);
+			return TypewriterTaskBuilder([pText](const String& text) { *pText = text; }, oneLetterDuration, text);
+		}
+
+		[[nodiscard]]
+		inline TypewriterTaskBuilder Typewriter(std::function<void(const String&)> callback)
+		{
+			return TypewriterTaskBuilder(std::move(callback), 1s, U"");
+		}
+
+		[[nodiscard]]
+		inline TypewriterTaskBuilder Typewriter(std::function<void(const String&)> callback, Duration oneLetterDuration)
+		{
+			return TypewriterTaskBuilder(std::move(callback), oneLetterDuration, U"");
+		}
+
+		[[nodiscard]]
+		inline TypewriterTaskBuilder Typewriter(std::function<void(const String&)> callback, Duration oneLetterDuration, StringView text)
+		{
+			return TypewriterTaskBuilder(std::move(callback), oneLetterDuration, text);
 		}
 	}
 }

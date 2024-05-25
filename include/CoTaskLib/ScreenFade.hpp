@@ -69,7 +69,7 @@ inline namespace cotasklib
 
 				Task<void> start() override
 				{
-					return Ease(m_duration, m_color, m_toColor, m_easeFunc).assigning(&m_color);
+					return Ease(&m_color, m_duration, m_color, m_toColor, m_easeFunc).play();
 				}
 
 				void draw() const override

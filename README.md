@@ -121,7 +121,7 @@ Co::Task<void> ExampleTask()
 ```cpp
 class ExampleSequence : public Co::SequenceBase<void>
 {
-public:
+private:
     Co::Task<void> start() override
     {
         // ここに処理をコルーチンで記述
@@ -219,12 +219,12 @@ const Co::ScopedSequenceRunner<ExampleSequence> sequenceRunner{};
 ```
 
 ### コルーチン内から実行する場合
-通常の関数での書き方と同様に`Co::Play`関数で`Co::Task`を取得し、これに対して通常通り`co_await`を使用します。
+`Co::Play`関数でシーケンスを再生する`Co::Task`を取得し、これに対して`co_await`を使用します。
 
 ```cpp
 Co::Task<void> ExampleTask()
 {
-    co_await Co::Play<ExampleSequence>(); // ExampleSequenceを実行し、完了まで待機します
+    co_await Co::Play<ExampleSequence>(); // ExampleSequenceを再生し、完了まで待機します
 }
 ```
 
@@ -242,11 +242,23 @@ Co::Task<void> ExampleTask()
 }
 ```
 
-なお、シーケンスクラスのインスタンスに対してタスクを実行できるのは1回のみです。同一インスタンスに対して複数回`play()`を呼び出してタスク実行することは許可されていません。2回目を実行しようとすると`s3d::Error`例外を送出します。
+シーケンスクラスの同一インスタンスに対して再生できるのは1回のみです。同一インスタンスに対して複数回`play()`を呼び出すことは許可されていません。複数回再生しようとすると`s3d::Error`例外が送出されます。
 
 ### 注意点
-シーケンス実行の際、シーケンスクラスの`start`関数を外部から直接呼び出すことは想定されていません。  
-`start`関数を直接呼び出してタスク実行すると、`draw`関数が呼び出されません。
+シーケンス実行の際、シーケンスクラスの`start`関数を外部から直接呼び出すことは想定されていません。`start`関数を直接呼び出してタスク実行すると、それ以外の関数(`draw`関数等)に記述した処理が呼び出されずに実行されてしまいます。
+
+このような意図しない呼び出しを防ぐために、`start`等の関数をオーバーライドする際はアクセス指定子をprivate(さらに継承させたい場合はprotected)にしておくことを推奨します。
+
+```cpp
+class ExampleSequence : public Co::SequenceBase<void>
+{
+private: // 基本的にprivateにしておくことを推奨
+    Co::Task<void> start() override
+    {
+        co_return;
+    }
+};
+```
 
 ## `Co::UpdaterSequenceBase<TResult>`クラス
 毎フレーム実行される`update()`関数を持つシーケンスの基底クラスです。コルーチンを使用しないシーケンスを作成する際は、このクラスを継承します。
@@ -258,7 +270,7 @@ Co::Task<void> ExampleTask()
 ```cpp
 class ExampleUpdaterSequence : public Co::UpdaterSequenceBase<void>
 {
-public:
+private:
     void update() override
     {
         // ここに毎フレームの処理を記述
@@ -358,7 +370,7 @@ void update() override
 ```cpp
 class ExampleScene : public Co::SceneBase
 {
-public:
+private:
     Co::Task<void> start() override
     {
         // ここに処理をコルーチンで記述
@@ -508,7 +520,7 @@ Siv3D標準のシーン機能を使用して作成したシーンをなるべく
 ```cpp
 class ExampleUpdaterScene : public Co::SceneBase
 {
-public:
+private:
     void update() override
     {
         // ここに毎フレームの処理を記述
@@ -634,7 +646,6 @@ class EaseExample : public Co::SequenceBase<void>
 private:
     Vec2 m_position;
 
-public:
     Co::Task<void> start() override
     {
         // 3秒かけて(100,100)から(700,500)へ推移させる。その値を毎フレームm_positionへ代入
@@ -685,7 +696,6 @@ private:
     Font m_font{ 30 };
     String m_text;
 
-public:
     Co::Task<void> start() override
     {
         // テキストを1文字ずつ表示

@@ -57,11 +57,7 @@ Co::Task<String> ExampleTaskWithResult()
     - タスクの実行中、同時に実行される子タスクを登録します。
     - 子タスクの完了は待ちません。親タスクが先に完了した場合、子タスクの実行は途中で終了されます。
     - 子タスクの戻り値は無視されます。
-    - この関数を複数回使用して、複数個のタスクを登録することも可能です。その場合、登録した順番で実行されます。
-- `then(std::function<void(TResult)>)` -> `Co::Task<TResult>`
-    - タスクの実行完了時に実行する関数を登録します。
-    - タスクが実行完了前に途中で終了された場合、登録した関数は実行されません。
-    - この関数を複数回使用して、複数個の関数を登録することも可能です。その場合、登録した順番で実行されます。
+    - この関数を複数回使用して、複数個のタスクを登録することも可能です。その場合、毎フレームの処理は登録した順番で実行されます。
 
 ### タスクの実行方法
 
@@ -649,10 +645,10 @@ private:
     Co::Task<void> start() override
     {
         // 3秒かけて(100,100)から(700,500)へ推移させる。その値を毎フレームm_positionへ代入
-        co_await Co::Ease<Vec2>(3s)
+        co_await Co::Ease<Vec2>(&m_position, 3s)
             .from(100, 100)
             .to(700, 500)
-            .assigning(&m_position);
+            .play();
     }
 
     void draw() const override
@@ -673,6 +669,8 @@ private:
     - 引数には、T型の値を指定するか、T型のコンストラクタ引数を指定します。
     - この関数の代わりに、from・toの値をそれぞれ`Co::Ease()`の第2・第3引数に指定することもできます。なお、その場合`Co::Ease<T>()`の`<T>`は記述を省略できます。
     - Tが浮動小数点型(double、float等)の場合は、この関数を呼ばなくてもデフォルトでfromに0.0、toに1.0が指定されます。
+- `fromTo(T, T)` -> `Co::EaseTaskBuilder<T>&`
+    - 開始値・目標値をまとめて指定します。
 - `setEase(double(*)(double))` -> `Co::EaseTaskBuilder<T>&`
     - 値の補間に使用するイージング関数を指定します。
     - Siv3Dに用意されているイージング関数を関数名で指定できます(例:`.setEase(EaseInOutExpo)`)。
@@ -680,11 +678,8 @@ private:
         - `Co::Ease()`: `EaseOutQuad`(目標値にやや早めに近づく曲線的な動き)
         - `Co::LinearEase()`: `Easing::Linear`(直線的な動き)
     - この関数の代わりに、`Co::Ease()`の第4引数に指定することもできます。
-- `assigning(T*)` -> `Co::Task<void>`
-    - 値の代入先の変数をポインタで指定し、イージングのタスクを生成します。
-    - 引数には必ずタスク実行よりも寿命が長い変数のポインタを指定してください。
-- `updating(std::function<void(T)>)` -> `Co::Task<void>`
-    - 毎フレーム値を受け取って実行する関数を指定し、イージングのタスクを生成します。
+- `play()` -> `Co::Task<void>`
+    - イージングを再生するタスクを取得します。
 
 ## 文字送り
 `Co::Typewriter()`関数を使うと、1文字ずつ文字表示する処理が簡単に実装できます。
@@ -699,8 +694,7 @@ private:
     Co::Task<void> start() override
     {
         // テキストを1文字ずつ表示
-        co_await Co::Typewriter(50ms, U"Hello, CoTaskLib!")
-            .assigning(&m_text);
+        co_await Co::Typewriter(&m_text, 50ms, U"Hello, CoTaskLib!").play();
 
         // クリックされるまで待つ
         co_await Co::WaitForDown(MouseL);
@@ -717,21 +711,18 @@ private:
 
 - `oneLetterDuration(Duration)` -> `Co::TypewriterTaskBuilder&`
     - 表示時間を1文字あたりの時間で指定します。
-    - この関数の代わりに、`Co::Typewriter()`の第1引数に指定することもできます。
+    - この関数の代わりに、`Co::Typewriter()`の第2引数に指定することもできます。
 - `totalDuration(Duration)` -> `Co::TypewriterTaskBuilder&`
     - 表示時間を文字列全体の時間で指定します。
 - `text(StringView)` -> `Co::TypewriterTaskBuilder&`
     - 表示するテキストを指定します。
-    - この関数の代わりに、`Co::Typewriter()`の第2引数に指定することもできます。
-- `assigning(String*)` -> `Co::Task<void>`
-    - 表示するテキストを代入する変数をポインタで指定し、文字送りのタスクを生成します。
-    - 引数には必ずタスク実行よりも寿命が長い変数のポインタを指定してください。
-- `updating(std::function<void(const String&)>)` -> `Co::Task<void>`
-    - テキストが更新されるごとに実行される関数を指定し、文字送りのタスクを生成します。
+    - この関数の代わりに、`Co::Typewriter()`の第3引数に指定することもできます。
+- `play()` -> `Co::Task<void>`
+    - 文字送りを再生するタスクを取得します。
 
 ## 関数一覧
 - `Co::Init()`
-    - `CoTaskLib`ライブラリを初期化します。
+    - CoTaskLibライブラリを初期化します。
     - ライブラリの機能を使用する前に、必ず一度だけ実行してください。
 - `Co::DelayFrame()` -> `Co::Task<void>`
     - 1フレーム待機します。

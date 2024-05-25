@@ -38,10 +38,13 @@ inline namespace cotasklib
 {
 	namespace Co
 	{
+#pragma warning(push)
+#pragma warning(disable : 4324)
 		struct ScopedTween3D
 		{
 			Optional<Transformer3D> transformer = none;
 		};
+#pragma warning(pop)
 
 		class Tweener3D
 		{

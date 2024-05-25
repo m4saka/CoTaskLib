@@ -834,6 +834,7 @@ inline namespace cotasklib
 			using promise_type = detail::Promise<TResult>;
 			using handle_type = std::coroutine_handle<promise_type>;
 			using result_type = TResult;
+			using finish_callback_type = FinishCallbackType<TResult>;
 
 			explicit Task(handle_type h)
 				: m_handle(std::move(h))
@@ -909,37 +910,13 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			ScopedTaskRunner runScoped()&&
-			{
-				return ScopedTaskRunner{ std::move(*this) };
-			}
-
-			[[nodiscard]]
-			ScopedTaskRunner runScoped(FinishCallbackType<TResult> finishCallback)&&
-			{
-				return ScopedTaskRunner{ std::move(*this), std::move(finishCallback) };
-			}
-
-			[[nodiscard]]
-			ScopedTaskRunner runScoped(FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)&&
+			ScopedTaskRunner runScoped(FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)&&
 			{
 				return ScopedTaskRunner{ std::move(*this), std::move(finishCallback), std::move(cancelCallback) };
 			}
-
+			
 			[[nodiscard]]
-			void runAddTo(MultiScoped& ms)&&
-			{
-				ms.add(ScopedTaskRunner{ std::move(*this) });
-			}
-
-			[[nodiscard]]
-			void runAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback)&&
-			{
-				ms.add(ScopedTaskRunner{ std::move(*this), std::move(finishCallback) });
-			}
-
-			[[nodiscard]]
-			void runAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)&&
+			void runAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)&&
 			{
 				ms.add(ScopedTaskRunner{ std::move(*this), std::move(finishCallback), std::move(cancelCallback) });
 			}

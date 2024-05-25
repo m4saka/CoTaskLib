@@ -246,52 +246,20 @@ inline namespace cotasklib
 			Task<TResult> play() && = delete;
 
 			[[nodiscard]]
-			ScopedTaskRunner playScoped()&
-			{
-				return play().runScoped();
-			}
-
-			[[nodiscard]]
-			ScopedTaskRunner playScoped(FinishCallbackType<TResult> finishCallback)&
-			{
-				return play().runScoped(std::move(finishCallback));
-			}
-
-			[[nodiscard]]
-			ScopedTaskRunner playScoped(FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)&
+			ScopedTaskRunner playScoped(FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)&
 			{
 				return play().runScoped(std::move(finishCallback), std::move(cancelCallback));
 			}
 
 			[[nodiscard]]
-			ScopedTaskRunner playScoped() && = delete;
+			ScopedTaskRunner playScoped(FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr) && = delete;
 
-			[[nodiscard]]
-			ScopedTaskRunner playScoped(FinishCallbackType<TResult> finishCallback) && = delete;
-
-			[[nodiscard]]
-			ScopedTaskRunner playScoped(FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback) && = delete;
-
-			void playAddTo(MultiScoped& ms)&
-			{
-				play().runAddTo(ms);
-			}
-
-			void playAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback)&
-			{
-				play().runAddTo(ms, std::move(finishCallback));
-			}
-
-			void playAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)&
+			void playAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)&
 			{
 				play().runAddTo(ms, std::move(finishCallback), std::move(cancelCallback));
 			}
 
-			void playAddTo(MultiScoped& ms) && = delete;
-
-			void playAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback) && = delete;
-
-			void playAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback) && = delete;
+			void playAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr) && = delete;
 
 			[[nodiscard]]
 			bool hasResult() const

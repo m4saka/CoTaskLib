@@ -125,14 +125,16 @@ inline namespace cotasklib
 		class [[nodiscard]] EaseTaskBuilder
 		{
 		private:
+			std::function<void(T)> m_callback;
 			Duration m_duration;
 			T m_from;
 			T m_to;
 			double(*m_easeFunc)(double);
 
 		public:
-			explicit EaseTaskBuilder(Duration duration, T from, T to, double(*easeFunc)(double))
-				: m_duration(duration)
+			explicit EaseTaskBuilder(std::function<void(T)> callback, Duration duration, T from, T to, double(*easeFunc)(double))
+				: m_callback(std::move(callback))
+				, m_duration(duration)
 				, m_from(std::move(from))
 				, m_to(std::move(to))
 				, m_easeFunc(easeFunc)
@@ -176,85 +178,189 @@ inline namespace cotasklib
 				return *this;
 			}
 
+			EaseTaskBuilder& fromTo(T from, T to)
+			{
+				m_from = std::move(from);
+				m_to = std::move(to);
+				return *this;
+			}
+
 			EaseTaskBuilder& setEase(double(*easeFunc)(double))
 			{
 				m_easeFunc = easeFunc;
 				return *this;
 			}
 
-			Task<void> updating(std::function<void(T)> updateFunc)
+			Task<void> play()
 			{
-				auto callback = [from = m_from, to = m_to, updateFunc](double t)
+				auto lerpedCallback = [from = m_from, to = m_to, callback = m_callback](double t)
 					{
-						updateFunc(detail::GenericLerp(from, to, t));
+						callback(detail::GenericLerp(from, to, t));
 					};
-				return detail::EaseTask(m_duration, m_easeFunc, std::move(callback));
-			}
-
-			Task<void> assigning(T* pValue)
-			{
-				if (pValue == nullptr)
-				{
-					throw Error{ U"EaseTaskBuilder::assigning received nullptr" };
-				}
-
-				auto callback = [from = m_from, to = m_to, pValue](double t)
-					{
-						*pValue = detail::GenericLerp(from, to, t);
-					};
-				return detail::EaseTask(m_duration, m_easeFunc, std::move(callback));
+				return detail::EaseTask(m_duration, m_easeFunc, std::move(lerpedCallback));
 			}
 		};
 
 		template <detail::Lerpable T>
 		[[nodiscard]]
-		EaseTaskBuilder<T> Ease()
+		EaseTaskBuilder<T> Ease(T* pValue)
 		{
 			if constexpr (std::is_floating_point_v<T>)
 			{
 				// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
-				return EaseTaskBuilder<T>(0s, 0.0, 1.0, EaseOutQuad);
+				return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, 0s, 0.0, 1.0, EaseOutQuad);
 			}
 			else
 			{
-				return EaseTaskBuilder<T>(0s, T{}, T{}, EaseOutQuad);
+				return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, 0s, T{}, T{}, EaseOutQuad);
 			}
 		}
 
 		template <detail::Lerpable T>
 		[[nodiscard]]
-		EaseTaskBuilder<T> Ease(Duration duration)
+		EaseTaskBuilder<T> Ease(T* pValue, Duration duration)
 		{
 			if constexpr (std::is_floating_point_v<T>)
 			{
 				// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
-				return EaseTaskBuilder<T>(duration, 0.0, 1.0, EaseOutQuad);
+				return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, 0.0, 1.0, EaseOutQuad);
 			}
 			else
 			{
-				return EaseTaskBuilder<T>(duration, T{}, T{}, EaseOutQuad);
+				return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, T{}, T{}, EaseOutQuad);
 			}
 		}
 
 		template <detail::Lerpable T>
 		[[nodiscard]]
-		EaseTaskBuilder<T> Ease(Duration duration, T from, T to)
+		EaseTaskBuilder<T> Ease(T* pValue, Duration duration, T from, T to)
 		{
-			return EaseTaskBuilder<T>(duration, std::move(from), std::move(to), EaseOutQuad);
+			return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, from, to, EaseOutQuad);
 		}
 
 		template <detail::Lerpable T>
 		[[nodiscard]]
-		EaseTaskBuilder<T> Ease(Duration duration, T from, T to, double(*easeFunc)(double))
+		EaseTaskBuilder<T> Ease(T* pValue, Duration duration, T from, T to, double(*easeFunc)(double))
 		{
-			return EaseTaskBuilder<T>(duration, std::move(from), std::move(to), easeFunc);
+			return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, from, to, easeFunc);
 		}
 
 		template <detail::Lerpable T>
 		[[nodiscard]]
-		EaseTaskBuilder<T> LinearEase(Duration duration, T from, T to)
+		EaseTaskBuilder<T> Ease(std::function<T> callback)
 		{
-			return EaseTaskBuilder<T>(duration, std::move(from), std::move(to), Easing::Linear);
+			if constexpr (std::is_floating_point_v<T>)
+			{
+				// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
+				return EaseTaskBuilder<T>(std::move(callback), 0s, 0.0, 1.0, EaseOutQuad);
+			}
+			else
+			{
+				return EaseTaskBuilder<T>(std::move(callback), 0s, T{}, T{}, EaseOutQuad);
+			}
+		}
+
+		template <detail::Lerpable T>
+		[[nodiscard]]
+		EaseTaskBuilder<T> Ease(std::function<T> callback, Duration duration)
+		{
+			if constexpr (std::is_floating_point_v<T>)
+			{
+				// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
+				return EaseTaskBuilder<T>(std::move(callback), duration, 0.0, 1.0, EaseOutQuad);
+			}
+			else
+			{
+				return EaseTaskBuilder<T>(std::move(callback), duration, T{}, T{}, EaseOutQuad);
+			}
+		}
+
+		template <detail::Lerpable T>
+		[[nodiscard]]
+		EaseTaskBuilder<T> Ease(std::function<T> callback, Duration duration, T from, T to)
+		{
+			return EaseTaskBuilder<T>(std::move(callback), duration, from, to, EaseOutQuad);
+		}
+
+		template <detail::Lerpable T>
+		[[nodiscard]]
+		EaseTaskBuilder<T> Ease(std::function<T> callback, Duration duration, T from, T to, double(*easeFunc)(double))
+		{
+			return EaseTaskBuilder<T>(std::move(callback), duration, from, to, easeFunc);
+		}
+
+		template <detail::Lerpable T>
+		[[nodiscard]]
+		EaseTaskBuilder<T> LinearEase(T* pValue)
+		{
+			if constexpr (std::is_floating_point_v<T>)
+			{
+				// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
+				return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, 0s, 0.0, 1.0, Easing::Linear);
+			}
+			else
+			{
+				return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, 0s, T{}, T{}, Easing::Linear);
+			}
+		}
+
+		template <detail::Lerpable T>
+		[[nodiscard]]
+		EaseTaskBuilder<T> LinearEase(T* pValue, Duration duration)
+		{
+			if constexpr (std::is_floating_point_v<T>)
+			{
+				// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
+				return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, 0.0, 1.0, Easing::Linear);
+			}
+			else
+			{
+				return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, T{}, T{}, Easing::Linear);
+			}
+		}
+
+		template <detail::Lerpable T>
+		[[nodiscard]]
+		EaseTaskBuilder<T> LinearEase(T* pValue, Duration duration, T from, T to)
+		{
+			return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, from, to, Easing::Linear);
+		}
+
+		template <detail::Lerpable T>
+		[[nodiscard]]
+		EaseTaskBuilder<T> LinearEase(std::function<T> callback)
+		{
+			if constexpr (std::is_floating_point_v<T>)
+			{
+				// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
+				return EaseTaskBuilder<T>(std::move(callback), 0s, 0.0, 1.0, Easing::Linear);
+			}
+			else
+			{
+				return EaseTaskBuilder<T>(std::move(callback), 0s, T{}, T{}, Easing::Linear);
+			}
+		}
+
+		template <detail::Lerpable T>
+		[[nodiscard]]
+		EaseTaskBuilder<T> LinearEase(std::function<T> callback, Duration duration)
+		{
+			if constexpr (std::is_floating_point_v<T>)
+			{
+				// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
+				return EaseTaskBuilder<T>(std::move(callback), duration, 0.0, 1.0, Easing::Linear);
+			}
+			else
+			{
+				return EaseTaskBuilder<T>(std::move(callback), duration, T{}, T{}, Easing::Linear);
+			}
+		}
+
+		template <detail::Lerpable T>
+		[[nodiscard]]
+		EaseTaskBuilder<T> LinearEase(std::function<T> callback, Duration duration, T from, T to)
+		{
+			return EaseTaskBuilder<T>(std::move(callback), duration, from, to, Easing::Linear);
 		}
 
 		class [[nodiscard]] TypewriterTaskBuilder

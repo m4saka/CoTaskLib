@@ -48,9 +48,10 @@ inline namespace cotasklib
 		class Tweener
 		{
 		private:
+			Vec2 m_pivot = Vec2::Zero();
 			Vec2 m_position = Vec2::Zero();
 			double(*m_easeFuncPosition)(double);
-			double m_scale = 1.0;
+			Vec2 m_scale = Vec2::One();
 			double(*m_easeFuncScale)(double);
 			double m_rotation = 0.0;
 			double(*m_easeFuncRotation)(double);
@@ -62,8 +63,9 @@ inline namespace cotasklib
 			double(*m_easeFuncAlpha)(double);
 
 		public:
-			explicit Tweener(double defaultEaseFunc(double) = EaseOutQuad)
-				: m_easeFuncPosition(defaultEaseFunc)
+			explicit Tweener(Vec2 pivot = Scene::CenterF(), double defaultEaseFunc(double) = EaseOutQuad)
+				: m_pivot(pivot)
+				, m_easeFuncPosition(defaultEaseFunc)
 				, m_easeFuncScale(defaultEaseFunc)
 				, m_easeFuncRotation(defaultEaseFunc)
 				, m_easeFuncColor(defaultEaseFunc)
@@ -78,6 +80,11 @@ inline namespace cotasklib
 			Tweener& operator=(const Tweener&) = default;
 			Tweener(Tweener&&) = default;
 			Tweener& operator=(Tweener&&) = default;
+
+			void setPivot(const Vec2& pivot)
+			{
+				m_pivot = pivot;
+			}
 
 			EaseTaskBuilder<Vec2> tweenPosition(Duration duration)
 			{
@@ -94,14 +101,19 @@ inline namespace cotasklib
 				m_easeFuncPosition = easeFunc;
 			}
 
-			EaseTaskBuilder<double> tweenScale(Duration duration)
+			EaseTaskBuilder<Vec2> tweenScale(Duration duration)
 			{
 				return Ease(&m_scale, duration, m_scale, m_scale, m_easeFuncScale);
 			}
 
-			void setScale(double scale)
+			void setScale(const Vec2& scale)
 			{
 				m_scale = scale;
+			}
+
+			void setScale(double scale)
+			{
+				m_scale = Vec2::All(scale);
 			}
 
 			void setScaleEase(double easeFunc(double))
@@ -181,13 +193,13 @@ inline namespace cotasklib
 				if (m_rotation != 0.0)
 				{
 					hasTransform = true;
-					mat = mat.rotated(m_rotation);
+					mat = mat.rotated(m_rotation, m_pivot);
 				}
 
-				if (m_scale != 1.0)
+				if (m_scale != Vec2::One())
 				{
 					hasTransform = true;
-					mat = mat.scaled(m_scale);
+					mat = mat.scaled(m_scale, m_pivot);
 				}
 
 				if (m_position != Vec2::Zero())

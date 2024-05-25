@@ -46,6 +46,7 @@ inline namespace cotasklib
 		class Tweener3D
 		{
 		private:
+			Vec3 m_pivot = Vec3::Zero();
 			Vec3 m_position = Vec3::Zero();
 			double(*m_easeFuncPosition)(double);
 			Vec3 m_scale = Vec3::One();
@@ -54,8 +55,9 @@ inline namespace cotasklib
 			double(*m_easeFuncRotation)(double);
 
 		public:
-			explicit Tweener3D(double defaultEaseFunc(double) = EaseOutQuad)
-				: m_easeFuncPosition(defaultEaseFunc)
+			explicit Tweener3D(Vec3 pivot = Vec3::Zero(), double defaultEaseFunc(double) = EaseOutQuad)
+				: m_pivot(pivot)
+				, m_easeFuncPosition(defaultEaseFunc)
 				, m_easeFuncScale(defaultEaseFunc)
 				, m_easeFuncRotation(defaultEaseFunc)
 			{
@@ -67,6 +69,11 @@ inline namespace cotasklib
 			Tweener3D& operator=(const Tweener3D&) = default;
 			Tweener3D(Tweener3D&&) = default;
 			Tweener3D& operator=(Tweener3D&&) = default;
+
+			void setPivot(const Vec3& pivot)
+			{
+				m_pivot = pivot;
+			}
 
 			EaseTaskBuilder<Vec3> tweenPosition(Duration duration)
 			{
@@ -161,14 +168,24 @@ inline namespace cotasklib
 				{
 					hasTransform = true;
 
+					if (m_pivot != Vec3::Zero())
+					{
+						mat *= Mat4x4::Translate(-m_pivot);
+					}
+
 					// 引数の順番が異なる(pitch, yaw, roll)点に注意
 					mat *= Mat4x4::RollPitchYaw(m_rollPitchYaw.y, m_rollPitchYaw.z, m_rollPitchYaw.x);
+
+					if (m_pivot != Vec3::Zero())
+					{
+						mat *= Mat4x4::Translate(m_pivot);
+					}
 				}
 
 				if (m_scale != Vec3::One())
 				{
 					hasTransform = true;
-					mat *= Mat4x4::Scale(m_scale);
+					mat *= Mat4x4::Scale(m_scale, m_pivot);
 				}
 
 				if (m_position != Vec3::Zero())

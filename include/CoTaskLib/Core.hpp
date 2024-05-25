@@ -48,8 +48,31 @@ inline namespace cotasklib
 				virtual void resume() = 0;
 
 				virtual bool isFinished() const = 0;
+			};
 
-				virtual void cancelIfNotFinished() = 0;
+			struct AwaiterEntry
+			{
+				std::unique_ptr<IAwaiter> awaiter;
+				std::function<void(IAwaiter*)> finishCallback;
+				std::function<void()> cancelCallback;
+
+				void callEndCallback() const
+				{
+					if (awaiter->isFinished())
+					{
+						if (finishCallback)
+						{
+							finishCallback(awaiter.get());
+						}
+					}
+					else
+					{
+						if (cancelCallback)
+						{
+							cancelCallback();
+						}
+					}
+				}
 			};
 
 			using AwaiterID = uint64;
@@ -60,7 +83,22 @@ inline namespace cotasklib
 
 			template <typename TResult>
 			class TaskAwaiter;
+
+			template <typename TResult>
+			struct FinishCallbackTypeTrait
+			{
+				using type = std::function<void(const TResult&)>;
+			};
+
+			template <>
+			struct FinishCallbackTypeTrait<void>
+			{
+				using type = std::function<void()>;
+			};
 		}
+
+		template <typename TResult>
+		using FinishCallbackType = typename detail::FinishCallbackTypeTrait<TResult>::type;
 
 		template <typename TResult>
 		class Task;
@@ -270,7 +308,7 @@ inline namespace cotasklib
 
 				bool m_currentAwaiterRemovalNeeded = false;
 
-				std::map<AwaiterID, std::unique_ptr<IAwaiter>> m_awaiters;
+				std::map<AwaiterID, AwaiterEntry> m_awaiterEntries;
 
 				OrderedExecutor<DrawerID> m_drawExecutor;
 
@@ -281,14 +319,16 @@ inline namespace cotasklib
 
 				void update()
 				{
-					for (auto it = m_awaiters.begin(); it != m_awaiters.end();)
+					for (auto it = m_awaiterEntries.begin(); it != m_awaiterEntries.end();)
 					{
 						m_currentAwaiterID = it->first;
 
-						it->second->resume();
-						if (m_currentAwaiterRemovalNeeded || it->second->isFinished())
+						const auto& entry = it->second;
+						entry.awaiter->resume();
+						if (m_currentAwaiterRemovalNeeded || entry.awaiter->isFinished())
 						{
-							it = m_awaiters.erase(it);
+							entry.callEndCallback();
+							it = m_awaiterEntries.erase(it);
 							m_currentAwaiterRemovalNeeded = false;
 						}
 						else
@@ -309,8 +349,9 @@ inline namespace cotasklib
 					Addon::Register(AddonName, std::make_unique<BackendAddon>());
 				}
 
+				template <typename TResult>
 				[[nodiscard]]
-				static AwaiterID Add(std::unique_ptr<IAwaiter>&& awaiter)
+				static AwaiterID Add(std::unique_ptr<TaskAwaiter<TResult>>&& awaiter, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)
 				{
 					if (!awaiter)
 					{
@@ -322,7 +363,25 @@ inline namespace cotasklib
 						throw Error{ U"Backend is not initialized" };
 					}
 					const AwaiterID id = s_pInstance->m_nextAwaiterID++;
-					s_pInstance->m_awaiters.emplace(id, std::move(awaiter));
+					auto finishCallbackTypeErased = [finishCallback = std::move(finishCallback)]([[maybe_unused]] IAwaiter* awaiter)
+						{
+							if constexpr (std::is_void_v<TResult>)
+							{
+								finishCallback();
+							}
+							else
+							{
+								// awaiterの型がTaskAwaiter<TResult>であることは保証されるため、static_castでキャストして問題ない
+								finishCallback(static_cast<TaskAwaiter<TResult>*>(awaiter)->value());
+							}
+						};
+					s_pInstance->m_awaiterEntries.emplace(id,
+						AwaiterEntry
+						{
+							.awaiter = std::move(awaiter),
+							.finishCallback = std::move(finishCallbackTypeErased),
+							.cancelCallback = std::move(cancelCallback),
+						});
 					return id;
 				}
 
@@ -340,11 +399,11 @@ inline namespace cotasklib
 						s_pInstance->m_currentAwaiterRemovalNeeded = true;
 						return;
 					}
-					const auto it = s_pInstance->m_awaiters.find(id);
-					if (it != s_pInstance->m_awaiters.end())
+					const auto it = s_pInstance->m_awaiterEntries.find(id);
+					if (it != s_pInstance->m_awaiterEntries.end())
 					{
-						it->second->cancelIfNotFinished();
-						s_pInstance->m_awaiters.erase(it);
+						it->second.callEndCallback();
+						s_pInstance->m_awaiterEntries.erase(it);
 					}
 				}
 
@@ -355,10 +414,10 @@ inline namespace cotasklib
 					{
 						throw Error{ U"Backend is not initialized" };
 					}
-					const auto it = s_pInstance->m_awaiters.find(id);
-					if (it != s_pInstance->m_awaiters.end())
+					const auto it = s_pInstance->m_awaiterEntries.find(id);
+					if (it != s_pInstance->m_awaiterEntries.end())
 					{
-						return it->second->isFinished();
+						return it->second.awaiter->isFinished();
 					}
 					return id < s_pInstance->m_nextAwaiterID;
 				}
@@ -461,14 +520,25 @@ inline namespace cotasklib
 
 			template <typename TResult>
 			[[nodiscard]]
-			Optional<AwaiterID> RegisterAwaiterIfNotDone(TaskAwaiter<TResult>&& awaiter)
+			Optional<AwaiterID> RegisterAwaiterIfNotDone(TaskAwaiter<TResult>&& awaiter, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)
 			{
 				if (awaiter.isFinished())
 				{
 					// フレーム待ちなしで終了した場合は登録不要
+					if (finishCallback)
+					{
+						if constexpr (std::is_void_v<TResult>)
+						{
+							finishCallback();
+						}
+						else
+						{
+							finishCallback(awaiter.value());
+						}
+					}
 					return none;
 				}
-				return Backend::Add(std::make_unique<TaskAwaiter<TResult>>(std::move(awaiter)));
+				return Backend::Add(std::make_unique<TaskAwaiter<TResult>>(std::move(awaiter)), std::move(finishCallback), std::move(cancelCallback));
 			}
 
 			template <typename TResult>
@@ -535,8 +605,8 @@ inline namespace cotasklib
 
 		public:
 			template <typename TResult>
-			explicit ScopedTaskRunner(Task<TResult>&& task)
-				: m_lifetime(detail::RegisterAwaiterIfNotDone(detail::TaskAwaiter<TResult>{ std::move(task) }))
+			explicit ScopedTaskRunner(Task<TResult>&& task, FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)
+				: m_lifetime(detail::RegisterAwaiterIfNotDone(detail::TaskAwaiter<TResult>{ std::move(task) }, std::move(finishCallback), std::move(cancelCallback)))
 			{
 			}
 
@@ -721,22 +791,7 @@ inline namespace cotasklib
 					m_handle.promise().rethrowIfException();
 				}
 			};
-
-			template <typename TResult>
-			struct FinishCallbackTypeTrait
-			{
-				using type = std::function<void(const TResult&)>;
-			};
-
-			template <>
-			struct FinishCallbackTypeTrait<void>
-			{
-				using type = std::function<void()>;
-			};
 		}
-
-		template <typename TResult>
-		using FinishCallbackType = typename detail::FinishCallbackTypeTrait<TResult>::type;
 
 		enum class WithTiming
 		{
@@ -757,8 +812,6 @@ inline namespace cotasklib
 
 			[[nodiscard]]
 			virtual bool isFinished() const = 0;
-
-			virtual void cancelIfNotFinished() = 0;
 		};
 
 		template <typename TResult>
@@ -772,46 +825,15 @@ inline namespace cotasklib
 			detail::CoroutineHandleWrapper<TResult> m_handle;
 			std::vector<std::unique_ptr<ITask>> m_concurrentTasksBefore;
 			std::vector<std::unique_ptr<ITask>> m_concurrentTasksAfter;
-			FinishCallbackType<TResult> m_finishCallback = nullptr;
-			std::function<void()> m_cancelCallback = nullptr;
-			bool m_isFinished = false;
-			bool m_isCanceled = false;
-
-			void finish()
-			{
-				if (m_isFinished || m_isCanceled)
-				{
-					return;
-				}
-
-				m_isFinished = true;
-
-				if (m_finishCallback)
-				{
-					if constexpr (std::is_void_v<TResult>)
-					{
-						m_finishCallback();
-					}
-					else
-					{
-						m_finishCallback(m_handle.value());
-					}
-				}
-			}
 
 		public:
 			using promise_type = detail::Promise<TResult>;
 			using handle_type = std::coroutine_handle<promise_type>;
 			using result_type = TResult;
-			using finish_callback_type = decltype(m_finishCallback);
 
 			explicit Task(handle_type h)
 				: m_handle(std::move(h))
 			{
-				if (m_handle.done())
-				{
-					finish();
-				}
 			}
 
 			Task(const Task<TResult>&) = delete;
@@ -824,7 +846,7 @@ inline namespace cotasklib
 
 			virtual void resume()
 			{
-				if (m_isFinished || m_isCanceled)
+				if (m_handle.done())
 				{
 					return;
 				}
@@ -840,23 +862,12 @@ inline namespace cotasklib
 				{
 					task->resume();
 				}
-
-				if (m_handle.done())
-				{
-					finish();
-				}
 			}
 
 			[[nodiscard]]
 			bool isFinished() const override
 			{
-				return m_isFinished;
-			}
-
-			[[nodiscard]]
-			bool isCanceled() const
-			{
-				return m_isCanceled;
+				return m_handle.done();
 			}
 
 			[[nodiscard]]
@@ -902,16 +913,13 @@ inline namespace cotasklib
 			[[nodiscard]]
 			ScopedTaskRunner runScoped(FinishCallbackType<TResult> finishCallback)&&
 			{
-				m_finishCallback = std::move(finishCallback);
-				return ScopedTaskRunner{ std::move(*this) };
+				return ScopedTaskRunner{ std::move(*this), std::move(finishCallback) };
 			}
 
 			[[nodiscard]]
 			ScopedTaskRunner runScoped(FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)&&
 			{
-				m_finishCallback = std::move(finishCallback);
-				m_cancelCallback = std::move(cancelCallback);
-				return ScopedTaskRunner{ std::move(*this) };
+				return ScopedTaskRunner{ std::move(*this), std::move(finishCallback), std::move(cancelCallback) };
 			}
 
 			[[nodiscard]]
@@ -923,41 +931,13 @@ inline namespace cotasklib
 			[[nodiscard]]
 			void runAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback)&&
 			{
-				m_finishCallback = std::move(finishCallback);
-				ms.add(ScopedTaskRunner{ std::move(*this) });
+				ms.add(ScopedTaskRunner{ std::move(*this), std::move(finishCallback) });
 			}
 
 			[[nodiscard]]
 			void runAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)&&
 			{
-				m_finishCallback = std::move(finishCallback);
-				m_cancelCallback = std::move(cancelCallback);
-				ms.add(ScopedTaskRunner{ std::move(*this) });
-			}
-
-			void cancelIfNotFinished() override
-			{
-				if (m_isFinished || m_isCanceled)
-				{
-					return;
-				}
-
-				for (auto& task : m_concurrentTasksBefore)
-				{
-					task->cancelIfNotFinished();
-				}
-
-				m_isCanceled = true;
-
-				if (m_cancelCallback)
-				{
-					m_cancelCallback();
-				}
-
-				for (auto& task : m_concurrentTasksAfter)
-				{
-					task->cancelIfNotFinished();
-				}
+				ms.add(ScopedTaskRunner{ std::move(*this), std::move(finishCallback), std::move(cancelCallback) });
 			}
 		};
 
@@ -1019,11 +999,6 @@ inline namespace cotasklib
 				TResult value() const
 				{
 					return m_task.value();
-				}
-
-				void cancelIfNotFinished() override
-				{
-					m_task.cancelIfNotFinished();
 				}
 			};
 

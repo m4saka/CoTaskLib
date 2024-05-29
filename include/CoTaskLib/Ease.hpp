@@ -67,7 +67,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			inline Task<void> EaseTask(std::function<void(double)> callback, const Duration duration, double easeFunc(double))
+			inline Task<void> EaseTask(std::function<void(double)> callback, const Duration duration, double easeFunc(double), ISteadyClock* pSteadyClock)
 			{
 				if (duration.count() <= 0.0)
 				{
@@ -76,7 +76,7 @@ inline namespace cotasklib
 					co_return;
 				}
 
-				const Timer timer{ duration, StartImmediately::Yes };
+				const Timer timer{ duration, StartImmediately::Yes, pSteadyClock };
 				while (!timer.reachedZero())
 				{
 					callback(easeFunc(timer.progress0_1()));
@@ -130,14 +130,16 @@ inline namespace cotasklib
 			T m_from;
 			T m_to;
 			double(*m_easeFunc)(double);
+			ISteadyClock* m_pSteadyClock;
 
 		public:
-			explicit EaseTaskBuilder(std::function<void(T)> callback, Duration duration, T from, T to, double(*easeFunc)(double))
+			explicit EaseTaskBuilder(std::function<void(T)> callback, Duration duration, T from, T to, double(*easeFunc)(double), ISteadyClock* pSteadyClock)
 				: m_callback(std::move(callback))
 				, m_duration(duration)
 				, m_from(std::move(from))
 				, m_to(std::move(to))
 				, m_easeFunc(easeFunc)
+				, m_pSteadyClock(pSteadyClock)
 			{
 			}
 
@@ -191,73 +193,79 @@ inline namespace cotasklib
 				return *this;
 			}
 
+			EaseTaskBuilder& setSteadyClock(ISteadyClock* pSteadyClock)
+			{
+				m_pSteadyClock = pSteadyClock;
+				return *this;
+			}
+
 			Task<void> play()
 			{
 				auto lerpedCallback = [from = m_from, to = m_to, callback = m_callback](double t)
 					{
 						callback(detail::GenericLerp(from, to, t));
 					};
-				return detail::EaseTask(std::move(lerpedCallback), m_duration, m_easeFunc);
+				return detail::EaseTask(std::move(lerpedCallback), m_duration, m_easeFunc, m_pSteadyClock);
 			}
 		};
 
 		template <detail::Lerpable T>
 		[[nodiscard]]
-		EaseTaskBuilder<T> Ease(T* pValue, Duration duration = 0s, double easeFunc(double) = EaseOutQuad)
+		EaseTaskBuilder<T> Ease(T* pValue, Duration duration = 0s, double easeFunc(double) = EaseOutQuad, ISteadyClock* pSteadyClock = nullptr)
 		{
 			if constexpr (std::is_floating_point_v<T>)
 			{
 				// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
-				return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, 0.0, 1.0, easeFunc);
+				return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, 0.0, 1.0, easeFunc, pSteadyClock);
 			}
 			else
 			{
-				return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, T{}, T{}, easeFunc);
+				return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, T{}, T{}, easeFunc, pSteadyClock);
 			}
 		}
 
 		template <detail::Lerpable T>
 		[[nodiscard]]
-		EaseTaskBuilder<T> Ease(std::function<T> callback, Duration duration = 0s, double easeFunc(double) = EaseOutQuad)
+		EaseTaskBuilder<T> Ease(std::function<T> callback, Duration duration = 0s, double easeFunc(double) = EaseOutQuad, ISteadyClock* pSteadyClock = nullptr)
 		{
 			if constexpr (std::is_floating_point_v<T>)
 			{
 				// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
-				return EaseTaskBuilder<T>(std::move(callback), duration, 0.0, 1.0, easeFunc);
+				return EaseTaskBuilder<T>(std::move(callback), duration, 0.0, 1.0, easeFunc, pSteadyClock);
 			}
 			else
 			{
-				return EaseTaskBuilder<T>(std::move(callback), duration, T{}, T{}, easeFunc);
+				return EaseTaskBuilder<T>(std::move(callback), duration, T{}, T{}, easeFunc, pSteadyClock);
 			}
 		}
 
 		template <detail::Lerpable T>
 		[[nodiscard]]
-		EaseTaskBuilder<T> LinearEase(T* pValue, Duration duration = 0s)
+		EaseTaskBuilder<T> LinearEase(T* pValue, Duration duration = 0s, ISteadyClock* pSteadyClock = nullptr)
 		{
 			if constexpr (std::is_floating_point_v<T>)
 			{
 				// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
-				return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, 0.0, 1.0, Easing::Linear);
+				return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, 0.0, 1.0, Easing::Linear, pSteadyClock);
 			}
 			else
 			{
-				return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, T{}, T{}, Easing::Linear);
+				return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, T{}, T{}, Easing::Linear, pSteadyClock);
 			}
 		}
 
 		template <detail::Lerpable T>
 		[[nodiscard]]
-		EaseTaskBuilder<T> LinearEase(std::function<T> callback, Duration duration = 0s)
+		EaseTaskBuilder<T> LinearEase(std::function<T> callback, Duration duration = 0s, ISteadyClock* pSteadyClock = nullptr)
 		{
 			if constexpr (std::is_floating_point_v<T>)
 			{
 				// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
-				return EaseTaskBuilder<T>(std::move(callback), duration, 0.0, 1.0, Easing::Linear);
+				return EaseTaskBuilder<T>(std::move(callback), duration, 0.0, 1.0, Easing::Linear, pSteadyClock);
 			}
 			else
 			{
-				return EaseTaskBuilder<T>(std::move(callback), duration, T{}, T{}, Easing::Linear);
+				return EaseTaskBuilder<T>(std::move(callback), duration, T{}, T{}, Easing::Linear, pSteadyClock);
 			}
 		}
 
@@ -268,18 +276,21 @@ inline namespace cotasklib
 			Duration m_duration;
 			bool m_isOneLetterDuration;
 			String m_text;
+			ISteadyClock* m_pSteadyClock;
 
+			[[nodiscard]]
 			Duration calcTotalDuration() const
 			{
 				return m_isOneLetterDuration ? m_duration * m_text.length() : m_duration;
 			}
 
 		public:
-			explicit TypewriterTaskBuilder(std::function<void(const String&)> callback, Duration oneLetterDuration, StringView text)
+			explicit TypewriterTaskBuilder(std::function<void(const String&)> callback, Duration oneLetterDuration, StringView text, ISteadyClock* pSteadyClock)
 				: m_callback(std::move(callback))
 				, m_duration(oneLetterDuration)
 				, m_isOneLetterDuration(true)
 				, m_text(text)
+				, m_pSteadyClock(pSteadyClock)
 			{
 			}
 
@@ -308,6 +319,12 @@ inline namespace cotasklib
 				return *this;
 			}
 
+			TypewriterTaskBuilder& setSteadyClock(ISteadyClock* pSteadyClock)
+			{
+				m_pSteadyClock = pSteadyClock;
+				return *this;
+			}
+
 			Task<void> play()
 			{
 				return detail::TypewriterTask(m_callback, calcTotalDuration(), m_text);
@@ -315,39 +332,15 @@ inline namespace cotasklib
 		};
 
 		[[nodiscard]]
-		inline TypewriterTaskBuilder Typewriter(String* pText)
+		inline TypewriterTaskBuilder Typewriter(String* pText, Duration oneLetterDuration = 0s, StringView text = U"", ISteadyClock* pSteadyClock = nullptr)
 		{
-			return TypewriterTaskBuilder([pText](const String& text) { *pText = text; }, 1s, U"");
+			return TypewriterTaskBuilder([pText](const String& text) { *pText = text; }, oneLetterDuration, text, pSteadyClock);
 		}
 
 		[[nodiscard]]
-		inline TypewriterTaskBuilder Typewriter(String* pText, Duration oneLetterDuration)
+		inline TypewriterTaskBuilder Typewriter(std::function<void(const String&)> callback, Duration oneLetterDuration = 0s, StringView text = U"", ISteadyClock* pSteadyClock = nullptr)
 		{
-			return TypewriterTaskBuilder([pText](const String& text) { *pText = text; }, oneLetterDuration, U"");
-		}
-
-		[[nodiscard]]
-		inline TypewriterTaskBuilder Typewriter(String* pText, Duration oneLetterDuration, StringView text)
-		{
-			return TypewriterTaskBuilder([pText](const String& text) { *pText = text; }, oneLetterDuration, text);
-		}
-
-		[[nodiscard]]
-		inline TypewriterTaskBuilder Typewriter(std::function<void(const String&)> callback)
-		{
-			return TypewriterTaskBuilder(std::move(callback), 1s, U"");
-		}
-
-		[[nodiscard]]
-		inline TypewriterTaskBuilder Typewriter(std::function<void(const String&)> callback, Duration oneLetterDuration)
-		{
-			return TypewriterTaskBuilder(std::move(callback), oneLetterDuration, U"");
-		}
-
-		[[nodiscard]]
-		inline TypewriterTaskBuilder Typewriter(std::function<void(const String&)> callback, Duration oneLetterDuration, StringView text)
-		{
-			return TypewriterTaskBuilder(std::move(callback), oneLetterDuration, text);
+			return TypewriterTaskBuilder(std::move(callback), oneLetterDuration, text, pSteadyClock);
 		}
 	}
 }

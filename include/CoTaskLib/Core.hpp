@@ -1365,9 +1365,9 @@ inline namespace cotasklib
 		}
 
 		[[nodiscard]]
-		inline Task<void> Delay(const Duration duration)
+		inline Task<void> Delay(const Duration duration, ISteadyClock* pSteadyClock = nullptr)
 		{
-			const Timer timer{ duration, StartImmediately::Yes };
+			const Timer timer{ duration, StartImmediately::Yes, pSteadyClock };
 			while (!timer.reachedZero())
 			{
 				co_await detail::Yield{};

@@ -64,9 +64,10 @@ inline namespace cotasklib
 			double(*m_easeFuncColorAdd)(double);
 			double m_alpha = 1.0;
 			double(*m_easeFuncAlpha)(double);
+			ISteadyClock* m_pSteadyClock = nullptr;
 
 		public:
-			explicit Tweener(Vec2 pivot = Scene::CenterF(), double defaultEaseFunc(double) = EaseOutQuad)
+			explicit Tweener(Vec2 pivot = Scene::CenterF(), double defaultEaseFunc(double) = EaseOutQuad, ISteadyClock* pSteadyClock = nullptr)
 				: m_pivot(pivot)
 				, m_easeFuncPosition(defaultEaseFunc)
 				, m_easeFuncScale(defaultEaseFunc)
@@ -74,6 +75,7 @@ inline namespace cotasklib
 				, m_easeFuncColor(defaultEaseFunc)
 				, m_easeFuncColorAdd(defaultEaseFunc)
 				, m_easeFuncAlpha(defaultEaseFunc)
+				, m_pSteadyClock(pSteadyClock)
 			{
 			}
 
@@ -96,7 +98,7 @@ inline namespace cotasklib
 
 			EaseTaskBuilder<Vec2> tweenPosition(Duration duration)
 			{
-				return Ease(&m_position, duration, m_easeFuncPosition).fromTo(m_position, m_position);
+				return Ease(&m_position, duration, m_easeFuncPosition, m_pSteadyClock).fromTo(m_position, m_position);
 			}
 
 			const Vec2& position() const
@@ -116,7 +118,7 @@ inline namespace cotasklib
 
 			EaseTaskBuilder<Vec2> tweenScale(Duration duration)
 			{
-				return Ease(&m_scale, duration, m_easeFuncScale).fromTo(m_scale, m_scale);
+				return Ease(&m_scale, duration, m_easeFuncScale, m_pSteadyClock).fromTo(m_scale, m_scale);
 			}
 
 			const Vec2& scale() const
@@ -141,7 +143,7 @@ inline namespace cotasklib
 
 			EaseTaskBuilder<double> tweenRotation(Duration duration)
 			{
-				return Ease(&m_rotation, duration, m_easeFuncRotation).fromTo(m_rotation, m_rotation);
+				return Ease(&m_rotation, duration, m_easeFuncRotation, m_pSteadyClock).fromTo(m_rotation, m_rotation);
 			}
 
 			double rotation() const
@@ -161,7 +163,7 @@ inline namespace cotasklib
 
 			EaseTaskBuilder<ColorF> tweenColor(Duration duration)
 			{
-				return Ease(&m_color, duration, m_easeFuncColor).fromTo(m_color, m_color);
+				return Ease(&m_color, duration, m_easeFuncColor, m_pSteadyClock).fromTo(m_color, m_color);
 			}
 
 			const ColorF& color() const
@@ -181,7 +183,7 @@ inline namespace cotasklib
 
 			EaseTaskBuilder<ColorF> tweenColorAdd(Duration duration)
 			{
-				return Ease(&m_colorAdd, duration, m_easeFuncColorAdd).fromTo(m_colorAdd, m_colorAdd);
+				return Ease(&m_colorAdd, duration, m_easeFuncColorAdd, m_pSteadyClock).fromTo(m_colorAdd, m_colorAdd);
 			}
 
 			const ColorF& colorAdd() const
@@ -201,17 +203,17 @@ inline namespace cotasklib
 
 			EaseTaskBuilder<double> tweenAlpha(Duration duration)
 			{
-				return Ease(&m_alpha, duration, m_easeFuncAlpha).fromTo(m_alpha, m_alpha);
+				return Ease(&m_alpha, duration, m_easeFuncAlpha, m_pSteadyClock).fromTo(m_alpha, m_alpha);
 			}
 
 			Co::Task<void> fadeInAlpha(Duration duration)
 			{
-				return Ease(&m_alpha, duration, m_easeFuncAlpha).fromTo(0.0, 1.0).play();
+				return Ease(&m_alpha, duration, m_easeFuncAlpha, m_pSteadyClock).fromTo(0.0, 1.0).play();
 			}
 
 			Co::Task<void> fadeOutAlpha(Duration duration)
 			{
-				return Ease(&m_alpha, duration, m_easeFuncAlpha).fromTo(m_alpha, 0.0).play();
+				return Ease(&m_alpha, duration, m_easeFuncAlpha, m_pSteadyClock).fromTo(m_alpha, 0.0).play();
 			}
 
 			double alpha() const

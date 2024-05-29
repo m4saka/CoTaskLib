@@ -56,20 +56,22 @@ inline namespace cotasklib
 				ColorF m_toColor;
 				double(*m_easeFunc)(double);
 				int32 m_drawIndex;
+				ISteadyClock* m_pSteadyClock;
 
 			public:
-				explicit ScreenFadeSequence(Duration duration, const ColorF& fromColor, const ColorF& toColor, double easeFunc(double), int32 drawIndex)
+				explicit ScreenFadeSequence(Duration duration, const ColorF& fromColor, const ColorF& toColor, double easeFunc(double), int32 drawIndex, ISteadyClock* pSteadyClock)
 					: m_duration(duration)
 					, m_color(fromColor)
 					, m_toColor(toColor)
 					, m_easeFunc(easeFunc)
 					, m_drawIndex(drawIndex)
+					, m_pSteadyClock(pSteadyClock)
 				{
 				}
 
 				Task<void> start() override
 				{
-					return Ease(&m_color, m_duration, m_easeFunc).fromTo(m_color, m_toColor).play();
+					return Ease(&m_color, m_duration, m_easeFunc, m_pSteadyClock).fromTo(m_color, m_toColor).play();
 				}
 
 				void draw() const override
@@ -83,15 +85,15 @@ inline namespace cotasklib
 		constexpr int32 ScreenFadeOutDrawIndex = 10600000;
 
 		[[nodiscard]]
-		inline Task<void> ScreenFadeIn(const Duration& duration, const ColorF& color = Palette::Black, double easeFunc(double) = Easing::Linear, int32 drawIndex = ScreenFadeInDrawIndex)
+		inline Task<void> ScreenFadeIn(const Duration& duration, const ColorF& color = Palette::Black, double easeFunc(double) = Easing::Linear, int32 drawIndex = ScreenFadeInDrawIndex, ISteadyClock* pSteadyClock = nullptr)
 		{
-			return Play<detail::ScreenFadeSequence>(duration, color, color.withA(0.0), easeFunc, drawIndex);
+			return Play<detail::ScreenFadeSequence>(duration, color, color.withA(0.0), easeFunc, drawIndex, pSteadyClock);
 		}
 
 		[[nodiscard]]
-		inline Task<void> ScreenFadeOut(const Duration& duration, const ColorF& color = Palette::Black, double easeFunc(double) = Easing::Linear, int32 drawIndex = ScreenFadeOutDrawIndex)
+		inline Task<void> ScreenFadeOut(const Duration& duration, const ColorF& color = Palette::Black, double easeFunc(double) = Easing::Linear, int32 drawIndex = ScreenFadeOutDrawIndex, ISteadyClock* pSteadyClock = nullptr)
 		{
-			return Play<detail::ScreenFadeSequence>(duration, color.withA(0.0), color, easeFunc, drawIndex);
+			return Play<detail::ScreenFadeSequence>(duration, color.withA(0.0), color, easeFunc, drawIndex, pSteadyClock);
 		}
 	}
 }

@@ -730,8 +730,6 @@ private:
     - 指定されたフレーム数だけ待機します。
 - `Co::Delay(Duration)` -> `Co::Task<void>`
     - 指定された時間だけ待機します。
-- `Co::Delay(Duration, std::function<void(const Timer&)>)` -> `Co::Task<void>`
-    - 指定された時間だけ待機し、待機中に毎フレーム指定された関数を実行します。
 - `Co::WaitForever()` -> `Co::Task<void>`
     - 永久に待機します。
     - Tips: 終了しないシーケンスの`start()`関数に使用できます。

@@ -524,29 +524,42 @@ inline namespace cotasklib
 
 			template <typename TResult>
 			[[nodiscard]]
-			Optional<AwaiterID> RegisterAwaiterIfNotDone(TaskAwaiter<TResult>&& awaiter, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)
+			Optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(TaskAwaiter<TResult>&& awaiter, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)
 			{
+				const auto fnCallFinishCallback = [&]
+					{
+						if (finishCallback)
+						{
+							if constexpr (std::is_void_v<TResult>)
+							{
+								finishCallback();
+							}
+							else
+							{
+								finishCallback(awaiter.value());
+							}
+						}
+					};
+
+				// フレーム待ちなしで終了した場合は登録不要
+				// (ここで一度resumeするのは、runScoped実行まで開始を遅延させるためにinitial_suspendをsuspend_alwaysにしているため)
 				if (awaiter.isFinished())
 				{
-					// フレーム待ちなしで終了した場合は登録不要
-					if (finishCallback)
-					{
-						if constexpr (std::is_void_v<TResult>)
-						{
-							finishCallback();
-						}
-						else
-						{
-							finishCallback(awaiter.value());
-						}
-					}
+					fnCallFinishCallback();
 					return none;
 				}
+				awaiter.resume();
+				if (awaiter.isFinished())
+				{
+					fnCallFinishCallback();
+					return none;
+				}
+
 				return Backend::Add(std::make_unique<TaskAwaiter<TResult>>(std::move(awaiter)), std::move(finishCallback), std::move(cancelCallback));
 			}
 
 			template <typename TResult>
-			Optional<AwaiterID> RegisterAwaiterIfNotDone(const TaskAwaiter<TResult>& awaiter) = delete;
+			Optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(const TaskAwaiter<TResult>& awaiter) = delete;
 		}
 
 		class MultiScoped;
@@ -610,7 +623,7 @@ inline namespace cotasklib
 		public:
 			template <typename TResult>
 			explicit ScopedTaskRunner(Task<TResult>&& task, FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)
-				: m_lifetime(detail::RegisterAwaiterIfNotDone(detail::TaskAwaiter<TResult>{ std::move(task) }, std::move(finishCallback), std::move(cancelCallback)))
+				: m_lifetime(ResumeAwaiterOnceAndRegisterIfNotDone(detail::TaskAwaiter<TResult>{ std::move(task) }, std::move(finishCallback), std::move(cancelCallback)))
 			{
 			}
 
@@ -966,9 +979,16 @@ inline namespace cotasklib
 				}
 
 				template <typename TResultOther>
-				void await_suspend(std::coroutine_handle<detail::Promise<TResultOther>> handle)
+				bool await_suspend(std::coroutine_handle<detail::Promise<TResultOther>> handle)
 				{
+					resume();
+					if (m_task.isFinished())
+					{
+						// フレーム待ちなしで終了した場合は登録不要
+						return false;
+					}
 					handle.promise().setSubAwaiter(this);
+					return true;
 				}
 
 				TResult await_resume() const
@@ -1006,7 +1026,10 @@ inline namespace cotasklib
 				[[nodiscard]]
 				auto initial_suspend()
 				{
-					return std::suspend_never{};
+					// suspend_neverにすれば関数呼び出し時点で実行開始されるが、
+					// その場合Co::AllやCo::Anyに渡す際など引数の評価順が不定になり扱いづらいため、
+					// ここではsuspend_alwaysにしてrunScoped実行まで実行を遅延させている
+					return std::suspend_always{};
 				}
 
 				[[nodiscard]]
@@ -1592,12 +1615,12 @@ inline namespace cotasklib
 
 			while (true)
 			{
-				co_await detail::Yield{};
 				(args.resume(), ...);
 				if ((args.isFinished() && ...))
 				{
 					co_return std::make_tuple(detail::ConvertVoidResult(args)...);
 				}
+				co_await detail::Yield{};
 			}
 		}
 
@@ -1611,12 +1634,12 @@ inline namespace cotasklib
 
 			while (true)
 			{
-				co_await detail::Yield{};
 				(args.resume(), ...);
 				if ((args.isFinished() || ...))
 				{
 					co_return std::make_tuple(detail::ConvertOptionalVoidResult(args)...);
 				}
+				co_await detail::Yield{};
 			}
 		}
 	}

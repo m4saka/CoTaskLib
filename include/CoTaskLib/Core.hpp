@@ -1170,7 +1170,7 @@ inline namespace cotasklib
 			using VoidResultTypeReplace = std::conditional_t<std::is_void_v<TResult>, VoidResult, TResult>;
 		}
 
-		template <typename TResult>
+		template <typename TResult = void>
 		class [[nodiscard]] TaskFinishSource
 		{
 			static_assert(!std::is_reference_v<TResult>, "TResult must not be a reference type");

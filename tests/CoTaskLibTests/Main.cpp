@@ -1,4 +1,5 @@
-﻿#define CATCH_CONFIG_MAIN
+﻿#include <compare>
+#define CATCH_CONFIG_MAIN
 #include <Catch2/catch.hpp>
 #include <CoTaskLib.hpp>
 
@@ -843,10 +844,8 @@ TEST_CASE("Co::Any with immediate tasks")
 	REQUIRE(runner.isFinished() == true);
 }
 
-class TestSequence : public Co::SequenceBase<int32>
+struct SequenceProgress
 {
-public:
-	int32 argValue;
 	bool isPreStartStarted = false;
 	bool isPreStartFinished = false;
 	bool isStartStarted = false;
@@ -858,96 +857,112 @@ public:
 	bool isPostFadeOutStarted = false;
 	bool isPostFadeOutFinished = false;
 
-	explicit TestSequence(int32 argValue)
-		: argValue(argValue)
+	auto operator<=>(const SequenceProgress&) const = default;
+
+	bool allFalse() const
+	{
+		return *this == SequenceProgress{};
+	}
+};
+
+class TestSequence : public Co::SequenceBase<int32>
+{
+public:
+	explicit TestSequence(int32 argValue, SequenceProgress* pProgress)
+		: m_argValue(argValue)
+		, m_pProgress(pProgress)
 	{
 	}
 
 private:
+	int32 m_argValue;
+	SequenceProgress* m_pProgress;
+
 	Co::Task<void> preStart() override
 	{
-		isPreStartStarted = true;
+		m_pProgress->isPreStartStarted = true;
 		co_await Co::DelayFrame();
-		isPreStartFinished = true;
+		m_pProgress->isPreStartFinished = true;
 	}
 
 	Co::Task<void> fadeIn() override
 	{
-		isFadeInStarted = true;
+		m_pProgress->isFadeInStarted = true;
 		co_await Co::DelayFrame();
-		isFadeInFinished = true;
+		m_pProgress->isFadeInFinished = true;
 	}
 
 	Co::Task<int32> start() override
 	{
-		isStartStarted = true;
+		m_pProgress->isStartStarted = true;
 		co_await Co::DelayFrame();
-		isStartFinished = true;
-		co_return argValue;
+		m_pProgress->isStartFinished = true;
+		co_return m_argValue;
 	}
 
 	Co::Task<void> fadeOut() override
 	{
-		isFadeOutStarted = true;
+		m_pProgress->isFadeOutStarted = true;
 		co_await Co::DelayFrame();
-		isFadeOutFinished = true;
+		m_pProgress->isFadeOutFinished = true;
 	}
 
 	Co::Task<void> postFadeOut() override
 	{
-		isPostFadeOutStarted = true;
+		m_pProgress->isPostFadeOutStarted = true;
 		co_await Co::DelayFrame();
-		isPostFadeOutFinished = true;
+		m_pProgress->isPostFadeOutFinished = true;
 	}
 };
 
 TEST_CASE("Sequence")
 {
-	TestSequence sequence{ 42 };
+	SequenceProgress progress;
+	TestSequence sequence{ 42, &progress };
 	const auto runner = sequence.playScoped();
 	REQUIRE(runner.isFinished() == false);
-	REQUIRE(sequence.isPreStartStarted == true); // 呼び出し時点で最初のsuspendまでは実行される
-	REQUIRE(sequence.isPreStartFinished == false);
-	REQUIRE(sequence.isFadeInStarted == false);
-	REQUIRE(sequence.isFadeInFinished == false);
-	REQUIRE(sequence.isStartStarted == false);
-	REQUIRE(sequence.isStartFinished == false);
-	REQUIRE(sequence.isFadeOutStarted == false);
-	REQUIRE(sequence.isFadeOutFinished == false);
-	REQUIRE(sequence.isPostFadeOutStarted == false);
-	REQUIRE(sequence.isPostFadeOutFinished == false);
+	REQUIRE(progress.isPreStartStarted == true); // 呼び出し時点で最初のsuspendまでは実行される
+	REQUIRE(progress.isPreStartFinished == false);
+	REQUIRE(progress.isFadeInStarted == false);
+	REQUIRE(progress.isFadeInFinished == false);
+	REQUIRE(progress.isStartStarted == false);
+	REQUIRE(progress.isStartFinished == false);
+	REQUIRE(progress.isFadeOutStarted == false);
+	REQUIRE(progress.isFadeOutFinished == false);
+	REQUIRE(progress.isPostFadeOutStarted == false);
+	REQUIRE(progress.isPostFadeOutFinished == false);
 	REQUIRE(sequence.hasResult() == false);
 	REQUIRE(sequence.resultOpt() == none);
 
 	System::Update();
 
 	REQUIRE(runner.isFinished() == false);
-	REQUIRE(sequence.isPreStartStarted == true);
-	REQUIRE(sequence.isPreStartFinished == true);
-	REQUIRE(sequence.isFadeInStarted == true); // fadeInとstartは同時に実行される
-	REQUIRE(sequence.isFadeInFinished == false);
-	REQUIRE(sequence.isStartStarted == true); // fadeInとstartは同時に実行される
-	REQUIRE(sequence.isStartFinished == false);
-	REQUIRE(sequence.isFadeOutStarted == false);
-	REQUIRE(sequence.isFadeOutFinished == false);
-	REQUIRE(sequence.isPostFadeOutStarted == false);
-	REQUIRE(sequence.isPostFadeOutFinished == false);
+	REQUIRE(progress.isPreStartStarted == true);
+	REQUIRE(progress.isPreStartFinished == true);
+	REQUIRE(progress.isFadeInStarted == true); // fadeInとstartは同時に実行される
+	REQUIRE(progress.isFadeInFinished == false);
+	REQUIRE(progress.isStartStarted == true); // fadeInとstartは同時に実行される
+	REQUIRE(progress.isStartFinished == false);
+	REQUIRE(progress.isFadeOutStarted == false);
+	REQUIRE(progress.isFadeOutFinished == false);
+	REQUIRE(progress.isPostFadeOutStarted == false);
+	REQUIRE(progress.isPostFadeOutFinished == false);
 	REQUIRE(sequence.hasResult() == false);
 	REQUIRE(sequence.resultOpt() == none);
 
 	System::Update();
 
 	REQUIRE(runner.isFinished() == false);
-	REQUIRE(sequence.isPreStartStarted == true);
-	REQUIRE(sequence.isPreStartFinished == true);
-	REQUIRE(sequence.isFadeInStarted == true);
-	REQUIRE(sequence.isFadeInFinished == true);
-	REQUIRE(sequence.isStartStarted == true);
-	REQUIRE(sequence.isStartFinished == true);
-	REQUIRE(sequence.isFadeOutStarted == true);
-	REQUIRE(sequence.isFadeOutFinished == false);
-	REQUIRE(sequence.isPostFadeOutStarted == false);
-	REQUIRE(sequence.isPostFadeOutFinished == false);
+	REQUIRE(progress.isPreStartStarted == true);
+	REQUIRE(progress.isPreStartFinished == true);
+	REQUIRE(progress.isFadeInStarted == true);
+	REQUIRE(progress.isFadeInFinished == true);
+	REQUIRE(progress.isStartStarted == true);
+	REQUIRE(progress.isStartFinished == true);
+	REQUIRE(progress.isFadeOutStarted == true);
+	REQUIRE(progress.isFadeOutFinished == false);
+	REQUIRE(progress.isPostFadeOutStarted == false);
+	REQUIRE(progress.isPostFadeOutFinished == false);
 
 	// startが完了した時点で結果が取得できる
 	REQUIRE(sequence.hasResult() == true);
@@ -957,193 +972,427 @@ TEST_CASE("Sequence")
 	System::Update();
 
 	REQUIRE(runner.isFinished() == false);
-	REQUIRE(sequence.isPreStartStarted == true);
-	REQUIRE(sequence.isPreStartFinished == true);
-	REQUIRE(sequence.isFadeInStarted == true);
-	REQUIRE(sequence.isFadeInFinished == true);
-	REQUIRE(sequence.isStartStarted == true);
-	REQUIRE(sequence.isStartFinished == true);
-	REQUIRE(sequence.isFadeOutStarted == true);
-	REQUIRE(sequence.isFadeOutFinished == true);
-	REQUIRE(sequence.isPostFadeOutStarted == true);
-	REQUIRE(sequence.isPostFadeOutFinished == false);
+	REQUIRE(progress.isPreStartStarted == true);
+	REQUIRE(progress.isPreStartFinished == true);
+	REQUIRE(progress.isFadeInStarted == true);
+	REQUIRE(progress.isFadeInFinished == true);
+	REQUIRE(progress.isStartStarted == true);
+	REQUIRE(progress.isStartFinished == true);
+	REQUIRE(progress.isFadeOutStarted == true);
+	REQUIRE(progress.isFadeOutFinished == true);
+	REQUIRE(progress.isPostFadeOutStarted == true);
+	REQUIRE(progress.isPostFadeOutFinished == false);
 
 	System::Update();
 
 	REQUIRE(runner.isFinished() == true);
-	REQUIRE(sequence.isPreStartStarted == true);
-	REQUIRE(sequence.isPreStartFinished == true);
-	REQUIRE(sequence.isFadeInStarted == true);
-	REQUIRE(sequence.isFadeInFinished == true);
-	REQUIRE(sequence.isStartStarted == true);
-	REQUIRE(sequence.isStartFinished == true);
-	REQUIRE(sequence.isFadeOutStarted == true);
-	REQUIRE(sequence.isFadeOutFinished == true);
-	REQUIRE(sequence.isPostFadeOutStarted == true);
-	REQUIRE(sequence.isPostFadeOutFinished == true);
+	REQUIRE(progress.isPreStartStarted == true);
+	REQUIRE(progress.isPreStartFinished == true);
+	REQUIRE(progress.isFadeInStarted == true);
+	REQUIRE(progress.isFadeInFinished == true);
+	REQUIRE(progress.isStartStarted == true);
+	REQUIRE(progress.isStartFinished == true);
+	REQUIRE(progress.isFadeOutStarted == true);
+	REQUIRE(progress.isFadeOutFinished == true);
+	REQUIRE(progress.isPostFadeOutStarted == true);
+	REQUIRE(progress.isPostFadeOutFinished == true);
 }
 
-Co::Task<void> PlaySequenceCaller(int32 value, int32* pDest)
+Co::Task<void> PlaySequenceCaller(int32 value, int32* pDest, SequenceProgress* pProgress)
 {
-	*pDest = co_await Co::Play<TestSequence>(value);
+	*pDest = co_await Co::Play<TestSequence>(value, pProgress);
 }
 
 TEST_CASE("Co::Play<TSequence>")
 {
 	int32 value = 0;
-	const auto runner = PlaySequenceCaller(42, &value).runScoped();
-	for (int32 i = 0; i < 4; ++i)
-	{
-		REQUIRE(runner.isFinished() == false);
-		System::Update();
-	}
+	SequenceProgress progress;
+	const auto runner = PlaySequenceCaller(42, &value, &progress).runScoped();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(progress.isPreStartStarted == true); // 呼び出し時点で最初のsuspendまでは実行される
+	REQUIRE(progress.isPreStartFinished == false);
+	REQUIRE(progress.isFadeInStarted == false);
+	REQUIRE(progress.isFadeInFinished == false);
+	REQUIRE(progress.isStartStarted == false);
+	REQUIRE(progress.isStartFinished == false);
+	REQUIRE(progress.isFadeOutStarted == false);
+	REQUIRE(progress.isFadeOutFinished == false);
+	REQUIRE(progress.isPostFadeOutStarted == false);
+	REQUIRE(progress.isPostFadeOutFinished == false);
+
+	System::Update();
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(progress.isPreStartStarted == true);
+	REQUIRE(progress.isPreStartFinished == true);
+	REQUIRE(progress.isFadeInStarted == true); // fadeInとstartは同時に実行される
+	REQUIRE(progress.isFadeInFinished == false);
+	REQUIRE(progress.isStartStarted == true); // fadeInとstartは同時に実行される
+	REQUIRE(progress.isStartFinished == false);
+	REQUIRE(progress.isFadeOutStarted == false);
+	REQUIRE(progress.isFadeOutFinished == false);
+	REQUIRE(progress.isPostFadeOutStarted == false);
+	REQUIRE(progress.isPostFadeOutFinished == false);
+
+	System::Update();
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(progress.isPreStartStarted == true);
+	REQUIRE(progress.isPreStartFinished == true);
+	REQUIRE(progress.isFadeInStarted == true);
+	REQUIRE(progress.isFadeInFinished == true);
+	REQUIRE(progress.isStartStarted == true);
+	REQUIRE(progress.isStartFinished == true);
+	REQUIRE(progress.isFadeOutStarted == true);
+	REQUIRE(progress.isFadeOutFinished == false);
+	REQUIRE(progress.isPostFadeOutStarted == false);
+	REQUIRE(progress.isPostFadeOutFinished == false);
+
+	System::Update();
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(progress.isPreStartStarted == true);
+	REQUIRE(progress.isPreStartFinished == true);
+	REQUIRE(progress.isFadeInStarted == true);
+	REQUIRE(progress.isFadeInFinished == true);
+	REQUIRE(progress.isStartStarted == true);
+	REQUIRE(progress.isStartFinished == true);
+	REQUIRE(progress.isFadeOutStarted == true);
+	REQUIRE(progress.isFadeOutFinished == true);
+	REQUIRE(progress.isPostFadeOutStarted == true);
+	REQUIRE(progress.isPostFadeOutFinished == false);
+
+	System::Update();
+
 	REQUIRE(runner.isFinished() == true);
+	REQUIRE(progress.isPreStartStarted == true);
+	REQUIRE(progress.isPreStartFinished == true);
+	REQUIRE(progress.isFadeInStarted == true);
+	REQUIRE(progress.isFadeInFinished == true);
+	REQUIRE(progress.isStartStarted == true);
+	REQUIRE(progress.isStartFinished == true);
+	REQUIRE(progress.isFadeOutStarted == true);
+	REQUIRE(progress.isFadeOutFinished == true);
+	REQUIRE(progress.isPostFadeOutStarted == true);
+	REQUIRE(progress.isPostFadeOutFinished == true);
+
 	REQUIRE(value == 42);
 }
 
 class TestScene : public Co::SceneBase
 {
 public:
-	bool isPreStartStarted = false;
-	bool isPreStartFinished = false;
-	bool isStartStarted = false;
-	bool isStartFinished = false;
-	bool isFadeInStarted = false;
-	bool isFadeInFinished = false;
-	bool isFadeOutStarted = false;
-	bool isFadeOutFinished = false;
-	bool isPostFadeOutStarted = false;
-	bool isPostFadeOutFinished = false;
-
-	explicit TestScene(int32 argValue)
+	explicit TestScene(SequenceProgress* pProgress)
+		: m_pProgress(pProgress)
 	{
-		REQUIRE(argValue == 42);
 	}
 
 private:
+	SequenceProgress* m_pProgress;
+
 	Co::Task<void> preStart() override
 	{
-		isPreStartStarted = true;
+		m_pProgress->isPreStartStarted = true;
 		co_await Co::DelayFrame();
-		isPreStartFinished = true;
+		m_pProgress->isPreStartFinished = true;
 	}
 
 	Co::Task<void> fadeIn() override
 	{
-		isFadeInStarted = true;
+		m_pProgress->isFadeInStarted = true;
 		co_await Co::DelayFrame();
-		isFadeInFinished = true;
+		m_pProgress->isFadeInFinished = true;
 	}
 
 	Co::Task<void> start() override
 	{
-		isStartStarted = true;
+		m_pProgress->isStartStarted = true;
 		co_await Co::DelayFrame();
-		isStartFinished = true;
+		m_pProgress->isStartFinished = true;
 	}
 
 	Co::Task<void> fadeOut() override
 	{
-		isFadeOutStarted = true;
+		m_pProgress->isFadeOutStarted = true;
 		co_await Co::DelayFrame();
-		isFadeOutFinished = true;
+		m_pProgress->isFadeOutFinished = true;
 	}
 
 	Co::Task<void> postFadeOut() override
 	{
-		isPostFadeOutStarted = true;
+		m_pProgress->isPostFadeOutStarted = true;
 		co_await Co::DelayFrame();
-		isPostFadeOutFinished = true;
+		m_pProgress->isPostFadeOutFinished = true;
 	}
 };
 
-TEST_CASE("Scene")
-{
-	TestScene scene{ 42 };
-	const auto runner = scene.playInternal().runScoped(); // Sceneは参照を持ったまま通常実行できないので、仕方なくplayInternalでテストする
-	REQUIRE(runner.isFinished() == false);
-	REQUIRE(scene.isPreStartStarted == true); // 呼び出し時点で最初のsuspendまでは実行される
-	REQUIRE(scene.isPreStartFinished == false);
-	REQUIRE(scene.isFadeInStarted == false);
-	REQUIRE(scene.isFadeInFinished == false);
-	REQUIRE(scene.isStartStarted == false);
-	REQUIRE(scene.isStartFinished == false);
-	REQUIRE(scene.isFadeOutStarted == false);
-	REQUIRE(scene.isFadeOutFinished == false);
-	REQUIRE(scene.isPostFadeOutStarted == false);
-	REQUIRE(scene.isPostFadeOutFinished == false);
-
-	System::Update();
-
-	REQUIRE(runner.isFinished() == false);
-	REQUIRE(scene.isPreStartStarted == true);
-	REQUIRE(scene.isPreStartFinished == true);
-	REQUIRE(scene.isFadeInStarted == true); // fadeInとstartは同時に実行される
-	REQUIRE(scene.isFadeInFinished == false);
-	REQUIRE(scene.isStartStarted == true); // fadeInとstartは同時に実行される
-	REQUIRE(scene.isStartFinished == false);
-	REQUIRE(scene.isFadeOutStarted == false);
-	REQUIRE(scene.isFadeOutFinished == false);
-	REQUIRE(scene.isPostFadeOutStarted == false);
-	REQUIRE(scene.isPostFadeOutFinished == false);
-
-	System::Update();
-
-	REQUIRE(runner.isFinished() == false);
-	REQUIRE(scene.isPreStartStarted == true);
-	REQUIRE(scene.isPreStartFinished == true);
-	REQUIRE(scene.isFadeInStarted == true);
-	REQUIRE(scene.isFadeInFinished == true);
-	REQUIRE(scene.isStartStarted == true);
-	REQUIRE(scene.isStartFinished == true);
-	REQUIRE(scene.isFadeOutStarted == true);
-	REQUIRE(scene.isFadeOutFinished == false);
-	REQUIRE(scene.isPostFadeOutStarted == false);
-	REQUIRE(scene.isPostFadeOutFinished == false);
-
-	System::Update();
-
-	REQUIRE(runner.isFinished() == false);
-	REQUIRE(scene.isPreStartStarted == true);
-	REQUIRE(scene.isPreStartFinished == true);
-	REQUIRE(scene.isFadeInStarted == true);
-	REQUIRE(scene.isFadeInFinished == true);
-	REQUIRE(scene.isStartStarted == true);
-	REQUIRE(scene.isStartFinished == true);
-	REQUIRE(scene.isFadeOutStarted == true);
-	REQUIRE(scene.isFadeOutFinished == true);
-	REQUIRE(scene.isPostFadeOutStarted == true);
-	REQUIRE(scene.isPostFadeOutFinished == false);
-
-	System::Update();
-
-	REQUIRE(runner.isFinished() == true);
-	REQUIRE(scene.isPreStartStarted == true);
-	REQUIRE(scene.isPreStartFinished == true);
-	REQUIRE(scene.isFadeInStarted == true);
-	REQUIRE(scene.isFadeInFinished == true);
-	REQUIRE(scene.isStartStarted == true);
-	REQUIRE(scene.isStartFinished == true);
-	REQUIRE(scene.isFadeOutStarted == true);
-	REQUIRE(scene.isFadeOutFinished == true);
-	REQUIRE(scene.isPostFadeOutStarted == true);
-	REQUIRE(scene.isPostFadeOutFinished == true);
-}
-
 TEST_CASE("Co::EntryScene<TScene>")
 {
-	const auto runner = Co::EntryScene<TestScene>(42).runScoped();
-	for (int32 i = 0; i < 4; ++i)
-	{
-		REQUIRE(runner.isFinished() == false);
-		System::Update();
-	}
+	SequenceProgress progress;
+	const auto runner = Co::EntryScene<TestScene>(&progress).runScoped();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(progress.isPreStartStarted == true); // 呼び出し時点で最初のsuspendまでは実行される
+	REQUIRE(progress.isPreStartFinished == false);
+	REQUIRE(progress.isFadeInStarted == false);
+	REQUIRE(progress.isFadeInFinished == false);
+	REQUIRE(progress.isStartStarted == false);
+	REQUIRE(progress.isStartFinished == false);
+	REQUIRE(progress.isFadeOutStarted == false);
+	REQUIRE(progress.isFadeOutFinished == false);
+	REQUIRE(progress.isPostFadeOutStarted == false);
+	REQUIRE(progress.isPostFadeOutFinished == false);
 
-	// TestSceneは次シーンを指定していないので4フレームで完了
+	System::Update();
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(progress.isPreStartStarted == true);
+	REQUIRE(progress.isPreStartFinished == true);
+	REQUIRE(progress.isFadeInStarted == true); // fadeInとstartは同時に実行される
+	REQUIRE(progress.isFadeInFinished == false);
+	REQUIRE(progress.isStartStarted == true); // fadeInとstartは同時に実行される
+	REQUIRE(progress.isStartFinished == false);
+	REQUIRE(progress.isFadeOutStarted == false);
+	REQUIRE(progress.isFadeOutFinished == false);
+	REQUIRE(progress.isPostFadeOutStarted == false);
+	REQUIRE(progress.isPostFadeOutFinished == false);
+
+	System::Update();
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(progress.isPreStartStarted == true);
+	REQUIRE(progress.isPreStartFinished == true);
+	REQUIRE(progress.isFadeInStarted == true);
+	REQUIRE(progress.isFadeInFinished == true);
+	REQUIRE(progress.isStartStarted == true);
+	REQUIRE(progress.isStartFinished == true);
+	REQUIRE(progress.isFadeOutStarted == true);
+	REQUIRE(progress.isFadeOutFinished == false);
+	REQUIRE(progress.isPostFadeOutStarted == false);
+	REQUIRE(progress.isPostFadeOutFinished == false);
+
+	System::Update();
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(progress.isPreStartStarted == true);
+	REQUIRE(progress.isPreStartFinished == true);
+	REQUIRE(progress.isFadeInStarted == true);
+	REQUIRE(progress.isFadeInFinished == true);
+	REQUIRE(progress.isStartStarted == true);
+	REQUIRE(progress.isStartFinished == true);
+	REQUIRE(progress.isFadeOutStarted == true);
+	REQUIRE(progress.isFadeOutFinished == true);
+	REQUIRE(progress.isPostFadeOutStarted == true);
+	REQUIRE(progress.isPostFadeOutFinished == false);
+
+	System::Update();
+
 	REQUIRE(runner.isFinished() == true);
+	REQUIRE(progress.isPreStartStarted == true);
+	REQUIRE(progress.isPreStartFinished == true);
+	REQUIRE(progress.isFadeInStarted == true);
+	REQUIRE(progress.isFadeInFinished == true);
+	REQUIRE(progress.isStartStarted == true);
+	REQUIRE(progress.isStartFinished == true);
+	REQUIRE(progress.isFadeOutStarted == true);
+	REQUIRE(progress.isFadeOutFinished == true);
+	REQUIRE(progress.isPostFadeOutStarted == true);
+	REQUIRE(progress.isPostFadeOutFinished == true);
 }
 
+class ChainedTestScene : public Co::SceneBase
+{
+public:
+	explicit ChainedTestScene(SequenceProgress* pProgress1, SequenceProgress* pProgress2)
+		: m_pProgress1(pProgress1)
+		, m_pProgress2(pProgress2)
+	{
+	}
 
+private:
+	SequenceProgress* m_pProgress1;
+	SequenceProgress* m_pProgress2;
+
+	Co::Task<void> preStart() override
+	{
+		m_pProgress1->isPreStartStarted = true;
+		co_await Co::DelayFrame();
+		m_pProgress1->isPreStartFinished = true;
+	}
+
+	Co::Task<void> fadeIn() override
+	{
+		m_pProgress1->isFadeInStarted = true;
+		co_await Co::DelayFrame();
+		m_pProgress1->isFadeInFinished = true;
+	}
+
+	Co::Task<void> start() override
+	{
+		m_pProgress1->isStartStarted = true;
+		co_await Co::DelayFrame();
+		requestNextScene<TestScene>(m_pProgress2);
+		m_pProgress1->isStartFinished = true;
+	}
+
+	Co::Task<void> fadeOut() override
+	{
+		m_pProgress1->isFadeOutStarted = true;
+		co_await Co::DelayFrame();
+		m_pProgress1->isFadeOutFinished = true;
+	}
+
+	Co::Task<void> postFadeOut() override
+	{
+		m_pProgress1->isPostFadeOutStarted = true;
+		co_await Co::DelayFrame();
+		m_pProgress1->isPostFadeOutFinished = true;
+	}
+};
+
+TEST_CASE("requestNextScene")
+{
+	SequenceProgress progress1;
+	SequenceProgress progress2;
+	const auto runner = Co::EntryScene<ChainedTestScene>(&progress1, &progress2).runScoped();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(progress1.isPreStartStarted == true); // 呼び出し時点で最初のsuspendまでは実行される
+	REQUIRE(progress1.isPreStartFinished == false);
+	REQUIRE(progress1.isFadeInStarted == false);
+	REQUIRE(progress1.isFadeInFinished == false);
+	REQUIRE(progress1.isStartStarted == false);
+	REQUIRE(progress1.isStartFinished == false);
+	REQUIRE(progress1.isFadeOutStarted == false);
+	REQUIRE(progress1.isFadeOutFinished == false);
+	REQUIRE(progress1.isPostFadeOutStarted == false);
+	REQUIRE(progress1.isPostFadeOutFinished == false);
+	REQUIRE(progress2.allFalse());
+	
+	System::Update();
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(progress1.isPreStartStarted == true);
+	REQUIRE(progress1.isPreStartFinished == true);
+	REQUIRE(progress1.isFadeInStarted == true); // fadeInとstartは同時に実行される
+	REQUIRE(progress1.isFadeInFinished == false);
+	REQUIRE(progress1.isStartStarted == true); // fadeInとstartは同時に実行される
+	REQUIRE(progress1.isStartFinished == false);
+	REQUIRE(progress1.isFadeOutStarted == false);
+	REQUIRE(progress1.isFadeOutFinished == false);
+	REQUIRE(progress1.isPostFadeOutStarted == false);
+	REQUIRE(progress1.isPostFadeOutFinished == false);
+	REQUIRE(progress2.allFalse());
+
+	System::Update();
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(progress1.isPreStartStarted == true);
+	REQUIRE(progress1.isPreStartFinished == true);
+	REQUIRE(progress1.isFadeInStarted == true);
+	REQUIRE(progress1.isFadeInFinished == true);
+	REQUIRE(progress1.isStartStarted == true);
+	REQUIRE(progress1.isStartFinished == true);
+	REQUIRE(progress1.isFadeOutStarted == true);
+	REQUIRE(progress1.isFadeOutFinished == false);
+	REQUIRE(progress1.isPostFadeOutStarted == false);
+	REQUIRE(progress1.isPostFadeOutFinished == false);
+	REQUIRE(progress2.allFalse());
+
+	System::Update();
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(progress1.isPreStartStarted == true);
+	REQUIRE(progress1.isPreStartFinished == true);
+	REQUIRE(progress1.isFadeInStarted == true);
+	REQUIRE(progress1.isFadeInFinished == true);
+	REQUIRE(progress1.isStartStarted == true);
+	REQUIRE(progress1.isStartFinished == true);
+	REQUIRE(progress1.isFadeOutStarted == true);
+	REQUIRE(progress1.isFadeOutFinished == true);
+	REQUIRE(progress1.isPostFadeOutStarted == true);
+	REQUIRE(progress1.isPostFadeOutFinished == false);
+	REQUIRE(progress2.allFalse());
+
+	System::Update();
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(progress1.isPreStartStarted == true);
+	REQUIRE(progress1.isPreStartFinished == true);
+	REQUIRE(progress1.isFadeInStarted == true);
+	REQUIRE(progress1.isFadeInFinished == true);
+	REQUIRE(progress1.isStartStarted == true);
+	REQUIRE(progress1.isStartFinished == true);
+	REQUIRE(progress1.isFadeOutStarted == true);
+	REQUIRE(progress1.isFadeOutFinished == true);
+	REQUIRE(progress1.isPostFadeOutStarted == true);
+	REQUIRE(progress1.isPostFadeOutFinished == true);
+	// ここから2番目のシーンに遷移
+	REQUIRE(progress2.isPreStartStarted == true);
+	REQUIRE(progress2.isPreStartFinished == false);
+	REQUIRE(progress2.isFadeInStarted == false);
+	REQUIRE(progress2.isFadeInFinished == false);
+	REQUIRE(progress2.isStartStarted == false);
+	REQUIRE(progress2.isStartFinished == false);
+	REQUIRE(progress2.isFadeOutStarted == false);
+	REQUIRE(progress2.isFadeOutFinished == false);
+	REQUIRE(progress2.isPostFadeOutStarted == false);
+	REQUIRE(progress2.isPostFadeOutFinished == false);
+
+	System::Update();
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(progress2.isPreStartStarted == true);
+	REQUIRE(progress2.isPreStartFinished == true);
+	REQUIRE(progress2.isFadeInStarted == true); // fadeInとstartは同時に実行される
+	REQUIRE(progress2.isFadeInFinished == false);
+	REQUIRE(progress2.isStartStarted == true); // fadeInとstartは同時に実行される
+	REQUIRE(progress2.isStartFinished == false);
+	REQUIRE(progress2.isFadeOutStarted == false);
+	REQUIRE(progress2.isFadeOutFinished == false);
+	REQUIRE(progress2.isPostFadeOutStarted == false);
+	REQUIRE(progress2.isPostFadeOutFinished == false);
+
+	System::Update();
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(progress2.isPreStartStarted == true);
+	REQUIRE(progress2.isPreStartFinished == true);
+	REQUIRE(progress2.isFadeInStarted == true);
+	REQUIRE(progress2.isFadeInFinished == true);
+	REQUIRE(progress2.isStartStarted == true);
+	REQUIRE(progress2.isStartFinished == true);
+	REQUIRE(progress2.isFadeOutStarted == true);
+	REQUIRE(progress2.isFadeOutFinished == false);
+	REQUIRE(progress2.isPostFadeOutStarted == false);
+	REQUIRE(progress2.isPostFadeOutFinished == false);
+
+	System::Update();
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(progress2.isPreStartStarted == true);
+	REQUIRE(progress2.isPreStartFinished == true);
+	REQUIRE(progress2.isFadeInStarted == true);
+	REQUIRE(progress2.isFadeInFinished == true);
+	REQUIRE(progress2.isStartStarted == true);
+	REQUIRE(progress2.isStartFinished == true);
+	REQUIRE(progress2.isFadeOutStarted == true);
+	REQUIRE(progress2.isFadeOutFinished == true);
+	REQUIRE(progress2.isPostFadeOutStarted == true);
+	REQUIRE(progress2.isPostFadeOutFinished == false);
+
+	System::Update();
+
+	REQUIRE(runner.isFinished() == true);
+	REQUIRE(progress2.isPreStartStarted == true);
+	REQUIRE(progress2.isPreStartFinished == true);
+	REQUIRE(progress2.isFadeInStarted == true);
+	REQUIRE(progress2.isFadeInFinished == true);
+	REQUIRE(progress2.isStartStarted == true);
+	REQUIRE(progress2.isStartFinished == true);
+	REQUIRE(progress2.isFadeOutStarted == true);
+	REQUIRE(progress2.isFadeOutFinished == true);
+	REQUIRE(progress2.isPostFadeOutStarted == true);
+	REQUIRE(progress2.isPostFadeOutFinished == true);
+}
 
 void Main()
 {

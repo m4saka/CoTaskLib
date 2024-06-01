@@ -37,7 +37,7 @@ inline namespace cotasklib
 {
 	namespace Co
 	{
-		template <typename TResult>
+		template <typename TResult = void>
 		class [[nodiscard]] SequenceBase
 		{
 			static_assert(!std::is_reference_v<TResult>, "TResult must not be a reference type");

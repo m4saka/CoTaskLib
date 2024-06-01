@@ -831,7 +831,7 @@ inline namespace cotasklib
 			virtual bool isFinished() const = 0;
 		};
 
-		template <typename TResult>
+		template <typename TResult = void>
 		class [[nodiscard]] Task : public ITask
 		{
 			static_assert(!std::is_reference_v<TResult>, "TResult must not be a reference type");

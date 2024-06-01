@@ -992,12 +992,158 @@ TEST_CASE("Co::Play<TSequence>")
 {
 	int32 value = 0;
 	const auto runner = PlaySequenceCaller(42, &value).runScoped();
-	while (!runner.isFinished())
+	for (int32 i = 0; i < 4; ++i)
 	{
+		REQUIRE(runner.isFinished() == false);
 		System::Update();
 	}
+	REQUIRE(runner.isFinished() == true);
 	REQUIRE(value == 42);
 }
+
+class TestScene : public Co::SceneBase
+{
+public:
+	bool isPreStartStarted = false;
+	bool isPreStartFinished = false;
+	bool isStartStarted = false;
+	bool isStartFinished = false;
+	bool isFadeInStarted = false;
+	bool isFadeInFinished = false;
+	bool isFadeOutStarted = false;
+	bool isFadeOutFinished = false;
+	bool isPostFadeOutStarted = false;
+	bool isPostFadeOutFinished = false;
+
+	explicit TestScene(int32 argValue)
+	{
+		REQUIRE(argValue == 42);
+	}
+
+private:
+	Co::Task<void> preStart() override
+	{
+		isPreStartStarted = true;
+		co_await Co::DelayFrame();
+		isPreStartFinished = true;
+	}
+
+	Co::Task<void> fadeIn() override
+	{
+		isFadeInStarted = true;
+		co_await Co::DelayFrame();
+		isFadeInFinished = true;
+	}
+
+	Co::Task<void> start() override
+	{
+		isStartStarted = true;
+		co_await Co::DelayFrame();
+		isStartFinished = true;
+	}
+
+	Co::Task<void> fadeOut() override
+	{
+		isFadeOutStarted = true;
+		co_await Co::DelayFrame();
+		isFadeOutFinished = true;
+	}
+
+	Co::Task<void> postFadeOut() override
+	{
+		isPostFadeOutStarted = true;
+		co_await Co::DelayFrame();
+		isPostFadeOutFinished = true;
+	}
+};
+
+TEST_CASE("Scene")
+{
+	TestScene scene{ 42 };
+	const auto runner = scene.playInternal().runScoped(); // Sceneは参照を持ったまま通常実行できないので、仕方なくplayInternalでテストする
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(scene.isPreStartStarted == true); // 呼び出し時点で最初のsuspendまでは実行される
+	REQUIRE(scene.isPreStartFinished == false);
+	REQUIRE(scene.isFadeInStarted == false);
+	REQUIRE(scene.isFadeInFinished == false);
+	REQUIRE(scene.isStartStarted == false);
+	REQUIRE(scene.isStartFinished == false);
+	REQUIRE(scene.isFadeOutStarted == false);
+	REQUIRE(scene.isFadeOutFinished == false);
+	REQUIRE(scene.isPostFadeOutStarted == false);
+	REQUIRE(scene.isPostFadeOutFinished == false);
+
+	System::Update();
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(scene.isPreStartStarted == true);
+	REQUIRE(scene.isPreStartFinished == true);
+	REQUIRE(scene.isFadeInStarted == true); // fadeInとstartは同時に実行される
+	REQUIRE(scene.isFadeInFinished == false);
+	REQUIRE(scene.isStartStarted == true); // fadeInとstartは同時に実行される
+	REQUIRE(scene.isStartFinished == false);
+	REQUIRE(scene.isFadeOutStarted == false);
+	REQUIRE(scene.isFadeOutFinished == false);
+	REQUIRE(scene.isPostFadeOutStarted == false);
+	REQUIRE(scene.isPostFadeOutFinished == false);
+
+	System::Update();
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(scene.isPreStartStarted == true);
+	REQUIRE(scene.isPreStartFinished == true);
+	REQUIRE(scene.isFadeInStarted == true);
+	REQUIRE(scene.isFadeInFinished == true);
+	REQUIRE(scene.isStartStarted == true);
+	REQUIRE(scene.isStartFinished == true);
+	REQUIRE(scene.isFadeOutStarted == true);
+	REQUIRE(scene.isFadeOutFinished == false);
+	REQUIRE(scene.isPostFadeOutStarted == false);
+	REQUIRE(scene.isPostFadeOutFinished == false);
+
+	System::Update();
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(scene.isPreStartStarted == true);
+	REQUIRE(scene.isPreStartFinished == true);
+	REQUIRE(scene.isFadeInStarted == true);
+	REQUIRE(scene.isFadeInFinished == true);
+	REQUIRE(scene.isStartStarted == true);
+	REQUIRE(scene.isStartFinished == true);
+	REQUIRE(scene.isFadeOutStarted == true);
+	REQUIRE(scene.isFadeOutFinished == true);
+	REQUIRE(scene.isPostFadeOutStarted == true);
+	REQUIRE(scene.isPostFadeOutFinished == false);
+
+	System::Update();
+
+	REQUIRE(runner.isFinished() == true);
+	REQUIRE(scene.isPreStartStarted == true);
+	REQUIRE(scene.isPreStartFinished == true);
+	REQUIRE(scene.isFadeInStarted == true);
+	REQUIRE(scene.isFadeInFinished == true);
+	REQUIRE(scene.isStartStarted == true);
+	REQUIRE(scene.isStartFinished == true);
+	REQUIRE(scene.isFadeOutStarted == true);
+	REQUIRE(scene.isFadeOutFinished == true);
+	REQUIRE(scene.isPostFadeOutStarted == true);
+	REQUIRE(scene.isPostFadeOutFinished == true);
+}
+
+TEST_CASE("Co::EntryScene<TScene>")
+{
+	const auto runner = Co::EntryScene<TestScene>(42).runScoped();
+	for (int32 i = 0; i < 4; ++i)
+	{
+		REQUIRE(runner.isFinished() == false);
+		System::Update();
+	}
+
+	// TestSceneは次シーンを指定していないので4フレームで完了
+	REQUIRE(runner.isFinished() == true);
+}
+
+
 
 void Main()
 {

@@ -1592,12 +1592,12 @@ inline namespace cotasklib
 
 			while (true)
 			{
+				co_await detail::Yield{};
 				(args.resume(), ...);
 				if ((args.isFinished() && ...))
 				{
 					co_return std::make_tuple(detail::ConvertVoidResult(args)...);
 				}
-				co_await detail::Yield{};
 			}
 		}
 
@@ -1611,12 +1611,12 @@ inline namespace cotasklib
 
 			while (true)
 			{
+				co_await detail::Yield{};
 				(args.resume(), ...);
 				if ((args.isFinished() || ...))
 				{
 					co_return std::make_tuple(detail::ConvertOptionalVoidResult(args)...);
 				}
-				co_await detail::Yield{};
 			}
 		}
 	}

@@ -629,6 +629,47 @@ TEST_CASE("Co::All return value")
 	REQUIRE(runner.isFinished() == true);
 }
 
+Co::Task<void> PushBackValueWithDelayFrame(std::vector<int32>* pVec, int32 value)
+{
+	co_await Co::DelayFrame();
+	pVec->push_back(value);
+}
+
+TEST_CASE("Co::All execution order")
+{
+	std::vector<int32> vec;
+
+	const auto runner = Co::All(
+		PushBackValueWithDelayFrame(&vec, 1),
+		PushBackValueWithDelayFrame(&vec, 2),
+		PushBackValueWithDelayFrame(&vec, 3)).runScoped();
+
+	REQUIRE(runner.isFinished() == false);
+	System::Update();
+	REQUIRE(runner.isFinished() == true);
+
+	// 渡した順番でresumeされる
+	// (ただし、引数の評価順序自体は不定なので、最初のsuspendまでの処理の順番は保証されない点に注意)
+	REQUIRE(vec.size() == 3);
+	REQUIRE(vec == std::vector<int32>{ 1, 2, 3 });
+}
+
+Co::Task<void> AllWithImmediateTasks()
+{
+	const auto [a, b] = co_await Co::All(
+		CoReturnTest(),
+		CoReturnTest());
+
+	REQUIRE(a == 42);
+	REQUIRE(b == 42);
+}
+
+TEST_CASE("Co::All with immediate tasks")
+{
+	const auto runner = AllWithImmediateTasks().runScoped();
+	REQUIRE(runner.isFinished() == true);
+}
+
 TEST_CASE("Co::Any running tasks")
 {
 	TestClock clock;
@@ -726,8 +767,6 @@ Co::Task<void> AnyReturnsOptionalVoidResultTest()
 		Co::DelayFrame(1),
 		Co::DelayFrame(2));
 
-	co_await Co::DelayFrame(3);
-
 	REQUIRE((bool)a == false);
 	REQUIRE((bool)b == true);
 	REQUIRE((bool)c == false);
@@ -737,11 +776,70 @@ TEST_CASE("Co::Any returns VoidResult")
 {
 	const auto runner = AnyReturnsOptionalVoidResultTest().runScoped();
 
-	for (int32 i = 0; i < 3; ++i)
-	{
-		REQUIRE(runner.isFinished() == false);
-		System::Update();
-	}
+	REQUIRE(runner.isFinished() == false);
+	System::Update();
+	REQUIRE(runner.isFinished() == true);
+}
+
+Co::Task<void> AnyReturnsOptionalVoidResultMultipleTest()
+{
+	const auto [a, b, c, d, e] = co_await Co::Any(
+		Co::DelayFrame(4),
+		Co::DelayFrame(2),
+		Co::DelayFrame(3),
+		Co::DelayFrame(2),
+		Co::DelayFrame(2));
+
+	REQUIRE((bool)a == false);
+	REQUIRE((bool)b == true);
+	REQUIRE((bool)c == false);
+	REQUIRE((bool)d == true);
+	REQUIRE((bool)e == true);
+}
+
+TEST_CASE("Co::Any returns VoidResult multiple")
+{
+	const auto runner = AnyReturnsOptionalVoidResultMultipleTest().runScoped();
+
+	REQUIRE(runner.isFinished() == false);
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	System::Update();
+	REQUIRE(runner.isFinished() == true);
+}
+
+TEST_CASE("Co::Any execution order")
+{
+	std::vector<int32> vec;
+
+	const auto runner = Co::Any(
+		PushBackValueWithDelayFrame(&vec, 1),
+		PushBackValueWithDelayFrame(&vec, 2),
+		PushBackValueWithDelayFrame(&vec, 3)).runScoped();
+
+	REQUIRE(runner.isFinished() == false);
+	System::Update();
+	REQUIRE(runner.isFinished() == true);
+
+	// 渡した順番でresumeされる
+	// (ただし、引数の評価順序自体は不定なので、最初のsuspendまでの処理の順番は保証されない点に注意)
+	REQUIRE(vec.size() == 3);
+	REQUIRE(vec == std::vector<int32>{ 1, 2, 3 });
+}
+
+Co::Task<void> AnyWithImmediateTasks()
+{
+	const auto [a, b] = co_await Co::Any(
+		CoReturnTest(),
+		Co::DelayFrame());
+
+	REQUIRE(a == 42);
+	REQUIRE((bool)b == false);
+}
+
+TEST_CASE("Co::Any with immediate tasks")
+{
+	const auto runner = AnyWithImmediateTasks().runScoped();
 	REQUIRE(runner.isFinished() == true);
 }
 
@@ -760,7 +858,7 @@ public:
 	bool isPostFadeOutStarted = false;
 	bool isPostFadeOutFinished = false;
 
-	TestSequence(int32 argValue)
+	explicit TestSequence(int32 argValue)
 		: argValue(argValue)
 	{
 	}

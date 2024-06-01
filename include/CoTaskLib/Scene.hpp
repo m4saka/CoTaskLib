@@ -110,7 +110,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			virtual int32 preStartDrawIndex() const
 			{
-				return 0;
+				return DrawIndex::Default;
 			}
 
 			[[nodiscard]]
@@ -123,7 +123,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			virtual int32 drawIndex() const
 			{
-				return 0;
+				return DrawIndex::Default;
 			}
 
 			[[nodiscard]]
@@ -151,7 +151,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			virtual int32 postFadeOutDrawIndex() const
 			{
-				return 0;
+				return DrawIndex::Default;
 			}
 
 			[[nodiscard]]

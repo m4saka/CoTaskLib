@@ -654,6 +654,15 @@ inline namespace cotasklib
 			}
 		};
 
+		namespace DrawIndex
+		{
+			constexpr int32 Back = -1;
+			constexpr int32 Default = 0;
+			constexpr int32 Front = 1;
+			constexpr int32 FadeIn = 100000;
+			constexpr int32 FadeOut = 200000;
+		}
+
 		class ScopedDrawer : public detail::IScoped
 		{
 		private:
@@ -661,7 +670,7 @@ inline namespace cotasklib
 
 		public:
 			ScopedDrawer(std::function<void()> func)
-				: m_id(detail::Backend::AddDrawer(std::move(func), [] { return 0; }))
+				: m_id(detail::Backend::AddDrawer(std::move(func), [] { return DrawIndex::Default; }))
 			{
 			}
 

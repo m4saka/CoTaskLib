@@ -329,12 +329,12 @@ inline namespace cotasklib
 
 		template <detail::SceneConcept TScene, class... Args>
 		[[nodiscard]]
-		Task<void> EntryScene(Args&&... args)
+		Task<void> EnterScene(Args&&... args)
 		{
 			return detail::ScenePtrToTask(std::make_unique<TScene>(std::forward<Args>(args)...));
 		}
 
-		inline Task<void> EntryScene(SceneFactory sceneFactory)
+		inline Task<void> EnterScene(SceneFactory sceneFactory)
 		{
 			auto scenePtr = sceneFactory();
 			return detail::ScenePtrToTask(std::move(scenePtr));
@@ -342,12 +342,12 @@ inline namespace cotasklib
 
 #ifdef __cpp_deleted_function_with_reason
 		template <detail::SceneConcept TScene>
-		auto operator co_await(TScene&& scene) = delete("To co_await a Scene, use Co::EntryScene<TScene>() instead.");
+		auto operator co_await(TScene&& scene) = delete("To co_await a Scene, use Co::EnterScene<TScene>() instead.");
 
 		template <detail::SceneConcept TScene>
-		auto operator co_await(TScene& scene) = delete("To co_await a Scene, use Co::EntryScene<TScene>() instead.");
+		auto operator co_await(TScene& scene) = delete("To co_await a Scene, use Co::EnterScene<TScene>() instead.");
 
-		auto operator co_await(SceneFactory sceneFactory) = delete("To co_await a Scene created by a SceneFactory, use Co::EntryScene(SceneFactory) instead.");
+		auto operator co_await(SceneFactory sceneFactory) = delete("To co_await a Scene created by a SceneFactory, use Co::EnterScene(SceneFactory) instead.");
 #else
 		template <detail::SceneConcept TScene>
 		auto operator co_await(TScene&& scene) = delete;

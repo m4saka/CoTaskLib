@@ -17,11 +17,11 @@ TEST_CASE("DelayFrame")
 	int32 value = 0;
 
 	auto task = DelayFrameTest(&value);
-	REQUIRE(value == 1); // 呼び出し時点で最初のsuspendまでは実行される
+	REQUIRE(value == 0); // タスク生成時点ではまだ実行されない
 
 	const auto runner = std::move(task).runScoped();
 
-	REQUIRE(value == 1); // runScopedの実行自体ではresumeしない
+	REQUIRE(value == 1); // runScopedにより実行が開始される
 	REQUIRE(runner.isFinished() == false);
 
 	System::Update();
@@ -70,7 +70,7 @@ TEST_CASE("DelayTime")
 	int32 value = 0;
 
 	const auto runner = DelayTimeTest(&value, &clock).runScoped();
-	REQUIRE(value == 1); // 呼び出し時点で最初のsuspendまでは実行される
+	REQUIRE(value == 1); // runScopedで最初のsuspendまで実行される
 
 	// 0秒
 	clock.microsec = 0;
@@ -191,7 +191,9 @@ TEST_CASE("co_return")
 	int32 value = 0;
 
 	auto task = CoReturnTestCaller(&value);
-	REQUIRE(value == 42); // runScopedを呼ばなくても、呼び出し時点で最初のsuspendまで実行される
+	REQUIRE(value == 0); // タスク生成時点ではまだ実行されない
+	const auto runner = std::move(task).runScoped();
+	REQUIRE(value == 42); // runScopedにより実行が開始される
 }
 
 Co::Task<int32> CoReturnWithDelayTest()
@@ -211,10 +213,10 @@ TEST_CASE("co_return with delay")
 	int32 value = 0;
 
 	auto task = CoReturnWithDelayTestCaller(&value);
-	REQUIRE(value == 1); // 1回目のsuspendまで実行される
+	REQUIRE(value == 0); // タスク生成時点ではまだ実行されない
 
 	const auto runner = std::move(task).runScoped();
-	REQUIRE(value == 1); // runScopedの実行自体ではresumeしない
+	REQUIRE(value == 1); // runScopedにより実行が開始される
 
 	System::Update();
 	REQUIRE(value == 42); // DelayFrame()の後が実行され、co_awaitで受け取った値が返る
@@ -238,7 +240,7 @@ TEST_CASE("WaitForever")
 
 	{
 		const auto runner = WaitForeverTest(&value).runScoped([&] { isFinished = true; }, [&] { isCanceled = true; });
-		REQUIRE(value == 1); // 呼び出し時点で最初のsuspendまでは実行される
+		REQUIRE(value == 1); // runScoped呼び出し時点で最初のsuspendまでは実行される
 		REQUIRE(isFinished == false);
 		REQUIRE(isCanceled == false);
 
@@ -287,11 +289,11 @@ TEST_CASE("Finish WaitUntil immediately")
 {
 	bool condition = true;
 
-	// 条件を満たしているので即座に完了する
+	// 既に条件を満たしているが、タスク生成時点ではまだ実行されない
 	auto task = WaitUntilTest(&condition);
-	REQUIRE(task.isFinished() == true);
+	REQUIRE(task.isFinished() == false);
 
-	// runScopedを呼んでも完了済みになっている
+	// 既に条件を満たしているのでrunScopedで開始すると即座に完了する
 	const auto runner = std::move(task).runScoped();
 	REQUIRE(runner.isFinished() == true);
 }
@@ -325,11 +327,11 @@ TEST_CASE("Finish WaitWhile immediately")
 {
 	bool condition = false;
 
-	// 条件を満たしていないので即座に完了する
+	// 既に条件を満たしていないが、タスク生成時点ではまだ実行されない
 	auto task = WaitWhileTest(&condition);
-	REQUIRE(task.isFinished() == true);
+	REQUIRE(task.isFinished() == false);
 
-	// runScopedを呼んでも完了済みになっている
+	// 既に条件を満たさなくなっているのでrunScopedで開始すると即座に完了する
 	const auto runner = std::move(task).runScoped();
 	REQUIRE(runner.isFinished() == true);
 }
@@ -370,12 +372,12 @@ TEST_CASE("Finish WaitForResult with std::optional immediately")
 	std::optional<int32> result = 42;
 	int32 ret = 0;
 
-	// 結果が代入されているので即座に完了する
+	// 既に結果が代入されているが、タスク生成時点ではまだ実行されない
 	auto task = WaitForResultStdOptionalTest(&result, &ret);
-	REQUIRE(task.isFinished() == true);
-	REQUIRE(ret == 42);
+	REQUIRE(task.isFinished() == false);
+	REQUIRE(ret == 0);
 
-	// runScopedを呼んでも完了済みになっている
+	// 既に結果が代入されているのでrunScopedで開始すると即座に完了する
 	const auto runner = std::move(task).runScoped();
 	REQUIRE(runner.isFinished() == true);
 	REQUIRE(ret == 42);
@@ -422,12 +424,12 @@ TEST_CASE("Finish WaitForResult with Optional immediately")
 	Optional<int32> result = 42;
 	int32 ret = 0;
 
-	// 結果が代入されているので即座に完了する
+	// 既に結果が代入されているが、タスク生成時点ではまだ実行されない
 	auto task = WaitForResultOptionalTest(&result, &ret);
-	REQUIRE(task.isFinished() == true);
-	REQUIRE(ret == 42);
+	REQUIRE(task.isFinished() == false);
+	REQUIRE(ret == 0);
 
-	// runScopedを呼んでも完了済みになっている
+	// 既に結果が代入されているのでrunScopedで開始すると即座に完了する
 	const auto runner = std::move(task).runScoped();
 	REQUIRE(runner.isFinished() == true);
 	REQUIRE(ret == 42);
@@ -482,7 +484,7 @@ TEST_CASE("Co::All running tasks")
 		AssignValueWithDelay(20, &value2, 2s, &clock),
 		AssignValueWithDelay(30, &value3, 3s, &clock)).runScoped();
 
-	// 呼び出し時点で最初のsuspendまでは実行される
+	// runScoped実行時点で最初のsuspendまでは実行される
 	REQUIRE(value1 == 1);
 	REQUIRE(value2 == 1);
 	REQUIRE(value3 == 1);

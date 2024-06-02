@@ -653,11 +653,21 @@ inline namespace cotasklib
 
 		namespace DrawIndex
 		{
-			constexpr int32 Back = -1;
 			constexpr int32 Default = 0;
-			constexpr int32 Front = 1;
-			constexpr int32 FadeIn = 100000;
-			constexpr int32 FadeOut = 200000;
+			constexpr int32 Back = Default - 1;
+			constexpr int32 Front = Default + 1;
+
+			constexpr int32 Modal = 100000;
+			constexpr int32 ModalBack = Modal - 1;
+			constexpr int32 ModalFront = Modal + 1;
+
+			constexpr int32 FadeIn = 200000;
+			constexpr int32 FadeInBack = FadeIn - 1;
+			constexpr int32 FadeInFront = FadeIn + 1;
+
+			constexpr int32 FadeOut = 300000;
+			constexpr int32 FadeOutBack = FadeOut - 1;
+			constexpr int32 FadeOutFront = FadeOut + 1;
 		}
 
 		class ScopedDrawer : public IScoped

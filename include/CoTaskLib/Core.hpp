@@ -564,26 +564,23 @@ inline namespace cotasklib
 
 		class MultiScoped;
 
-		namespace detail
+		class IScoped
 		{
-			class IScoped
-			{
-			public:
-				IScoped() = default;
-				virtual ~IScoped() = default;
-				IScoped(const IScoped&) = delete;
-				IScoped& operator=(const IScoped&) = delete;
-				IScoped(IScoped&&) = default;
-				IScoped& operator=(IScoped&&) = default;
+		public:
+			IScoped() = default;
+			virtual ~IScoped() = default;
+			IScoped(const IScoped&) = delete;
+			IScoped& operator=(const IScoped&) = delete;
+			IScoped(IScoped&&) = default;
+			IScoped& operator=(IScoped&&) = default;
 
-				virtual void addTo(MultiScoped& ms) && = 0;
-			};
-		}
+			virtual void addTo(MultiScoped& ms) && = 0;
+		};
 
 		class MultiScoped
 		{
 		private:
-			std::vector<std::unique_ptr<detail::IScoped>> m_scopedInstances;
+			std::vector<std::unique_ptr<IScoped>> m_scopedInstances;
 
 		public:
 			MultiScoped() = default;
@@ -599,7 +596,7 @@ inline namespace cotasklib
 			~MultiScoped() = default;
 
 			template <typename TScoped>
-			void add(TScoped&& runner) requires std::derived_from<TScoped, detail::IScoped>
+			void add(TScoped&& runner) requires std::derived_from<TScoped, IScoped>
 			{
 				m_scopedInstances.push_back(std::make_unique<TScoped>(std::forward<TScoped>(runner)));
 			}
@@ -615,7 +612,7 @@ inline namespace cotasklib
 			}
 		};
 
-		class ScopedTaskRunner : public detail::IScoped
+		class ScopedTaskRunner : public IScoped
 		{
 		private:
 			detail::ScopedTaskRunLifetime m_lifetime;
@@ -663,7 +660,7 @@ inline namespace cotasklib
 			constexpr int32 FadeOut = 200000;
 		}
 
-		class ScopedDrawer : public detail::IScoped
+		class ScopedDrawer : public IScoped
 		{
 		private:
 			Optional<detail::DrawerID> m_id;
@@ -1349,7 +1346,7 @@ inline namespace cotasklib
 			}
 		}
 
-		class ScopedUpdater : public detail::IScoped
+		class ScopedUpdater : public IScoped
 		{
 		private:
 			ScopedTaskRunner m_runner;

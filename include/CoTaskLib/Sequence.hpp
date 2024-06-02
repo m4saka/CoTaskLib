@@ -349,7 +349,7 @@ inline namespace cotasklib
 			bool m_isFinished = false;
 
 		protected:
-			void finish()
+			void requestFinish()
 			{
 				m_isFinished = true;
 			}

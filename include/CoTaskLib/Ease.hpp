@@ -305,7 +305,7 @@ inline namespace cotasklib
 				return *this;
 			}
 
-			TypewriterTaskBuilder& setSteadyClock(ISteadyClock* pSteadyClock)
+			TypewriterTaskBuilder& setClock(ISteadyClock* pSteadyClock)
 			{
 				m_pSteadyClock = pSteadyClock;
 				return *this;

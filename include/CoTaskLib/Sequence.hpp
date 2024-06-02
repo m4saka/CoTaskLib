@@ -302,14 +302,14 @@ inline namespace cotasklib
 		}
 
 		// 毎フレーム呼ばれるupdate関数を記述するタイプのシーケンス基底クラス
-		template <typename TResult>
+		template <typename TResult = void>
 		class [[nodiscard]] UpdaterSequenceBase : public SequenceBase<TResult>
 		{
 		private:
 			Optional<TResult> m_result;
 
 		protected:
-			void finish(const TResult& result)
+			void requestFinish(const TResult& result)
 			{
 				m_result = result;
 			}
@@ -330,15 +330,31 @@ inline namespace cotasklib
 			[[nodiscard]]
 			virtual Task<TResult> start() override final
 			{
-				while (!m_result)
+				// コンストラクタやpreStart内でrequestFinishが呼ばれた場合は即座に終了
+				if (m_result.has_value())
+				{
+					co_return *m_result;
+				}
+
+				while (true)
 				{
 					update();
+					if (m_result.has_value())
+					{
+						break;
+					}
 					co_await detail::Yield{};
 				}
 				co_return *m_result;
 			}
 
 			virtual void update() = 0;
+
+			[[nodiscard]]
+			bool isFinishRequested() const
+			{
+				return m_result.has_value();
+			}
 		};
 
 		// 毎フレーム呼ばれるupdate関数を記述するタイプのシーケンス基底クラス(void特殊化)

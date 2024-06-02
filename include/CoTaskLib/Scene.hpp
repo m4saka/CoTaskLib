@@ -285,10 +285,20 @@ inline namespace cotasklib
 			[[nodiscard]]
 			virtual Task<void> start() override final
 			{
-				// requestNextSceneかrequestSceneFinishが呼ばれるまでループ
-				while (!isRequested())
+				if (isRequested())
+				{
+					// コンストラクタやpreStart内で次シーンが指定済みの場合は即座に終了
+					co_return;
+				}
+
+				// 次シーンが指定されるまでループ
+				while (true)
 				{
 					update();
+					if (isRequested())
+					{
+						co_return;
+					}
 					co_await detail::Yield{};
 				}
 			}

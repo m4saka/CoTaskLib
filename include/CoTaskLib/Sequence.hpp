@@ -360,9 +360,19 @@ inline namespace cotasklib
 			[[nodiscard]]
 			virtual Task<void> start() override final
 			{
-				while (!m_isFinishRequested)
+				if (m_isFinishRequested)
+				{
+					// コンストラクタやpreStart内でrequestFinishが呼ばれた場合は即座に終了
+					co_return;
+				}
+
+				while (true)
 				{
 					update();
+					if (m_isFinishRequested)
+					{
+						co_return;
+					}
 					co_await detail::Yield{};
 				}
 			}

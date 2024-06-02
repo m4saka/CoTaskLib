@@ -179,7 +179,7 @@ inline namespace cotasklib
 				return *this;
 			}
 
-			EaseTaskBuilder& setSteadyClock(ISteadyClock* pSteadyClock)
+			EaseTaskBuilder& setClock(ISteadyClock* pSteadyClock)
 			{
 				m_pSteadyClock = pSteadyClock;
 				return *this;

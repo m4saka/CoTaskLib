@@ -346,12 +346,12 @@ inline namespace cotasklib
 		class [[nodiscard]] UpdaterSequenceBase<void> : public SequenceBase<void>
 		{
 		private:
-			bool m_isFinished = false;
+			bool m_isFinishRequested = false;
 
 		protected:
 			void requestFinish()
 			{
-				m_isFinished = true;
+				m_isFinishRequested = true;
 			}
 
 		public:
@@ -360,7 +360,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			virtual Task<void> start() override final
 			{
-				while (!m_isFinished)
+				while (!m_isFinishRequested)
 				{
 					update();
 					co_await detail::Yield{};
@@ -368,6 +368,12 @@ inline namespace cotasklib
 			}
 
 			virtual void update() = 0;
+
+			[[nodiscard]]
+			bool isFinishRequested() const
+			{
+				return m_isFinishRequested;
+			}
 		};
 
 #ifdef __cpp_deleted_function_with_reason

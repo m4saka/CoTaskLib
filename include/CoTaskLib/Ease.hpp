@@ -70,7 +70,7 @@ inline namespace cotasklib
 			inline Task<void> EaseTask(std::function<void(double)> callback, const Duration duration, double easeFunc(double), ISteadyClock* pSteadyClock)
 			{
 				const Timer timer{ duration, StartImmediately::Yes, pSteadyClock };
-				double progress = 0.0;
+				double progress;
 				while (true)
 				{
 					progress = timer.progress0_1();
@@ -84,15 +84,15 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			inline Task<void> TypewriterTask(std::function<void(const String&)> callback, const Duration totalDuration, const String text)
+			inline Task<void> TypewriterTask(std::function<void(const String&)> callback, const Duration totalDuration, const String text, ISteadyClock* pSteadyClock)
 			{
 				Optional<std::size_t> prevLength = none;
-				const Timer timer{ totalDuration, StartImmediately::Yes };
-				double progress = 0.0;
+				const Timer timer{ totalDuration, StartImmediately::Yes, pSteadyClock };
+				double progress;
 				while (true)
 				{
 					progress = timer.progress0_1();
-					const std::size_t length = std::min(static_cast<std::size_t>(1 + text.length() * progress), text.length());
+					const std::size_t length = Min(static_cast<std::size_t>(1 + text.length() * progress), text.length());
 					if (length != prevLength)
 					{
 						callback(text.substr(0, length));
@@ -313,7 +313,7 @@ inline namespace cotasklib
 
 			Task<void> play()
 			{
-				return detail::TypewriterTask(m_callback, calcTotalDuration(), m_text);
+				return detail::TypewriterTask(m_callback, calcTotalDuration(), m_text, m_pSteadyClock);
 			}
 		};
 

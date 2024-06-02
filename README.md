@@ -1,5 +1,5 @@
 # CoTaskLib for Siv3D
-Siv3D用コルーチンライブラリ(試験的)。ヘッダオンリー。
+Siv3D用コルーチンタスクライブラリ(試験的)。ヘッダオンリー。
 
 C++20の`co_await`/`co_return`キーワードを利用して、複数フレームにまたがる処理を見通しの良いシンプルなコードで実装できます。
 
@@ -8,6 +8,8 @@ C++20の`co_await`/`co_return`キーワードを利用して、複数フレー�
 結果を返す必要がない場合、`Co::Task<void>`を使用します。
 
 #### 戻り値がない場合の例:
+クリックしたタイミングで完了します。
+
 ```cpp
 Co::Task<void> ExampleTask()
 {
@@ -19,6 +21,8 @@ Co::Task<void> ExampleTask()
 ```
 
 #### 戻り値がある場合の例:
+クリックまたは右クリックしたタイミングで完了し、呼び出し元へ文字列を返します。
+
 ```cpp
 Co::Task<String> ExampleTaskWithResult()
 {
@@ -53,6 +57,7 @@ Co::Task<String> ExampleTaskWithResult()
     - タスクの実行を開始し、`Co::ScopedTaskRunner`(生存期間オブジェクト)のインスタンスを返します。
     - タスクの実行が完了する前に`Co::ScopedTaskRunner`のインスタンスが破棄された場合、タスクは途中で終了されます。
         - メモリ安全性のため、タスク内で外部の変数を参照する場合は必ず`Co::ScopedTaskRunner`のインスタンスよりも生存期間が長い変数であることを確認してください。
+    - 第1引数に`std::funciton<void(const TResult&)>`型でタスク完了時のコールバック関数、第2引数に`std::function<void()>`型でタスクキャンセル時のコールバック関数を指定することもできます。
 - `with(Co::Task)` -> `Co::Task<TResult>`
     - タスクの実行中、同時に実行される子タスクを登録します。
     - 子タスクの完了は待ちません。親タスクが先に完了した場合、子タスクの実行は途中で終了されます。
@@ -216,13 +221,6 @@ const auto taskRunner = exampleSequence.runScoped();
 
 // シーケンスクラスのインスタンスへ操作可能(※一例)
 exampleSequence.setText(U"テキスト");
-```
-
-また、`Co::ScopedSequenceRunner`クラスを使用して下記のように書くこともできます。  
-もしシーケンスクラスのコンストラクタに引数が必要な場合、`Co::ScopedSequenceRunner`クラスのコンストラクタ引数として渡すことができます。
-
-```cpp
-const Co::ScopedSequenceRunner<ExampleSequence> sequenceRunner{};
 ```
 
 ### コルーチン内から実行する場合
@@ -807,11 +805,11 @@ private:
 - `Co::ScreenFadeIn(Duration, ColorF)` -> `Co::Task<void>`
     - 指定色からの画面フェードインを開始し、完了まで待機します。
     - 任意で、第3引数にint32型で描画順序のソート値(drawIndex)を指定することもできます。
-        - デフォルト値は`Co::ScreenFadeInDrawIndex`(=10500000)で、通常描画(0)よりも手前に表示されるようになっています。
+        - デフォルト値は`Co::DrawIndex::FadeIn`(=100000)で、通常描画(0)よりも手前に表示されるようになっています。
 - `Co::ScreenFadeOut(Duration, ColorF)` -> `Co::Task<void>`
     - 指定色への画面フェードアウトを開始し、完了まで待機します。
     - 任意で、第3引数にint32型で描画順序のソート値(drawIndex)を指定することもできます。
-        - デフォルト値は`Co::ScreenFadeOutDrawIndex`(=10600000)で、通常描画(0)よりも手前に表示されるようになっています。
+        - デフォルト値は`Co::DrawIndex::FadeOut`(=200000)で、通常描画(0)よりも手前に表示されるようになっています。
 - `Co::All(TTasks&&...)` -> `Co::Task<std::tuple<...>>`
     - 全ての`Co::Task`が完了するまで待機します。各`Co::Task`の結果が`std::tuple`で返されます。
     - `Co::Task`の結果が`void`型の場合、`Co::VoidResult`型(空の構造体)に置換して返されます。

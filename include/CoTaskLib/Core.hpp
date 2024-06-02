@@ -1214,7 +1214,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			bool isFinished() const
+			bool isFinishRequested() const
 			{
 				return m_result.has_value();
 			}
@@ -1272,7 +1272,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			bool isFinished() const
+			bool isFinishRequested() const
 			{
 				return m_result.has_value();
 			}
@@ -1332,7 +1332,7 @@ inline namespace cotasklib
 			while (true)
 			{
 				updateFunc(taskFinishSource);
-				if (taskFinishSource.isFinished())
+				if (taskFinishSource.isFinishRequested())
 				{
 					co_return;
 				}

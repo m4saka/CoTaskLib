@@ -1193,7 +1193,16 @@ inline namespace cotasklib
 
 			~TaskFinishSource() = default;
 
-			void requestFinish(TResult result)
+			void requestFinish(const TResult& result)
+			{
+				if (m_result.has_value())
+				{
+					return;
+				}
+				m_result = result;
+			}
+
+			void requestFinish(TResult&& result)
 			{
 				if (m_result.has_value())
 				{

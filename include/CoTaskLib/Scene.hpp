@@ -77,7 +77,7 @@ inline namespace cotasklib
 			bool m_isFadingOut = false;
 			bool m_isPostFadeOut = false;
 
-			Optional<SceneFactory> m_nextSceneFactory = none;
+			TaskFinishSource<SceneFactory> m_taskFinishSource;
 
 			[[nodiscard]]
 			Task<void> startAndFadeOut()
@@ -176,23 +176,23 @@ inline namespace cotasklib
 			template <class TScene, typename... Args>
 			void requestNextScene(Args&&... args)
 			{
-				m_nextSceneFactory = MakeSceneFactory<TScene>(std::forward<Args>(args)...);
+				m_taskFinishSource.requestFinish(MakeSceneFactory<TScene>(std::forward<Args>(args)...));
 			}
 
 			void requestNextScene(SceneFactory sceneFactory)
 			{
-				m_nextSceneFactory = std::move(sceneFactory);
+				m_taskFinishSource.requestFinish(std::move(sceneFactory));
 			}
 
 			void requestSceneFinish()
 			{
-				m_nextSceneFactory = nullptr;
+				m_taskFinishSource.requestFinish(nullptr);
 			}
 
 			[[nodiscard]]
 			bool isRequested() const
 			{
-				return m_nextSceneFactory.has_value();
+				return m_taskFinishSource.isFinishRequested();
 			}
 
 		public:
@@ -252,9 +252,9 @@ inline namespace cotasklib
 					m_isPostFadeOut = false;
 				}
 
-				if (m_nextSceneFactory.has_value())
+				if (m_taskFinishSource.hasResult())
 				{
-					co_return *m_nextSceneFactory;
+					co_return m_taskFinishSource.result();
 				}
 				else
 				{

@@ -306,12 +306,17 @@ inline namespace cotasklib
 		class [[nodiscard]] UpdaterSequenceBase : public SequenceBase<TResult>
 		{
 		private:
-			Optional<TResult> m_result;
+			TaskFinishSource<TResult> m_taskFinishSource;
 
 		protected:
 			void requestFinish(const TResult& result)
 			{
-				m_result = result;
+				m_taskFinishSource.requestFinish(result);
+			}
+
+			void requestFinish(TResult&& result)
+			{
+				m_taskFinishSource.requestFinish(std::move(result));
 			}
 
 		public:
@@ -331,21 +336,21 @@ inline namespace cotasklib
 			virtual Task<TResult> start() override final
 			{
 				// コンストラクタやpreStart内でrequestFinishが呼ばれた場合は即座に終了
-				if (m_result.has_value())
+				if (m_taskFinishSource.hasResult())
 				{
-					co_return *m_result;
+					co_return m_taskFinishSource.result();
 				}
 
 				while (true)
 				{
 					update();
-					if (m_result.has_value())
+					if (m_taskFinishSource.hasResult())
 					{
 						break;
 					}
 					co_await detail::Yield{};
 				}
-				co_return *m_result;
+				return m_taskFinishSource.result();
 			}
 
 			virtual void update() = 0;
@@ -353,7 +358,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			bool isFinishRequested() const
 			{
-				return m_result.has_value();
+				return m_taskFinishSource.isFinishRequested();
 			}
 		};
 
@@ -362,12 +367,12 @@ inline namespace cotasklib
 		class [[nodiscard]] UpdaterSequenceBase<void> : public SequenceBase<void>
 		{
 		private:
-			bool m_isFinishRequested = false;
+			TaskFinishSource<void> m_taskFinishSource;
 
 		protected:
 			void requestFinish()
 			{
-				m_isFinishRequested = true;
+				m_taskFinishSource.requestFinish();
 			}
 
 		public:
@@ -376,7 +381,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			virtual Task<void> start() override final
 			{
-				if (m_isFinishRequested)
+				if (m_taskFinishSource.isFinishRequested())
 				{
 					// コンストラクタやpreStart内でrequestFinishが呼ばれた場合は即座に終了
 					co_return;
@@ -385,7 +390,7 @@ inline namespace cotasklib
 				while (true)
 				{
 					update();
-					if (m_isFinishRequested)
+					if (m_taskFinishSource.isFinishRequested())
 					{
 						co_return;
 					}
@@ -398,7 +403,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			bool isFinishRequested() const
 			{
-				return m_isFinishRequested;
+				return m_taskFinishSource.isFinishRequested();
 			}
 		};
 
@@ -415,81 +420,5 @@ inline namespace cotasklib
 		template <detail::SequenceConcept TSequence>
 		auto operator co_await(TSequence& sequence) = delete;
 #endif
-
-		template <detail::SequenceConcept TSequence>
-		class [[nodiscard]] ScopedSequencePlayer : public detail::IScoped
-		{
-		public:
-			using result_type = typename TSequence::result_type;
-			using result_type_void_replaced = detail::VoidResultTypeReplace<result_type>;
-
-		private:
-			ScopedTaskRunner m_runner;
-
-			TaskFinishSource<result_type> m_taskFinishSource;
-
-		public:
-			template <typename... Args>
-			explicit ScopedSequencePlayer(Args&&... args) requires !std::is_void_v<result_type>
-				: m_runner(Play<TSequence>(std::forward<Args>(args)...).runScoped([this](const result_type& result) { m_taskFinishSource.requestFinish(result); }))
-			{
-			}
-
-			template <typename... Args>
-			explicit ScopedSequencePlayer(Args&&... args) requires std::is_void_v<result_type>
-				: m_runner(Play<TSequence>(std::forward<Args>(args)...).runScoped([this] { m_taskFinishSource.requestFinish(); }))
-			{
-			}
-
-			ScopedSequencePlayer(const ScopedSequencePlayer&) = delete;
-
-			ScopedSequencePlayer& operator=(const ScopedSequencePlayer&) = delete;
-
-			ScopedSequencePlayer(ScopedSequencePlayer&&) = default;
-
-			ScopedSequencePlayer& operator=(ScopedSequencePlayer&&) = default;
-
-			~ScopedSequencePlayer() = default;
-
-			[[nodiscard]]
-			bool isFinished() const
-			{
-				return m_runner.isFinished();
-			}
-
-			void forget()
-			{
-				m_runner.forget();
-			}
-
-			[[nodiscard]]
-			bool hasResult() const
-			{
-				return m_taskFinishSource.hasResult();
-			}
-
-			[[nodiscard]]
-			const result_type_void_replaced& result() const
-			{
-				return m_taskFinishSource.result();
-			}
-
-			[[nodiscard]]
-			const Optional<result_type_void_replaced>& resultOpt() const
-			{
-				return m_taskFinishSource.resultOpt();
-			}
-
-			[[nodiscard]]
-			Task<result_type_void_replaced> waitForFinish() const
-			{
-				return m_taskFinishSource.waitForFinish();
-			}
-
-			void addTo(MultiScoped& ms) && override
-			{
-				ms.add(std::move(*this));
-			}
-		};
 	}
 }

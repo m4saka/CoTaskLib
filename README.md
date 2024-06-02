@@ -805,11 +805,11 @@ private:
 - `Co::ScreenFadeIn(Duration, ColorF)` -> `Co::Task<void>`
     - 指定色からの画面フェードインを開始し、完了まで待機します。
     - 任意で、第3引数にint32型で描画順序のソート値(drawIndex)を指定することもできます。
-        - デフォルト値は`Co::DrawIndex::FadeIn`(=100000)で、通常描画(0)よりも手前に表示されるようになっています。
+        - デフォルト値は`Co::DrawIndex::FadeIn`(=200000)で、通常描画(0)よりも手前に表示されるようになっています。
 - `Co::ScreenFadeOut(Duration, ColorF)` -> `Co::Task<void>`
     - 指定色への画面フェードアウトを開始し、完了まで待機します。
     - 任意で、第3引数にint32型で描画順序のソート値(drawIndex)を指定することもできます。
-        - デフォルト値は`Co::DrawIndex::FadeOut`(=200000)で、通常描画(0)よりも手前に表示されるようになっています。
+        - デフォルト値は`Co::DrawIndex::FadeOut`(=300000)で、通常描画(0)よりも手前に表示されるようになっています。
 - `Co::All(TTasks&&...)` -> `Co::Task<std::tuple<...>>`
     - 全ての`Co::Task`が完了するまで待機します。各`Co::Task`の結果が`std::tuple`で返されます。
     - `Co::Task`の結果が`void`型の場合、`Co::VoidResult`型(空の構造体)に置換して返されます。

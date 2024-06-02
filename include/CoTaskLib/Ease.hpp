@@ -69,53 +69,39 @@ inline namespace cotasklib
 			[[nodiscard]]
 			inline Task<void> EaseTask(std::function<void(double)> callback, const Duration duration, double easeFunc(double), ISteadyClock* pSteadyClock)
 			{
-				if (duration.count() <= 0.0)
-				{
-					// durationが0の場合は1.0を設定するが、フレームを待たずに終了
-					callback(1.0);
-					co_return;
-				}
-
 				const Timer timer{ duration, StartImmediately::Yes, pSteadyClock };
-				while (!timer.reachedZero())
+				double progress = 0.0;
+				while (true)
 				{
-					callback(easeFunc(timer.progress0_1()));
+					progress = timer.progress0_1();
+					callback(easeFunc(progress));
+					if (progress >= 1.0)
+					{
+						co_return;
+					}
 					co_await detail::Yield{};
 				}
-
-				// 最後は必ず1.0になるようにする
-				callback(1.0);
-				co_await detail::Yield{};
 			}
 
 			[[nodiscard]]
 			inline Task<void> TypewriterTask(std::function<void(const String&)> callback, const Duration totalDuration, const String text)
 			{
-				if (totalDuration.count() <= 0.0)
-				{
-					// totalDurationが0の場合はそのまま出力するが、フレームを待たずに終了
-					callback(text);
-					co_return;
-				}
-
 				Optional<std::size_t> prevLength = none;
 				const Timer timer{ totalDuration, StartImmediately::Yes };
-				while (!timer.reachedZero())
+				double progress = 0.0;
+				while (true)
 				{
-					const double t = timer.progress0_1();
-					const std::size_t length = std::min(static_cast<std::size_t>(1 + text.length() * t), text.length());
+					progress = timer.progress0_1();
+					const std::size_t length = std::min(static_cast<std::size_t>(1 + text.length() * progress), text.length());
 					if (length != prevLength)
 					{
 						callback(text.substr(0, length));
 						prevLength = length;
 					}
-					co_await detail::Yield{};
-				}
-
-				// 最後は必ず全て表示
-				if (prevLength != text.length())
-				{
-					callback(text);
+					if (progress >= 1.0)
+					{
+						co_return;
+					}
 					co_await detail::Yield{};
 				}
 			}

@@ -1396,6 +1396,374 @@ TEST_CASE("requestNextScene")
 	REQUIRE(progress2.isPostFadeOutFinished == true);
 }
 
+TEST_CASE("Co::Ease")
+{
+	TestClock clock;
+
+	double value = -1.0;
+	auto easeTask = Co::Ease(&value, 1s)
+		.setClock(&clock)
+		.from(0.0)
+		.to(100.0)
+		.play();
+
+	// Task生成時点ではまだ実行されない
+	REQUIRE(easeTask.isFinished() == false);
+	REQUIRE(value == -1.0);
+
+	const auto runner = std::move(easeTask).runScoped();
+
+	// runScopedで開始すると初期値が代入される
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == 0.0);
+
+	// 0秒
+	clock.microsec = 0;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == 0.0);
+
+	// 0.5秒
+	clock.microsec = 500'000;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == Approx(EaseOutQuad(0.5) * 100.0));
+
+	// 0.999秒
+	clock.microsec = 999'000;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == Approx(EaseOutQuad(0.999) * 100.0));
+
+	// 1.001秒
+	clock.microsec = 1'001'000;
+	System::Update();
+	REQUIRE(runner.isFinished() == true);
+	REQUIRE(value == 100.0);
+}
+
+TEST_CASE("Co::Ease with zero duration")
+{
+	double value = -1.0;
+	const auto runner = Co::Ease(&value, 0s)
+		.from(0.0)
+		.to(100.0)
+		.play()
+		.runScoped();
+
+	// 即座に終了
+	REQUIRE(runner.isFinished() == true);
+	REQUIRE(value == 100.0);
+}
+
+TEST_CASE("Co::Ease and Co::Delay ends at the same time")
+{
+	TestClock clock;
+
+	double value = -1.0;
+	auto easeTask = Co::Ease(&value, 1s).setClock(&clock).play();
+
+	Optional<Co::VoidResult> easeResult;
+	Optional<Co::VoidResult> delayResult;
+
+	const auto runner = Co::Any(
+		std::move(easeTask),
+		Co::Delay(1s, &clock)).runScoped([&](const auto& result) { std::tie(easeResult, delayResult) = result; });
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE((bool)easeResult == false);
+	REQUIRE((bool)delayResult == false);
+
+	// 0秒
+	clock.microsec = 0;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE((bool)easeResult == false);
+	REQUIRE((bool)delayResult == false);
+
+	// 0.5秒
+	clock.microsec = 500'000;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE((bool)easeResult == false);
+	REQUIRE((bool)delayResult == false);
+
+	// 0.999秒
+	clock.microsec = 999'000;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE((bool)easeResult == false);
+	REQUIRE((bool)delayResult == false);
+
+	// 1.001秒
+	clock.microsec = 1'001'000;
+	System::Update();
+	REQUIRE(runner.isFinished() == true);
+	REQUIRE((bool)easeResult == true);
+	REQUIRE((bool)delayResult == true);
+	REQUIRE(value == 1.0);
+}
+
+TEST_CASE("Co::Ease::setEase")
+{
+	TestClock clock;
+
+	double value = -1.0;
+	auto easeTask = Co::Ease(&value, 1s)
+		.setClock(&clock)
+		.setEase(EaseInBounce)
+		.from(0.0)
+		.to(100.0)
+		.play();
+
+	const auto runner = std::move(easeTask).runScoped();
+
+	// 0秒
+	clock.microsec = 0;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == 0.0);
+
+	// 0.25秒
+	clock.microsec = 250'000;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == Approx(EaseInBounce(0.25) * 100.0));
+
+	// 0.5秒
+	clock.microsec = 500'000;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == Approx(EaseInBounce(0.5) * 100.0));
+
+	// 0.999秒
+	clock.microsec = 999'000;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == Approx(EaseInBounce(0.999) * 100.0));
+
+	// 1.001秒
+	clock.microsec = 1'001'000;
+	System::Update();
+	REQUIRE(runner.isFinished() == true);
+	REQUIRE(value == 100.0);
+}
+
+TEST_CASE("Co::LinearEase")
+{
+	TestClock clock;
+
+	double value = -1.0;
+	auto easeTask = Co::LinearEase(&value, 1s)
+		.setClock(&clock)
+		.from(0.0)
+		.to(100.0)
+		.play();
+
+	// Task生成時点ではまだ実行されない
+	REQUIRE(easeTask.isFinished() == false);
+	REQUIRE(value == -1.0);
+
+	const auto runner = std::move(easeTask).runScoped();
+
+	// runScopedで開始すると初期値が代入される
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == 0.0);
+
+	// 0秒
+	clock.microsec = 0;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == 0.0);
+
+	// 0.5秒
+	clock.microsec = 500'000;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == Approx(50.0));
+
+	// 0.999秒
+	clock.microsec = 999'000;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == Approx(99.9));
+
+	// 1.001秒
+	clock.microsec = 1'001'000;
+	System::Update();
+	REQUIRE(runner.isFinished() == true);
+	REQUIRE(value == 100.0);
+}
+
+TEST_CASE("Co::LinearEase with zero duration")
+{
+	double value = -1.0;
+	const auto runner = Co::LinearEase(&value, 0s)
+		.from(0.0)
+		.to(100.0)
+		.play()
+		.runScoped();
+
+	// 即座に終了
+	REQUIRE(runner.isFinished() == true);
+	REQUIRE(value == 100.0);
+}
+
+TEST_CASE("Co::LinearEase and Co::Delay ends at the same time")
+{
+	TestClock clock;
+
+	double value = -1.0;
+	auto easeTask = Co::LinearEase(&value, 1s).setClock(&clock).play();
+
+	Optional<Co::VoidResult> easeResult;
+	Optional<Co::VoidResult> delayResult;
+
+	const auto runner = Co::Any(
+		std::move(easeTask),
+		Co::Delay(1s, &clock)).runScoped([&](const auto& result) { std::tie(easeResult, delayResult) = result; });
+
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE((bool)easeResult == false);
+	REQUIRE((bool)delayResult == false);
+
+	// 0秒
+	clock.microsec = 0;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE((bool)easeResult == false);
+	REQUIRE((bool)delayResult == false);
+
+	// 0.5秒
+	clock.microsec = 500'000;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE((bool)easeResult == false);
+	REQUIRE((bool)delayResult == false);
+
+	// 0.999秒
+	clock.microsec = 999'000;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE((bool)easeResult == false);
+	REQUIRE((bool)delayResult == false);
+
+	// 1.001秒
+	clock.microsec = 1'001'000;
+	System::Update();
+	REQUIRE(runner.isFinished() == true);
+	REQUIRE((bool)easeResult == true);
+	REQUIRE((bool)delayResult == true);
+	REQUIRE(value == 1.0);
+}
+
+TEST_CASE("Co::Typewriter")
+{
+	TestClock clock;
+
+	String value;
+	auto typewriterTask = Co::Typewriter(&value, 0.25s, U"TEST") // ここで指定するのは1文字あたりの時間
+		.setClock(&clock)
+		.play();
+
+	// Task生成時点ではまだ実行されない
+	REQUIRE(typewriterTask.isFinished() == false);
+	REQUIRE(value.isEmpty());
+
+	const auto runner = std::move(typewriterTask).runScoped();
+
+	// runScopedで開始すると初期値が代入される
+	// 1文字目は最初から表示される仕様にしている
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == U"T");
+
+	// 0秒
+	clock.microsec = 0;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == U"T");
+
+	// 0.2501秒
+	clock.microsec = 250'100;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == U"TE");
+
+	// 0.5001秒
+	clock.microsec = 500'100;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == U"TES");
+
+	// 0.7501秒
+	// 最後の文字が見える時間を設ける必要があるため、この時点で最後の文字まで表示される仕様にしている
+	clock.microsec = 750'100;
+	System::Update();
+	REQUIRE(runner.isFinished() == false); // タスク自体はまだ終了していない
+	REQUIRE(value == U"TEST");
+
+	// 1.0001秒
+	clock.microsec = 1'000'100;
+	System::Update();
+	REQUIRE(runner.isFinished() == true);
+	REQUIRE(value == U"TEST");
+}
+
+TEST_CASE("Co::Typewriter with zero duration")
+{
+	String value;
+	const auto runner = Co::Typewriter(&value, 0s, U"TEST")
+		.play()
+		.runScoped();
+
+	// 即座に終了
+	REQUIRE(runner.isFinished() == true);
+	REQUIRE(value == U"TEST");
+}
+
+TEST_CASE("Co::Typewriter with total duration")
+{
+	TestClock clock;
+
+	String value;
+	const auto runner = Co::Typewriter(&value)
+		.text(U"TEST")
+		.totalDuration(1s)
+		.setClock(&clock)
+		.play()
+		.runScoped();
+
+	// 0秒
+	clock.microsec = 0;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == U"T");
+
+	// 0.2501秒
+	clock.microsec = 250'100;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == U"TE");
+
+	// 0.5001秒
+	clock.microsec = 500'100;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == U"TES");
+
+	// 0.7501秒
+	clock.microsec = 750'100;
+	System::Update();
+	REQUIRE(runner.isFinished() == false);
+	REQUIRE(value == U"TEST");
+
+	// 1.0001秒
+	clock.microsec = 1'000'100;
+	System::Update();
+	REQUIRE(runner.isFinished() == true);
+	REQUIRE(value == U"TEST");
+}
+
 void Main()
 {
 	Co::Init();

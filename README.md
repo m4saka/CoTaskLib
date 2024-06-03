@@ -73,7 +73,7 @@ Co::Task<String> ExampleTaskWithResult()
 const auto taskRunner = ExampleTask().runScoped();
 ```
 
-### コルーチン内から実行する場合
+#### コルーチン内から実行する場合
 `co_await`へ渡すことで、`Co::Task`を実行して完了まで待機できます。
 
 ```cpp
@@ -223,7 +223,7 @@ const auto taskRunner = exampleSequence.runScoped();
 exampleSequence.setText(U"テキスト");
 ```
 
-### コルーチン内から実行する場合
+#### コルーチン内から実行する場合
 `Co::Play`関数でシーケンスを再生する`Co::Task`を取得し、これに対して`co_await`を使用します。
 
 ```cpp
@@ -488,7 +488,7 @@ private:
     - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番で描画されます。
 
 ### シーンの実行方法
-`Co::EnterScene`関数を開始シーンの型を指定して呼び出すことで、最初のシーンから最後のシーンまでの一連の動作を実行する`Co::Task`を取得できます。これに対して通常通り、`runScoped`関数を使用します。  
+`Co::EnterScene`関数を開始シーンの型を指定して呼び出すことで、最初のシーンから最後のシーンまでの一連の動作を実行する`Co::Task<void>`を取得できます。これに対して通常通り、`runScoped`関数を使用します。  
 もし開始シーンのクラスのコンストラクタに引数が必要な場合、`Co::EnterScene`関数の引数として渡すことができます。
 
 全てのシーンが終了した場合にプログラムを終了するためには、下記のように`isFinished()`関数でタスクの完了を確認してwhileループを抜けます。
@@ -637,6 +637,13 @@ private:
 
 - `preStartDrawIndex()` -> `int32`
     - `preStart()`の実行中の描画順序のソート値(drawIndex)を設定します。
+    - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番で描画されます。
+
+- `postFadeOutDraw() const`
+    - `postFadeOut()`の実行中に毎フレーム呼び出される描画処理です。
+
+- `postFadeOutDrawIndex()` -> `int32`
+    - `postFadeOut()`の実行中の描画順序のソート値(drawIndex)を設定します。
     - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番で描画されます。
 
 

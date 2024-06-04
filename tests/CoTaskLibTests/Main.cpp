@@ -479,12 +479,18 @@ TEST_CASE("Co::All running tasks")
 	int32 value2 = 0;
 	int32 value3 = 0;
 
-	const auto runner = Co::All(
+	auto task = Co::All(
 		AssignValueWithDelay(10, &value1, 1s, &clock),
 		AssignValueWithDelay(20, &value2, 2s, &clock),
-		AssignValueWithDelay(30, &value3, 3s, &clock)).runScoped();
+		AssignValueWithDelay(30, &value3, 3s, &clock));
 
-	// runScoped実行時点で最初のsuspendまでは実行される
+	// タスク生成時点ではまだ実行されない
+	REQUIRE(value1 == 0);
+	REQUIRE(value2 == 0);
+	REQUIRE(value3 == 0);
+
+	// runScopedで開始すると最初のsuspendまで実行される
+	const auto runner = std::move(task).runScoped();
 	REQUIRE(value1 == 1);
 	REQUIRE(value2 == 1);
 	REQUIRE(value3 == 1);
@@ -634,8 +640,9 @@ TEST_CASE("Co::All return value")
 
 Co::Task<void> PushBackValueWithDelayFrame(std::vector<int32>* pVec, int32 value)
 {
-	co_await Co::DelayFrame();
 	pVec->push_back(value);
+	co_await Co::DelayFrame();
+	pVec->push_back(value * 10);
 }
 
 TEST_CASE("Co::All execution order")
@@ -647,14 +654,18 @@ TEST_CASE("Co::All execution order")
 		PushBackValueWithDelayFrame(&vec, 2),
 		PushBackValueWithDelayFrame(&vec, 3)).runScoped();
 
-	REQUIRE(runner.isFinished() == false);
-	System::Update();
-	REQUIRE(runner.isFinished() == true);
-
+	// runScopedを呼んだ時点で最初のsuspendまでは実行される
 	// 渡した順番でresumeされる
-	// (ただし、引数の評価順序自体は不定なので、最初のsuspendまでの処理の順番は保証されない点に注意)
 	REQUIRE(vec.size() == 3);
 	REQUIRE(vec == std::vector<int32>{ 1, 2, 3 });
+	REQUIRE(runner.isFinished() == false);
+
+	System::Update();
+
+	// 渡した順番でresumeされる
+	REQUIRE(vec.size() == 6);
+	REQUIRE(vec == std::vector<int32>{ 1, 2, 3, 10, 20, 30 });
+	REQUIRE(runner.isFinished() == true);
 }
 
 Co::Task<void> AllWithImmediateTasks()
@@ -820,14 +831,18 @@ TEST_CASE("Co::Any execution order")
 		PushBackValueWithDelayFrame(&vec, 2),
 		PushBackValueWithDelayFrame(&vec, 3)).runScoped();
 
-	REQUIRE(runner.isFinished() == false);
-	System::Update();
-	REQUIRE(runner.isFinished() == true);
-
+	// runScopedを呼んだ時点で最初のsuspendまでは実行される
 	// 渡した順番でresumeされる
-	// (ただし、引数の評価順序自体は不定なので、最初のsuspendまでの処理の順番は保証されない点に注意)
 	REQUIRE(vec.size() == 3);
 	REQUIRE(vec == std::vector<int32>{ 1, 2, 3 });
+	REQUIRE(runner.isFinished() == false);
+
+	System::Update();
+
+	// 渡した順番でresumeされる
+	REQUIRE(vec.size() == 6);
+	REQUIRE(vec == std::vector<int32>{ 1, 2, 3, 10, 20, 30 });
+	REQUIRE(runner.isFinished() == true);
 }
 
 Co::Task<void> AnyWithImmediateTasks()

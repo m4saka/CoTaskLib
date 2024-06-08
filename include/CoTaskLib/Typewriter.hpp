@@ -43,16 +43,40 @@ inline namespace cotasklib
 			[[nodiscard]]
 			inline Task<void> TypewriterTask(std::function<void(const String&)> callback, const Duration totalDuration, const String text, ISteadyClock* pSteadyClock)
 			{
-				Optional<std::size_t> prevLength = none;
+				Optional<std::size_t> prevLength = none; // textが空文字列の場合の初回コールバック呼び出しを考慮するためOptionalを使用
 				const Timer timer{ totalDuration, StartImmediately::Yes, pSteadyClock };
-				double progress;
 				while (true)
 				{
-					progress = timer.progress0_1();
+					const double progress = timer.progress0_1();
 					const std::size_t length = Min(static_cast<std::size_t>(1 + text.length() * progress), text.length());
 					if (length != prevLength)
 					{
 						callback(text.substr(0, length));
+						prevLength = length;
+					}
+					if (progress >= 1.0)
+					{
+						co_return;
+					}
+					co_await detail::Yield{};
+				}
+			}
+
+			[[nodiscard]]
+			inline Task<void> TypewriterCharTask(std::function<void(String::value_type)> callback, const Duration totalDuration, const String text, ISteadyClock* pSteadyClock)
+			{
+				std::size_t prevLength = 0; // TypewriterCharの場合はtextが空文字列の場合の初回コールバック呼び出しを考慮する必要がないためOptional不使用
+				const Timer timer{ totalDuration, StartImmediately::Yes, pSteadyClock };
+				while (true)
+				{
+					const double progress = timer.progress0_1();
+					const std::size_t length = Min(static_cast<std::size_t>(1 + text.length() * progress), text.length());
+					if (length != prevLength)
+					{
+						for (std::size_t i = prevLength; i < length; ++i)
+						{
+							callback(text[i]);
+						}
 						prevLength = length;
 					}
 					if (progress >= 1.0)
@@ -126,6 +150,68 @@ inline namespace cotasklib
 			}
 		};
 
+		class [[nodiscard]] TypewriterCharTaskBuilder
+		{
+		private:
+			std::function<void(String::value_type)> m_callback;
+			Duration m_duration;
+			bool m_isOneLetterDuration;
+			String m_text;
+			ISteadyClock* m_pSteadyClock;
+
+			[[nodiscard]]
+			Duration calcTotalDuration() const
+			{
+				return m_isOneLetterDuration ? m_duration * m_text.length() : m_duration;
+			}
+
+		public:
+			explicit TypewriterCharTaskBuilder(std::function<void(String::value_type)> callback, Duration oneLetterDuration, StringView text, ISteadyClock* pSteadyClock)
+				: m_callback(std::move(callback))
+				, m_duration(oneLetterDuration)
+				, m_isOneLetterDuration(true)
+				, m_text(text)
+				, m_pSteadyClock(pSteadyClock)
+			{
+			}
+
+			TypewriterCharTaskBuilder(const TypewriterCharTaskBuilder&) = default;
+			TypewriterCharTaskBuilder(TypewriterCharTaskBuilder&&) = default;
+			TypewriterCharTaskBuilder& operator=(const TypewriterCharTaskBuilder&) = default;
+			TypewriterCharTaskBuilder& operator=(TypewriterCharTaskBuilder&&) = default;
+
+			TypewriterCharTaskBuilder& oneLetterDuration(Duration oneLetterDuration)
+			{
+				m_duration = oneLetterDuration;
+				m_isOneLetterDuration = true;
+				return *this;
+			}
+
+			TypewriterCharTaskBuilder& totalDuration(Duration duration)
+			{
+				m_duration = duration;
+				m_isOneLetterDuration = false;
+				return *this;
+			}
+
+			TypewriterCharTaskBuilder& text(StringView text)
+			{
+				m_text = text;
+				return *this;
+			}
+
+			TypewriterCharTaskBuilder& setClock(ISteadyClock* pSteadyClock)
+			{
+				m_pSteadyClock = pSteadyClock;
+				return *this;
+			}
+
+			Task<void> play()
+			{
+				return detail::TypewriterCharTask(m_callback, calcTotalDuration(), m_text, m_pSteadyClock);
+			}
+		};
+
 		[[nodiscard]]
 		inline TypewriterTaskBuilder Typewriter(String* pText, Duration oneLetterDuration = 0s, StringView text = U"", ISteadyClock* pSteadyClock = nullptr)
 		{
@@ -136,6 +222,12 @@ inline namespace cotasklib
 		inline TypewriterTaskBuilder Typewriter(std::function<void(const String&)> callback, Duration oneLetterDuration = 0s, StringView text = U"", ISteadyClock* pSteadyClock = nullptr)
 		{
 			return TypewriterTaskBuilder(std::move(callback), oneLetterDuration, text, pSteadyClock);
+		}
+
+		[[nodiscard]]
+		inline TypewriterCharTaskBuilder TypewriterChar(std::function<void(String::value_type)> callback, Duration oneLetterDuration = 0s, StringView text = U"", ISteadyClock* pSteadyClock = nullptr)
+		{
+			return TypewriterCharTaskBuilder(std::move(callback), oneLetterDuration, text, pSteadyClock);
 		}
 	}
 }

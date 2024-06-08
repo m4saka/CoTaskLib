@@ -350,7 +350,7 @@ inline namespace cotasklib
 					}
 					co_await detail::Yield{};
 				}
-				return m_taskFinishSource.result();
+				co_return m_taskFinishSource.result();
 			}
 
 			virtual void update() = 0;

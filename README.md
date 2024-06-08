@@ -775,7 +775,7 @@ private:
     - ライブラリの機能を使用する前に、必ず一度だけ実行してください。
 - `Co::DelayFrame()` -> `Co::Task<void>`
     - 1フレーム待機します。
-- `Co::DelayFrame(int32)` -> `Co::Task<void>`
+- `Co::DelayFrame(int32 frames)` -> `Co::Task<void>`
     - 指定されたフレーム数だけ待機します。
 - `Co::Delay(Duration)` -> `Co::Task<void>`
     - 指定された時間だけ待機します。
@@ -809,14 +809,23 @@ private:
     - マウスの右ボタンが指定領域でクリックされてから離されるまで待機します。
 - `Co::WaitForMouseOver(TArea)` -> `Co::Task<void>`
     - マウスカーソルが指定領域内に侵入するまで待機します。
+- `Co::SimpleDialog(String text)` -> `Co::Task<void>`
+    - 第1引数で指定した文字列を本文として表示するダイアログを表示し、OKボタンで閉じるまで待機します。
+    - 任意で、第2引数にint32型で描画順序のソート値(drawIndex)を指定することもできます。
+        - デフォルト値は`Co::DrawIndex::Modal`(=150000)で、通常描画(0)よりも手前に表示されるようになっています。
+- `Co::SimpleDialog(String text, Array<String> buttonTexts)` -> `Co::Task<String>`
+    - 第1引数で指定した文字列を本文とし、第2引数で指定した文字列のボタンで選択するダイアログを表示します。
+        - いずれかのボタンを押すとダイアログが閉じ、押したボタンの文字列が返されます。
+    - 任意で、第3引数にint32型で描画順序のソート値(drawIndex)を指定することもできます。
+        - デフォルト値は`Co::DrawIndex::Modal`(=150000)で、通常描画(0)よりも手前に表示されるようになっています。
 - `Co::ScreenFadeIn(Duration, ColorF)` -> `Co::Task<void>`
     - 指定色からの画面フェードインを開始し、完了まで待機します。
     - 任意で、第3引数にint32型で描画順序のソート値(drawIndex)を指定することもできます。
-        - デフォルト値は`Co::DrawIndex::FadeIn`(=200000)で、通常描画(0)よりも手前に表示されるようになっています。
+        - デフォルト値は`Co::DrawIndex::FadeIn`(=250000)で、通常描画(0)よりも手前に表示されるようになっています。
 - `Co::ScreenFadeOut(Duration, ColorF)` -> `Co::Task<void>`
     - 指定色への画面フェードアウトを開始し、完了まで待機します。
     - 任意で、第3引数にint32型で描画順序のソート値(drawIndex)を指定することもできます。
-        - デフォルト値は`Co::DrawIndex::FadeOut`(=300000)で、通常描画(0)よりも手前に表示されるようになっています。
+        - デフォルト値は`Co::DrawIndex::FadeOut`(=350000)で、通常描画(0)よりも手前に表示されるようになっています。
 - `Co::All(TTasks&&...)` -> `Co::Task<std::tuple<...>>`
     - 全ての`Co::Task`が完了するまで待機します。各`Co::Task`の結果が`std::tuple`で返されます。
     - `Co::Task`の結果が`void`型の場合、`Co::VoidResult`型(空の構造体)に置換して返されます。
@@ -831,6 +840,20 @@ private:
     - `TScene`クラスのインスタンスを構築し、それを開始シーンとした一連のシーン実行のタスクを返します。
     - `TScene`クラスは`Co::SceneBase`の派生クラスである必要があります。
     - 引数には、`TScene`のコンストラクタの引数を指定します。
+- `Co::HasActiveDrawer(int32 drawIndex)` -> `bool`
+    - 指定したdrawIndexを持つDrawerが存在するかどうかを返します。
+- `Co::HasActiveDrawerInRange(int32 drawIndexMin, int32 drawIndexMax)` -> `bool`
+    - 最小値、最大値を指定して、その範囲内のdrawIndexを持つDrawerが存在するかどうかを返します。
+        - `drawIndexMin`以上`drawIndexMax`以下のものが対象となります。範囲には`drawIndexMax`を含みます。
+- `Co::HasActiveModal()` -> `bool`
+    - ModalカテゴリのdrawIndexを持つDrawerが存在するかどうかを返します。
+    - `Co::HasActiveDrawerInRange(Co::DrawIndex::ModalMin, Co::DrawIndex::ModalMax)`と同義です。
+- `Co::HasActiveFadeIn()` -> `bool`
+    - FadeInカテゴリのdrawIndexを持つDrawerが存在するかどうかを返します。
+    - `Co::HasActiveDrawerInRange(Co::DrawIndex::FadeInMin, Co::DrawIndex::FadeInMax)`と同義です。
+- `Co::HasActiveFadeOut()` -> `bool`
+    - FadeOutカテゴリのdrawIndexを持つDrawerが存在するかどうかを返します。
+    - `Co::HasActiveDrawerInRange(Co::DrawIndex::FadeOutMin, Co::DrawIndex::FadeOutMax)`と同義です。
 
 ## サンプル
 

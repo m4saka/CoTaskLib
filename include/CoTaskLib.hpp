@@ -34,3 +34,4 @@
 #include "CoTaskLib/Tween3D.hpp"
 #include "CoTaskLib/Sequence.hpp"
 #include "CoTaskLib/ScreenFade.hpp"
+#include "CoTaskLib/SimpleDialog.hpp"

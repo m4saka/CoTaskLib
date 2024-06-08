@@ -165,13 +165,11 @@ inline namespace cotasklib
 		public:
 			SequenceBase() = default;
 
+			// thisポインタをキャプチャするためコピー・ムーブ禁止
 			SequenceBase(const SequenceBase&) = delete;
-
 			SequenceBase& operator=(const SequenceBase&) = delete;
-
-			SequenceBase(SequenceBase&&) = default;
-
-			SequenceBase& operator=(SequenceBase&&) = default;
+			SequenceBase(SequenceBase&&) = delete;
+			SequenceBase& operator=(SequenceBase&&) = delete;
 
 			virtual ~SequenceBase() = default;
 

@@ -198,13 +198,11 @@ inline namespace cotasklib
 		public:
 			SceneBase() = default;
 
+			// thisポインタをキャプチャするためコピー・ムーブ禁止
 			SceneBase(const SceneBase&) = delete;
-
 			SceneBase& operator=(const SceneBase&) = delete;
-
-			SceneBase(SceneBase&&) = default;
-
-			SceneBase& operator=(SceneBase&&) = default;
+			SceneBase(SceneBase&&) = delete;
+			SceneBase& operator=(SceneBase&&) = delete;
 
 			virtual ~SceneBase() = default;
 

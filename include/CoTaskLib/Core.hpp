@@ -1200,22 +1200,24 @@ inline namespace cotasklib
 
 			~TaskFinishSource() = default;
 
-			void requestFinish(const TResult& result)
+			bool requestFinish(const TResult& result)
 			{
 				if (m_result.has_value())
 				{
-					return;
+					return false;
 				}
 				m_result = result;
+				return true;
 			}
 
-			void requestFinish(TResult&& result)
+			bool requestFinish(TResult&& result)
 			{
 				if (m_result.has_value())
 				{
-					return;
+					return false;
 				}
 				m_result = std::move(result);
+				return true;
 			}
 
 			[[nodiscard]]
@@ -1273,9 +1275,14 @@ inline namespace cotasklib
 
 			~TaskFinishSource() = default;
 
-			void requestFinish()
+			bool requestFinish()
 			{
+				if (m_result.has_value())
+				{
+					return false;
+				}
 				m_result = VoidResult{};
+				return true;
 			}
 
 			[[nodiscard]]

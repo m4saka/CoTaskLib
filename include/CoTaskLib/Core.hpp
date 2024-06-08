@@ -250,6 +250,33 @@ inline namespace cotasklib
 						caller.func();
 					}
 				}
+
+				[[nodiscard]]
+				bool hasSortingOrder(int32 sortingOrder) const
+				{
+					for (const auto& [key, caller] : m_callers)
+					{
+						if (caller.sortingOrderFunc() == sortingOrder)
+						{
+							return true;
+						}
+					}
+					return false;
+				}
+
+				[[nodiscard]]
+				bool hasSortingOrderInRange(int32 sortingOrderMin, int32 sortingOrderMax) const
+				{
+					for (const auto& [key, caller] : m_callers)
+					{
+						const int32 sortingOrder = caller.sortingOrderFunc();
+						if (sortingOrderMin <= sortingOrder && sortingOrder <= sortingOrderMax)
+						{
+							return true;
+						}
+					}
+					return false;
+				}
 			};
 
 			class Backend
@@ -444,6 +471,28 @@ inline namespace cotasklib
 						return;
 					}
 					s_pInstance->m_drawExecutor.remove(id);
+				}
+
+				[[nodiscard]]
+				static bool HasActiveDrawer(int32 drawIndex)
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+
+					return s_pInstance->m_drawExecutor.hasSortingOrder(drawIndex);
+				}
+
+				[[nodiscard]]
+				static bool HasActiveDrawerInRange(int32 drawIndexMin, int32 drawIndexMax)
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+
+					return s_pInstance->m_drawExecutor.hasSortingOrderInRange(drawIndexMin, drawIndexMax);
 				}
 
 				[[nodiscard]]
@@ -653,21 +702,27 @@ inline namespace cotasklib
 
 		namespace DrawIndex
 		{
+			constexpr int32 Back = -1;
 			constexpr int32 Default = 0;
-			constexpr int32 Back = Default - 1;
-			constexpr int32 Front = Default + 1;
+			constexpr int32 Front = 1;
 
-			constexpr int32 Modal = 100000;
-			constexpr int32 ModalBack = Modal - 1;
-			constexpr int32 ModalFront = Modal + 1;
+			constexpr int32 ModalMin = 100000;
+			constexpr int32 ModalBack = 149999;
+			constexpr int32 Modal = 150000;
+			constexpr int32 ModalFront = 150001;
+			constexpr int32 ModalMax = 199999;
 
-			constexpr int32 FadeIn = 200000;
-			constexpr int32 FadeInBack = FadeIn - 1;
-			constexpr int32 FadeInFront = FadeIn + 1;
+			constexpr int32 FadeInMin = 200000;
+			constexpr int32 FadeInBack = 249999;
+			constexpr int32 FadeIn = 250000;
+			constexpr int32 FadeInFront = 250001;
+			constexpr int32 FadeInMax = 299999;
 
-			constexpr int32 FadeOut = 300000;
-			constexpr int32 FadeOutBack = FadeOut - 1;
-			constexpr int32 FadeOutFront = FadeOut + 1;
+			constexpr int32 FadeOutMin = 300000;
+			constexpr int32 FadeOutBack = 349999;
+			constexpr int32 FadeOut = 350000;
+			constexpr int32 FadeOutFront = 350001;
+			constexpr int32 FadeOutMax = 399999;
 		}
 
 		class ScopedDrawer : public IScoped
@@ -1402,6 +1457,44 @@ inline namespace cotasklib
 		inline void Init()
 		{
 			detail::Backend::Init();
+		}
+
+		[[nodiscard]]
+		inline bool HasActiveDrawer(int32 drawIndex)
+		{
+			return detail::Backend::HasActiveDrawer(drawIndex);
+		}
+
+		// drawIndexMin <= drawIndex <= drawIndexMax であるdrawIndexを持つDrawerが存在するか
+		// (drawIndexMaxを含む点に注意)
+		[[nodiscard]]
+		inline bool HasActiveDrawerInRange(int32 drawIndexMin, int32 drawIndexMax)
+		{
+			return detail::Backend::HasActiveDrawerInRange(drawIndexMin, drawIndexMax);
+		}
+
+		[[nodiscard]]
+		inline bool HasActiveModal()
+		{
+			return detail::Backend::HasActiveDrawerInRange(DrawIndex::ModalMin, DrawIndex::ModalMax);
+		}
+
+		[[nodiscard]]
+		inline bool HasActiveFadeIn()
+		{
+			return detail::Backend::HasActiveDrawerInRange(DrawIndex::FadeInMin, DrawIndex::FadeInMax);
+		}
+
+		[[nodiscard]]
+		inline bool HasActiveFadeOut()
+		{
+			return detail::Backend::HasActiveDrawerInRange(DrawIndex::FadeOutMin, DrawIndex::FadeOutMax);
+		}
+
+		[[nodiscard]]
+		inline bool HasActiveFade()
+		{
+			return HasActiveFadeIn() || HasActiveFadeOut();
 		}
 
 		[[nodiscard]]

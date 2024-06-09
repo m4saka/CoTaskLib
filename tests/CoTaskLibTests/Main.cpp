@@ -2152,8 +2152,7 @@ TEST_CASE("Co::Ease with zero duration")
 	const auto runner = Co::Ease(&value, 0s)
 		.from(0.0)
 		.to(100.0)
-		.play()
-		.runScoped();
+		.playScoped();
 
 	// 即座に終了
 	REQUIRE(runner.done() == true);
@@ -2416,9 +2415,7 @@ TEST_CASE("Co::Typewriter")
 TEST_CASE("Co::Typewriter with zero duration")
 {
 	String value;
-	const auto runner = Co::Typewriter(&value, 0s, U"TEST")
-		.play()
-		.runScoped();
+	const auto runner = Co::Typewriter(&value, 0s, U"TEST").playScoped();
 
 	// 即座に終了
 	REQUIRE(runner.done() == true);
@@ -2434,8 +2431,7 @@ TEST_CASE("Co::Typewriter with total duration")
 		.text(U"TEST")
 		.totalDuration(1s)
 		.setClock(&clock)
-		.play()
-		.runScoped();
+		.playScoped();
 
 	// 0秒
 	clock.microsec = 0;

@@ -107,8 +107,8 @@ inline namespace cotasklib
 			}
 
 			EaseTaskBuilder(const EaseTaskBuilder&) = default;
-			EaseTaskBuilder(EaseTaskBuilder&&) = default;
 			EaseTaskBuilder& operator=(const EaseTaskBuilder&) = default;
+			EaseTaskBuilder(EaseTaskBuilder&&) = default;
 			EaseTaskBuilder& operator=(EaseTaskBuilder&&) = default;
 
 			EaseTaskBuilder& duration(Duration duration)

@@ -124,15 +124,15 @@ inline namespace cotasklib
 					{
 					}
 
-					CallerKey(const CallerKey&) = default;
+					CallerKey(const CallerKey&) noexcept = default;
 
-					CallerKey& operator=(const CallerKey&) = default;
+					CallerKey& operator=(const CallerKey&) noexcept = default;
 
-					CallerKey(CallerKey&&) = default;
+					CallerKey(CallerKey&&) noexcept = default;
 
-					CallerKey& operator=(CallerKey&&) = default;
+					CallerKey& operator=(CallerKey&&) noexcept = default;
 
-					bool operator<(const CallerKey& other) const
+					bool operator<(const CallerKey& other) const noexcept
 					{
 						if (sortingOrder != other.sortingOrder)
 						{
@@ -582,19 +582,7 @@ inline namespace cotasklib
 					rhs.m_id.reset();
 				}
 
-				ScopedTaskRunLifetime& operator=(ScopedTaskRunLifetime&& rhs) noexcept
-				{
-					if (this != &rhs)
-					{
-						if (m_id.has_value())
-						{
-							Backend::Remove(*m_id);
-						}
-						m_id = rhs.m_id;
-						rhs.m_id.reset();
-					}
-					return *this;
-				}
+				ScopedTaskRunLifetime& operator=(ScopedTaskRunLifetime&& rhs) = delete;
 
 				~ScopedTaskRunLifetime()
 				{
@@ -688,7 +676,7 @@ inline namespace cotasklib
 		}
 
 		[[nodiscard]]
-		inline auto NextFrame()
+		inline auto NextFrame() noexcept
 		{
 			return std::suspend_always{};
 		}
@@ -759,9 +747,9 @@ inline namespace cotasklib
 
 			ScopedTaskRunner& operator=(const ScopedTaskRunner&) = delete;
 
-			ScopedTaskRunner(ScopedTaskRunner&&) = default;
+			ScopedTaskRunner(ScopedTaskRunner&&) noexcept = default;
 
-			ScopedTaskRunner& operator=(ScopedTaskRunner&&) = default;
+			ScopedTaskRunner& operator=(ScopedTaskRunner&&) = delete;
 
 			~ScopedTaskRunner() = default;
 
@@ -838,19 +826,7 @@ inline namespace cotasklib
 				rhs.m_id.reset();
 			}
 
-			ScopedDrawer& operator=(ScopedDrawer&& rhs) noexcept
-			{
-				if (this != &rhs)
-				{
-					if (m_id.has_value())
-					{
-						detail::Backend::RemoveDrawer(*m_id);
-					}
-					m_id = rhs.m_id;
-					rhs.m_id.reset();
-				}
-				return *this;
-			}
+			ScopedDrawer& operator=(ScopedDrawer&& rhs) = delete;
 
 			~ScopedDrawer()
 			{
@@ -903,19 +879,7 @@ inline namespace cotasklib
 					rhs.m_handle = nullptr;
 				}
 
-				CoroutineHandleWrapper& operator=(CoroutineHandleWrapper<TResult>&& rhs) noexcept
-				{
-					if (this != &rhs)
-					{
-						if (m_handle)
-						{
-							m_handle.destroy();
-						}
-						m_handle = rhs.m_handle;
-						rhs.m_handle = nullptr;
-					}
-					return *this;
-				}
+				CoroutineHandleWrapper& operator=(CoroutineHandleWrapper<TResult>&& rhs) = delete;
 
 				[[nodiscard]]
 				TResult value() const
@@ -1001,9 +965,9 @@ inline namespace cotasklib
 
 			Task<TResult>& operator=(const Task<TResult>&) = delete;
 
-			Task(Task<TResult>&& rhs) = default;
+			Task(Task<TResult>&& rhs) noexcept = default;
 
-			Task<TResult>& operator=(Task<TResult>&& rhs) = default;
+			Task<TResult>& operator=(Task<TResult>&& rhs) = delete;
 
 			virtual void resume()
 			{
@@ -1106,9 +1070,9 @@ inline namespace cotasklib
 
 				TaskAwaiter<TResult>& operator=(const TaskAwaiter<TResult>&) = delete;
 
-				TaskAwaiter(TaskAwaiter<TResult>&& rhs) = default;
+				TaskAwaiter(TaskAwaiter<TResult>&& rhs) noexcept = default;
 
-				TaskAwaiter<TResult>& operator=(TaskAwaiter<TResult>&& rhs) = default;
+				TaskAwaiter<TResult>& operator=(TaskAwaiter<TResult>&& rhs) = delete;
 
 				void resume() override
 				{
@@ -1158,8 +1122,6 @@ inline namespace cotasklib
 				IAwaiter* m_pSubAwaiter = nullptr;
 
 			public:
-				virtual ~PromiseBase() = 0;
-
 				PromiseBase() = default;
 
 				PromiseBase(const PromiseBase&) = delete;
@@ -1172,18 +1134,12 @@ inline namespace cotasklib
 					rhs.m_pSubAwaiter = nullptr;
 				}
 
-				PromiseBase& operator=(PromiseBase&& rhs) noexcept
-				{
-					if (this != &rhs)
-					{
-						m_pSubAwaiter = rhs.m_pSubAwaiter;
-						rhs.m_pSubAwaiter = nullptr;
-					}
-					return *this;
-				}
+				PromiseBase& operator=(PromiseBase&& rhs) = delete;
+
+				virtual ~PromiseBase() = 0;
 
 				[[nodiscard]]
-				auto initial_suspend()
+				auto initial_suspend() noexcept
 				{
 					// suspend_neverにすれば関数呼び出し時点で実行開始されるが、
 					// その場合Co::AllやCo::Anyに渡す際など引数の評価順が不定になり扱いづらいため、
@@ -1216,7 +1172,7 @@ inline namespace cotasklib
 					return true;
 				}
 
-				void setSubAwaiter(IAwaiter* pSubAwaiter)
+				void setSubAwaiter(IAwaiter* pSubAwaiter) noexcept
 				{
 					m_pSubAwaiter = pSubAwaiter;
 				}
@@ -1239,9 +1195,9 @@ inline namespace cotasklib
 			public:
 				Promise() = default;
 
-				Promise(Promise<TResult>&&) = default;
+				Promise(Promise<TResult>&&) noexcept = default;
 
-				Promise& operator=(Promise<TResult>&&) = default;
+				Promise& operator=(Promise<TResult>&&) = delete;
 
 				void return_value(const TResult& v) requires std::is_copy_constructible_v<TResult>
 				{
@@ -1294,9 +1250,9 @@ inline namespace cotasklib
 			public:
 				Promise() = default;
 
-				Promise(Promise<void>&&) = default;
+				Promise(Promise<void>&&) noexcept = default;
 
-				Promise<void>& operator=(Promise<void>&&) = default;
+				Promise<void>& operator=(Promise<void>&&) = delete;
 
 				void return_void()
 				{
@@ -1351,11 +1307,11 @@ inline namespace cotasklib
 
 			TaskFinishSource& operator=(const TaskFinishSource&) = delete;
 
-			TaskFinishSource(TaskFinishSource&&) = default;
+			TaskFinishSource(TaskFinishSource&&) noexcept = default;
 
-			TaskFinishSource& operator=(TaskFinishSource&&) = default;
+			TaskFinishSource& operator=(TaskFinishSource&&) = delete;
 
-			~TaskFinishSource() = default;
+			~TaskFinishSource() noexcept = default;
 
 			bool requestFinish(const TResult& result) requires std::is_copy_constructible_v<TResult>
 			{
@@ -1380,7 +1336,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			bool hasResult() const
+			bool hasResult() const noexcept
 			{
 				return m_isFinishRequested && !m_resultConsumed;
 			}
@@ -1422,7 +1378,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			bool isFinishRequested() const
+			bool isFinishRequested() const noexcept
 			{
 				return m_isFinishRequested;
 			}
@@ -1441,11 +1397,11 @@ inline namespace cotasklib
 
 			TaskFinishSource& operator=(const TaskFinishSource&) = delete;
 
-			TaskFinishSource(TaskFinishSource&&) = default;
+			TaskFinishSource(TaskFinishSource&&) noexcept = default;
 
-			TaskFinishSource& operator=(TaskFinishSource&&) = default;
+			TaskFinishSource& operator=(TaskFinishSource&&) = delete;
 
-			~TaskFinishSource() = default;
+			~TaskFinishSource() noexcept = default;
 
 			bool requestFinish()
 			{
@@ -1467,7 +1423,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			bool isFinishRequested() const
+			bool isFinishRequested() const noexcept
 			{
 				return m_finishRequested;
 			}
@@ -1534,11 +1490,11 @@ inline namespace cotasklib
 
 			ScopedUpdater(ScopedUpdater&&) = default;
 
-			ScopedUpdater& operator=(ScopedUpdater&&) = default;
+			ScopedUpdater& operator=(ScopedUpdater&&) = delete;
 
 			~ScopedUpdater() = default;
 
-			void addTo(MultiScoped& ms)&&
+			void addTo(MultiScoped& ms) && override
 			{
 				ms.add(std::move(m_runner));
 			}

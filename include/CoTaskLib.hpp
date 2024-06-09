@@ -32,7 +32,6 @@
 #include "CoTaskLib/Ease.hpp"
 #include "CoTaskLib/Typewriter.hpp"
 #include "CoTaskLib/Tween.hpp"
-#include "CoTaskLib/Tween3D.hpp"
 #include "CoTaskLib/Sequence.hpp"
 #include "CoTaskLib/ScreenFade.hpp"
 #include "CoTaskLib/SimpleDialog.hpp"

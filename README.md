@@ -787,8 +787,13 @@ private:
 - `Co::WaitWhile(std::function<bool()>)` -> `Co::Task<void>`
     - 指定された関数を毎フレーム実行し、結果がtrueの間、待機します。
 - `Co::WaitForResult(const Optional<T>*)` -> `Co::Task<T>`
+    - `Optional`の`has_value()`関数がtrueを返すまで待機し、値を返します。
+    - 値は返却時にコピーされます。値のコピーを避けたい場合は、代わりに`Co::WaitUntilHasValue`で待機し、`Optional`の値を手動で取得してください。
+- `Co::WaitUntilHasValue(const Optional<T>*)` -> `Co::Task<void>`
     - `Optional`の`has_value()`関数がtrueを返すまで待機します。
-    - 値はコピーして返却されます。値のコピーを避けたい場合は、代わりに`Co::WaitUntil`を使用して`has_value()`がtrueを返すまで待機し、`Optional`の値を手動で取得してください。
+- `Co::WaitUntilValueChanged(const T*)` -> `Co::Task<void>`
+    - 指定された変数の値が変化するまで待機します。
+    - 呼び出し時点での値と現在の値を`operator==`で毎フレーム比較し、falseとなった時点で終了します。
 - `Co::WaitForTimer(const Timer*)` -> `Co::Task<void>`
     - `Timer`が0になるまで待機します。この関数は`Timer`を自動的に開始しないので、あらかじめ開始しておく必要があります。
 - `Co::WaitForDown(TInput)` -> `Co::Task<void>`

@@ -229,7 +229,7 @@ inline namespace cotasklib
 				Task<void> fadeIn() override
 				{
 					co_await All(
-						m_tweener.fadeInAlpha(FadeDuration),
+						m_tweener.fadeInAlpha(FadeDuration).play(),
 						m_tweener.tweenScale(FadeDuration).fromTo(FadeInScaleFrom, FadeInScaleTo).play());
 					setButtonInteractable(true);
 				}
@@ -238,7 +238,7 @@ inline namespace cotasklib
 				{
 					setButtonInteractable(false);
 					co_await All(
-						m_tweener.fadeOutAlpha(FadeDuration),
+						m_tweener.fadeOutAlpha(FadeDuration).play(),
 						m_tweener.tweenScale(FadeDuration).fromTo(FadeInScaleTo, FadeInScaleFrom).play());
 				}
 

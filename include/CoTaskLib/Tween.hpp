@@ -206,14 +206,14 @@ inline namespace cotasklib
 				return Ease(&m_alpha, duration, m_easeFuncAlpha, m_pSteadyClock).fromTo(m_alpha, m_alpha);
 			}
 
-			Co::Task<void> fadeInAlpha(Duration duration)
+			EaseTaskBuilder<double> fadeInAlpha(Duration duration)
 			{
-				return Ease(&m_alpha, duration, m_easeFuncAlpha, m_pSteadyClock).fromTo(0.0, 1.0).play();
+				return Ease(&m_alpha, duration, m_easeFuncAlpha, m_pSteadyClock).fromTo(0.0, 1.0);
 			}
 
-			Co::Task<void> fadeOutAlpha(Duration duration)
+			EaseTaskBuilder<double> fadeOutAlpha(Duration duration)
 			{
-				return Ease(&m_alpha, duration, m_easeFuncAlpha, m_pSteadyClock).fromTo(m_alpha, 0.0).play();
+				return Ease(&m_alpha, duration, m_easeFuncAlpha, m_pSteadyClock).fromTo(m_alpha, 0.0);
 			}
 
 			double alpha() const

@@ -1368,6 +1368,24 @@ TEST_CASE("Co::Play<TSequence>")
 	REQUIRE(value == 42);
 }
 
+class SequenceWithVoidResult : public Co::SequenceBase<void>
+{
+private:
+	Co::Task<void> start() override
+	{
+		co_await Co::DelayFrame();
+	}
+};
+
+TEST_CASE("Sequence with void result")
+{
+	const auto runner = Co::Play<SequenceWithVoidResult>().runScoped();
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+	REQUIRE(runner.done() == true);
+}
+
 class SequenceWithMoveOnlyResult : public Co::SequenceBase<std::unique_ptr<int32>>
 {
 private:
@@ -1390,6 +1408,108 @@ TEST_CASE("Sequence with move-only result")
 
 	System::Update();
 	REQUIRE(runner.done() == true);
+	REQUIRE(*value == 42);
+}
+
+class TestUpdaterSequence : public Co::UpdaterSequenceBase<void>
+{
+private:
+	int m_count = 0;
+
+	void update() override
+	{
+		if (m_count == 3)
+		{
+			requestFinish();
+		}
+		++m_count;
+	}
+};
+
+TEST_CASE("UpdaterSequence")
+{
+	const auto runner = Co::Play<TestUpdaterSequence>().runScoped();
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+	REQUIRE(runner.done() == true);
+}
+
+class TestUpdaterSequenceWithResult : public Co::UpdaterSequenceBase<int32>
+{
+private:
+	int m_count = 0;
+
+	void update() override
+	{
+		if (m_count == 3)
+		{
+			requestFinish(42);
+		}
+		++m_count;
+	}
+};
+
+TEST_CASE("UpdaterSequence with result")
+{
+	int32 value = 0;
+	const auto runner = Co::Play<TestUpdaterSequenceWithResult>().runScoped([&](int32 result) { value = result; });
+	REQUIRE(runner.done() == false);
+	REQUIRE(value == 0);
+
+	System::Update();
+	REQUIRE(runner.done() == false);
+	REQUIRE(value == 0);
+
+	System::Update();
+	REQUIRE(runner.done() == false);
+	REQUIRE(value == 0);
+
+	System::Update();
+	REQUIRE(runner.done() == true);
+	REQUIRE(value == 42);
+}
+
+class TestUpdaterSequenceWithMoveOnlyResult : public Co::UpdaterSequenceBase<std::unique_ptr<int32>>
+{
+private:
+	int m_count = 0;
+
+	void update() override
+	{
+		if (m_count == 3)
+		{
+			requestFinish(std::make_unique<int32>(42));
+		}
+		++m_count;
+	}
+};
+
+TEST_CASE("UpdaterSequence with move-only result")
+{
+	std::unique_ptr<int32> value;
+	const auto runner = Co::Play<TestUpdaterSequenceWithMoveOnlyResult>()
+		.runScoped([&](std::unique_ptr<int32>&& result) { value = std::move(result); });
+	REQUIRE(runner.done() == false);
+	REQUIRE(value == nullptr);
+
+	System::Update();
+	REQUIRE(runner.done() == false);
+	REQUIRE(value == nullptr);
+
+	System::Update();
+	REQUIRE(runner.done() == false);
+	REQUIRE(value == nullptr);
+
+	System::Update();
+	REQUIRE(runner.done() == true);
+	REQUIRE(value != nullptr);
 	REQUIRE(*value == 42);
 }
 

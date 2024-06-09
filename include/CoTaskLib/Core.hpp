@@ -1166,9 +1166,21 @@ inline namespace cotasklib
 
 				PromiseBase& operator=(const PromiseBase&) = delete;
 
-				PromiseBase(PromiseBase&&) = default;
+				PromiseBase(PromiseBase&& rhs) noexcept
+					: m_pSubAwaiter(rhs.m_pSubAwaiter)
+				{
+					rhs.m_pSubAwaiter = nullptr;
+				}
 
-				PromiseBase& operator=(PromiseBase&&) = default;
+				PromiseBase& operator=(PromiseBase&& rhs) noexcept
+				{
+					if (this != &rhs)
+					{
+						m_pSubAwaiter = rhs.m_pSubAwaiter;
+						rhs.m_pSubAwaiter = nullptr;
+					}
+					return *this;
+				}
 
 				[[nodiscard]]
 				auto initial_suspend()

@@ -1406,6 +1406,7 @@ inline namespace cotasklib
 				{
 					co_await detail::Yield{};
 				}
+				m_resultConsumed = true;
 				co_return m_promise.get_future().get();
 			}
 
@@ -1444,9 +1445,14 @@ inline namespace cotasklib
 
 			~TaskFinishSource() = default;
 
-			void requestFinish()
+			bool requestFinish()
 			{
+				if (m_finishRequested)
+				{
+					return false;
+				}
 				m_finishRequested = true;
+				return true;
 			}
 
 			[[nodiscard]]

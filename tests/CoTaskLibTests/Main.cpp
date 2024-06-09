@@ -359,6 +359,129 @@ TEST_CASE("Throw exception with delay and non-void result")
 	REQUIRE(cancelCallbackCount == 1);
 }
 
+TEST_CASE("TaskFinishSource<void>")
+{
+	Co::TaskFinishSource<void> taskFinishSource;
+	REQUIRE(taskFinishSource.isFinishRequested() == false);
+
+	// 初回のリクエストではtrueが返る
+	REQUIRE(taskFinishSource.requestFinish() == true);
+	REQUIRE(taskFinishSource.isFinishRequested() == true);
+
+	// 2回目以降のリクエストは受け付けない
+	REQUIRE(taskFinishSource.requestFinish() == false);
+	REQUIRE(taskFinishSource.isFinishRequested() == true);
+}
+
+TEST_CASE("TaskFinishSource<void>::waitForFinish")
+{
+	Co::TaskFinishSource<void> taskFinishSource;
+	const auto runner = taskFinishSource.waitForFinish().runScoped();
+
+	// まだ完了していない
+	REQUIRE(runner.done() == false);
+	REQUIRE(taskFinishSource.isFinishRequested() == false);
+
+	// 完了リクエスト
+	taskFinishSource.requestFinish();
+
+	// System::Updateが呼ばれるまでは完了しない
+	REQUIRE(runner.done() == false);
+	REQUIRE(taskFinishSource.isFinishRequested() == true);
+
+	System::Update();
+
+	// System::Updateが呼ばれたら完了する
+	REQUIRE(runner.done() == true);
+	REQUIRE(taskFinishSource.isFinishRequested() == true);
+}
+
+TEST_CASE("TaskFinishSource<int32>")
+{
+	Co::TaskFinishSource<int32> taskFinishSource;
+	REQUIRE(taskFinishSource.isFinishRequested() == false);
+	REQUIRE(taskFinishSource.hasResult() == false);
+
+	// 結果が入るまではresultは例外を投げる
+	REQUIRE_THROWS_AS(taskFinishSource.result(), Error);
+
+	// 初回のリクエストではtrueが返る
+	REQUIRE(taskFinishSource.requestFinish(42) == true);
+	REQUIRE(taskFinishSource.isFinishRequested() == true);
+
+	// 結果が取得できる
+	REQUIRE(taskFinishSource.hasResult() == true);
+	REQUIRE(taskFinishSource.result() == 42);
+
+	// 2回目以降の結果取得はできない
+	REQUIRE(taskFinishSource.hasResult() == false);
+	REQUIRE_THROWS_AS(taskFinishSource.result(), Error);
+	REQUIRE(taskFinishSource.isFinishRequested() == true);
+
+	// 2回目以降のリクエストは受け付けない
+	REQUIRE(taskFinishSource.requestFinish(4242) == false);
+	REQUIRE(taskFinishSource.hasResult() == false);
+	REQUIRE_THROWS_AS(taskFinishSource.result(), Error);
+	REQUIRE(taskFinishSource.isFinishRequested() == true);
+}
+
+TEST_CASE("TaskFinishSource<int32>::waitForFinish")
+{
+	Co::TaskFinishSource<int32> taskFinishSource;
+	const auto runner = taskFinishSource.waitForFinish().runScoped();
+
+	// まだ完了していない
+	REQUIRE(runner.done() == false);
+	REQUIRE(taskFinishSource.isFinishRequested() == false);
+
+	// 完了リクエスト
+	taskFinishSource.requestFinish(42);
+
+	// System::Updateが呼ばれるまでは完了しない
+	REQUIRE(runner.done() == false);
+	REQUIRE(taskFinishSource.isFinishRequested() == true);
+
+	System::Update();
+
+	// System::Updateが呼ばれたら完了する
+	REQUIRE(runner.done() == true);
+	REQUIRE(taskFinishSource.isFinishRequested() == true);
+	REQUIRE(taskFinishSource.hasResult() == true);
+	REQUIRE(taskFinishSource.result() == 42);
+}
+
+TEST_CASE("TaskFinishSource<int32>::waitForResult")
+{
+	Co::TaskFinishSource<int32> taskFinishSource;
+	Optional<int32> result = none;
+	const auto runner = taskFinishSource.waitForResult().runScoped([&](int32 r) { result = r; });
+
+	// まだ完了していない
+	REQUIRE(runner.done() == false);
+	REQUIRE(taskFinishSource.isFinishRequested() == false);
+	REQUIRE(result == none);
+
+	// 完了リクエスト
+	taskFinishSource.requestFinish(42);
+
+	// System::Updateが呼ばれるまでは完了しない
+	REQUIRE(runner.done() == false);
+	REQUIRE(taskFinishSource.isFinishRequested() == true);
+	REQUIRE(result == none);
+
+	System::Update();
+
+	// System::Updateが呼ばれたら完了する
+	REQUIRE(runner.done() == true);
+	REQUIRE(taskFinishSource.isFinishRequested() == true);
+	REQUIRE(result == 42);
+
+	// 2回目以降の結果取得はできない
+	// (waitForResult内で既に結果取得しているため2回目となる)
+	REQUIRE_THROWS_AS(taskFinishSource.result(), Error);
+	REQUIRE(taskFinishSource.isFinishRequested() == true);
+}
+
 Co::Task<void> WaitForeverTest(int32* pValue)
 {
 	*pValue = 1;

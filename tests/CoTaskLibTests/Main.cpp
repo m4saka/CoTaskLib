@@ -592,17 +592,12 @@ TEST_CASE("Finish WaitWhile immediately")
 	REQUIRE(runner.done() == true);
 }
 
-Co::Task<void> WaitForResultStdOptionalTest(std::optional<int32>* pResult, int32* pRet)
-{
-	*pRet = co_await Co::WaitForResult(pResult);
-}
-
 TEST_CASE("WaitForResult with std::optional")
 {
 	std::optional<int32> result;
 	int32 ret = 0;
 
-	const auto runner = WaitForResultStdOptionalTest(&result, &ret).runScoped();
+	const auto runner = Co::WaitForResult(&result).runScoped([&](int32 r) { ret = r; });
 	REQUIRE(runner.done() == false);
 	REQUIRE(ret == 0);
 
@@ -629,12 +624,11 @@ TEST_CASE("Finish WaitForResult with std::optional immediately")
 	int32 ret = 0;
 
 	// 既に結果が代入されているが、タスク生成時点ではまだ実行されない
-	auto task = WaitForResultStdOptionalTest(&result, &ret);
+	auto task = Co::WaitForResult(&result);
 	REQUIRE(task.done() == false);
-	REQUIRE(ret == 0);
 
 	// 既に結果が代入されているのでrunScopedで開始すると即座に完了する
-	const auto runner = std::move(task).runScoped();
+	const auto runner = std::move(task).runScoped([&](int32 r) { ret = r; });
 	REQUIRE(runner.done() == true);
 	REQUIRE(ret == 42);
 
@@ -644,17 +638,12 @@ TEST_CASE("Finish WaitForResult with std::optional immediately")
 	REQUIRE(ret == 42);
 }
 
-Co::Task<void> WaitForResultOptionalTest(Optional<int32>* pResult, int32* pRet)
-{
-	*pRet = co_await Co::WaitForResult(pResult);
-}
-
 TEST_CASE("WaitForResult with Optional")
 {
 	Optional<int32> result;
 	int32 ret = 0;
 
-	const auto runner = WaitForResultOptionalTest(&result, &ret).runScoped();
+	const auto runner = Co::WaitForResult(&result).runScoped([&](int32 r) { ret = r; });
 	REQUIRE(runner.done() == false);
 	REQUIRE(ret == 0);
 
@@ -681,12 +670,11 @@ TEST_CASE("Finish WaitForResult with Optional immediately")
 	int32 ret = 0;
 
 	// 既に結果が代入されているが、タスク生成時点ではまだ実行されない
-	auto task = WaitForResultOptionalTest(&result, &ret);
+	auto task = Co::WaitForResult(&result);
 	REQUIRE(task.done() == false);
-	REQUIRE(ret == 0);
 
 	// 既に結果が代入されているのでrunScopedで開始すると即座に完了する
-	const auto runner = std::move(task).runScoped();
+	const auto runner = std::move(task).runScoped([&](int32 r) { ret = r; });
 	REQUIRE(runner.done() == true);
 	REQUIRE(ret == 42);
 
@@ -694,6 +682,74 @@ TEST_CASE("Finish WaitForResult with Optional immediately")
 	System::Update();
 	REQUIRE(runner.done() == true);
 	REQUIRE(ret == 42);
+}
+
+TEST_CASE("WaitUntilHasValue with std::optional")
+{
+	std::optional<int32> result;
+
+	const auto runner = Co::WaitUntilHasValue(&result).runScoped();
+	REQUIRE(runner.done() == false);
+
+	// 結果が代入されるまで完了しない
+	System::Update();
+	REQUIRE(runner.done() == false);
+
+	result = 42;
+
+	// 結果が代入されてもUpdateが呼ばれるまでは完了しない
+	REQUIRE(runner.done() == false);
+
+	// 結果が代入された後の初回のUpdateで完了する
+	System::Update();
+	REQUIRE(runner.done() == true);
+}
+
+TEST_CASE("Finish WaitUntilHasValue with std::optional immediately")
+{
+	std::optional<int32> result = 42;
+
+	// 既に結果が代入されているが、タスク生成時点ではまだ実行されない
+	auto task = Co::WaitUntilHasValue(&result);
+	REQUIRE(task.done() == false);
+
+	// 既に結果が代入されているのでrunScopedで開始すると即座に完了する
+	const auto runner = std::move(task).runScoped();
+	REQUIRE(runner.done() == true);
+}
+
+TEST_CASE("WaitUntilHasValue with Optional")
+{
+	Optional<int32> result;
+
+	const auto runner = Co::WaitUntilHasValue(&result).runScoped();
+	REQUIRE(runner.done() == false);
+
+	// 結果が代入されるまで完了しない
+	System::Update();
+	REQUIRE(runner.done() == false);
+
+	result = 42;
+
+	// 結果が代入されてもUpdateが呼ばれるまでは完了しない
+	REQUIRE(runner.done() == false);
+
+	// 結果が代入された後の初回のUpdateで完了する
+	System::Update();
+	REQUIRE(runner.done() == true);
+}
+
+TEST_CASE("Finish WaitUntilHasValue with Optional immediately")
+{
+	Optional<int32> result = 42;
+
+	// 既に結果が代入されているが、タスク生成時点ではまだ実行されない
+	auto task = Co::WaitUntilHasValue(&result);
+	REQUIRE(task.done() == false);
+
+	// 既に結果が代入されているのでrunScopedで開始すると即座に完了する
+	const auto runner = std::move(task).runScoped();
+	REQUIRE(runner.done() == true);
 }
 
 TEST_CASE("WaitUntilValueChanged")

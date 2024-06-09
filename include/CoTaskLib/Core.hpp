@@ -954,6 +954,13 @@ inline namespace cotasklib
 					m_handle.resume();
 				}
 			};
+
+			template <typename TResult>
+			[[nodiscard]]
+			Task<void> DiscardResult(std::unique_ptr<Task<TResult>> task)
+			{
+				co_await std::move(*task);
+			}
 		}
 
 		enum class WithTiming
@@ -1066,6 +1073,12 @@ inline namespace cotasklib
 					throw Error{ U"Task: Invalid WithTiming" };
 				}
 				return std::move(*this);
+			}
+
+			[[nodiscard]]
+			Task<void> discardResult()&&
+			{
+				return detail::DiscardResult(std::make_unique<Task<TResult>>(std::move(*this)));
 			}
 
 			[[nodiscard]]
@@ -1842,7 +1855,7 @@ inline namespace cotasklib
 		{
 			static_assert(
 				((std::is_copy_constructible_v<typename TTasks::result_type> || std::is_void_v<typename TTasks::result_type>) && ...),
-				"Any does not support non-copyable types");
+				"Co::Any does not support tasks that return non-copy-constructible results; use discardResult() if the result is not needed.");
 
 			if ((args.done() || ...))
 			{

@@ -994,6 +994,26 @@ TEST_CASE("Co::Any with immediate tasks")
 	REQUIRE(runner.done() == true);
 }
 
+Co::Task<void> AnyWithNonCopyableResult()
+{
+	const auto [a, b, c] = co_await Co::Any(
+		CoReturnWithMoveOnlyTypeAndDelayTest().discardResult(),
+		Co::DelayFrame(),
+		Co::DelayFrame(2));
+
+	REQUIRE((bool)a == true);
+	REQUIRE((bool)b == true);
+	REQUIRE((bool)c == false);
+}
+
+TEST_CASE("Co::Any with non-copyable result")
+{
+	const auto runner = AnyWithNonCopyableResult().runScoped();
+	REQUIRE(runner.done() == false);
+	System::Update();
+	REQUIRE(runner.done() == true);
+}
+
 struct SequenceProgress
 {
 	bool isPreStartStarted = false;

@@ -1213,6 +1213,7 @@ TEST_CASE("Sequence")
 	SequenceProgress progress;
 	TestSequence sequence{ 42, &progress };
 	const auto runner = sequence.playScoped();
+	REQUIRE(sequence.done() == false);
 	REQUIRE(runner.done() == false);
 	REQUIRE(progress.isPreStartStarted == true); // 呼び出し時点で最初のsuspendまでは実行される
 	REQUIRE(progress.isPreStartFinished == false);
@@ -1224,11 +1225,10 @@ TEST_CASE("Sequence")
 	REQUIRE(progress.isFadeOutFinished == false);
 	REQUIRE(progress.isPostFadeOutStarted == false);
 	REQUIRE(progress.isPostFadeOutFinished == false);
-	REQUIRE(sequence.hasResult() == false);
-	REQUIRE(sequence.resultOpt() == none);
 
 	System::Update();
 
+	REQUIRE(sequence.done() == false);
 	REQUIRE(runner.done() == false);
 	REQUIRE(progress.isPreStartStarted == true);
 	REQUIRE(progress.isPreStartFinished == true);
@@ -1240,11 +1240,10 @@ TEST_CASE("Sequence")
 	REQUIRE(progress.isFadeOutFinished == false);
 	REQUIRE(progress.isPostFadeOutStarted == false);
 	REQUIRE(progress.isPostFadeOutFinished == false);
-	REQUIRE(sequence.hasResult() == false);
-	REQUIRE(sequence.resultOpt() == none);
 
 	System::Update();
 
+	REQUIRE(sequence.done() == false);
 	REQUIRE(runner.done() == false);
 	REQUIRE(progress.isPreStartStarted == true);
 	REQUIRE(progress.isPreStartFinished == true);
@@ -1257,13 +1256,9 @@ TEST_CASE("Sequence")
 	REQUIRE(progress.isPostFadeOutStarted == false);
 	REQUIRE(progress.isPostFadeOutFinished == false);
 
-	// startが完了した時点で結果が取得できる
-	REQUIRE(sequence.hasResult() == true);
-	REQUIRE(sequence.resultOpt() == 42);
-	REQUIRE(sequence.result() == 42);
-
 	System::Update();
 
+	REQUIRE(sequence.done() == false);
 	REQUIRE(runner.done() == false);
 	REQUIRE(progress.isPreStartStarted == true);
 	REQUIRE(progress.isPreStartFinished == true);
@@ -1278,6 +1273,7 @@ TEST_CASE("Sequence")
 
 	System::Update();
 
+	REQUIRE(sequence.done() == true);
 	REQUIRE(runner.done() == true);
 	REQUIRE(progress.isPreStartStarted == true);
 	REQUIRE(progress.isPreStartFinished == true);
@@ -1370,6 +1366,31 @@ TEST_CASE("Co::Play<TSequence>")
 	REQUIRE(progress.isPostFadeOutFinished == true);
 
 	REQUIRE(value == 42);
+}
+
+class SequenceWithMoveOnlyResult : public Co::SequenceBase<std::unique_ptr<int32>>
+{
+private:
+	Co::Task<std::unique_ptr<int32>> start() override
+	{
+		co_await Co::DelayFrame();
+		co_return std::make_unique<int32>(42);
+	}
+
+public:
+	SequenceWithMoveOnlyResult() = default;
+};
+
+TEST_CASE("Sequence with move-only result")
+{
+	std::unique_ptr<int32> value;
+	const auto runner = Co::Play<SequenceWithMoveOnlyResult>()
+		.runScoped([&](std::unique_ptr<int32>&& result) { value = std::move(result); });
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+	REQUIRE(runner.done() == true);
+	REQUIRE(*value == 42);
 }
 
 class TestScene : public Co::SceneBase

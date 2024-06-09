@@ -55,7 +55,8 @@ inline namespace cotasklib
 			bool m_isFadingIn = false;
 			bool m_isFadingOut = false;
 			bool m_isPostFadeOut = false;
-			Optional<result_type_void_replaced> m_result;
+			bool m_isDone = false;
+			TaskFinishSource<TResult> m_taskFinishSource;
 
 			[[nodiscard]]
 			Task<void> startAndFadeOut()
@@ -63,14 +64,15 @@ inline namespace cotasklib
 				if constexpr (std::is_void_v<TResult>)
 				{
 					co_await start();
-					m_result.emplace();
+					m_taskFinishSource.requestFinish();
 					m_isFadingOut = true;
 					co_await fadeOut();
 					m_isFadingOut = false;
 				}
 				else
 				{
-					m_result = co_await start();
+					TResult result = co_await start();
+					m_taskFinishSource.requestFinish(std::move(result));
 					m_isFadingOut = true;
 					co_await fadeOut();
 					m_isFadingOut = false;
@@ -229,6 +231,8 @@ inline namespace cotasklib
 					m_isPostFadeOut = false;
 				}
 
+				m_isDone = true;
+
 				if constexpr (std::is_void_v<TResult>)
 				{
 					co_return;
@@ -236,7 +240,7 @@ inline namespace cotasklib
 				else
 				{
 					// m_resultにはstartAndFadeOut内で結果が代入済みなのでそれを返す
-					co_return *m_result;
+					co_return m_taskFinishSource.result();
 				}
 			}
 
@@ -260,21 +264,9 @@ inline namespace cotasklib
 			void playAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr) && = delete;
 
 			[[nodiscard]]
-			bool hasResult() const
+			bool done() const
 			{
-				return m_result.has_value();
-			}
-
-			[[nodiscard]]
-			const result_type_void_replaced& result() const
-			{
-				return *m_result;
-			}
-
-			[[nodiscard]]
-			const Optional<result_type_void_replaced>& resultOpt() const
-			{
-				return m_result;
+				return m_isDone;
 			}
 		};
 

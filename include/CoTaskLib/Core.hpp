@@ -87,7 +87,7 @@ inline namespace cotasklib
 			template <typename TResult>
 			struct FinishCallbackTypeTrait
 			{
-				using type = std::function<void(const TResult&)>;
+				using type = std::function<void(TResult)>;
 			};
 
 			template <>
@@ -1241,7 +1241,7 @@ inline namespace cotasklib
 
 				Promise& operator=(Promise<TResult>&&) = default;
 
-				void return_value(const TResult& v)
+				void return_value(const TResult& v) requires std::is_copy_constructible_v<TResult>
 				{
 					m_value.set_value(v);
 					m_isResultSet = true;

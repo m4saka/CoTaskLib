@@ -25,7 +25,7 @@ TEST_CASE("DelayFrame")
 	REQUIRE(runner.done() == false);
 
 	System::Update();
-	REQUIRE(value == 2); // DelayFrame(1)の後が実行される
+	REQUIRE(value == 2); // NextFrame()の後が実行される
 	REQUIRE(runner.done() == false);
 
 	System::Update();
@@ -219,7 +219,7 @@ TEST_CASE("co_return with delay")
 	REQUIRE(value == 1); // runScopedにより実行が開始される
 
 	System::Update();
-	REQUIRE(value == 42); // DelayFrame(1)の後が実行され、co_awaitで受け取った値が返る
+	REQUIRE(value == 42); // NextFrame()の後が実行され、co_awaitで受け取った値が返る
 
 	System::Update();
 	REQUIRE(value == 42); // すでに完了しているので何も起こらない
@@ -270,7 +270,7 @@ TEST_CASE("co_return with move-only type and delay")
 	REQUIRE(value == 0); // runScopedにより実行が開始される
 
 	System::Update();
-	REQUIRE(value == 42); // DelayFrame(1)の後が実行され、co_awaitで受け取った値が返る
+	REQUIRE(value == 42); // NextFrame()の後が実行され、co_awaitで受け取った値が返る
 
 	System::Update();
 	REQUIRE(value == 42); // すでに完了しているので何も起こらない

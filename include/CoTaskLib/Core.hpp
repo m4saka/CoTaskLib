@@ -1473,33 +1473,6 @@ inline namespace cotasklib
 			}
 		}
 
-		class ScopedUpdater : public IScoped
-		{
-		private:
-			ScopedTaskRunner m_runner;
-
-		public:
-			explicit ScopedUpdater(std::function<void()> func)
-				: m_runner(UpdaterTask(std::move(func)))
-			{
-			}
-
-			ScopedUpdater(const ScopedUpdater&) = delete;
-
-			ScopedUpdater& operator=(const ScopedUpdater&) = delete;
-
-			ScopedUpdater(ScopedUpdater&&) = default;
-
-			ScopedUpdater& operator=(ScopedUpdater&&) = delete;
-
-			~ScopedUpdater() = default;
-
-			void addTo(MultiScoped& ms) && override
-			{
-				ms.add(std::move(m_runner));
-			}
-		};
-
 		template <typename TResult>
 		auto operator co_await(Task<TResult>&& rhs)
 		{

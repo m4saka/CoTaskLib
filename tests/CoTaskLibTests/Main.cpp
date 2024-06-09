@@ -696,6 +696,25 @@ TEST_CASE("Finish WaitForResult with Optional immediately")
 	REQUIRE(ret == 42);
 }
 
+TEST_CASE("WaitUntilValueChanged")
+{
+	int32 value = 0;
+	const auto runner = Co::WaitUntilValueChanged(&value).runScoped();
+	REQUIRE(runner.done() == false);
+
+	// 値が変わるまでは完了しない
+	System::Update();
+	REQUIRE(runner.done() == false);
+
+	// 値が変わってもUpdateが呼ばれるまでは完了しない
+	value = 42;
+	REQUIRE(runner.done() == false);
+
+	// 値が変わった後の初回のUpdateで完了する
+	System::Update();
+	REQUIRE(runner.done() == true);
+}
+
 TEST_CASE("WaitForTimer")
 {
 	TestClock clock;

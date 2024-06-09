@@ -1639,26 +1639,35 @@ inline namespace cotasklib
 
 		template <typename T>
 		[[nodiscard]]
-		inline Task<T> WaitForResult(const std::optional<T>* pOptional)
+		Task<T> WaitForResult(const std::optional<T>* pOptional)
 		{
 			while (!pOptional->has_value())
 			{
 				co_await detail::Yield{};
 			}
-
 			co_return **pOptional;
 		}
 
 		template <typename T>
 		[[nodiscard]]
-		inline Task<T> WaitForResult(const Optional<T>* pOptional)
+		Task<T> WaitForResult(const Optional<T>* pOptional)
 		{
 			while (!pOptional->has_value())
 			{
 				co_await detail::Yield{};
 			}
-
 			co_return **pOptional;
+		}
+
+		template <typename T>
+		[[nodiscard]]
+		Task<void> WaitUntilValueChanged(const T* pValue)
+		{
+			const T initialValue = *pValue;
+			while (*pValue == initialValue)
+			{
+				co_await detail::Yield{};
+			}
 		}
 
 		[[nodiscard]]

@@ -502,7 +502,9 @@ while (System::Update())
 - CoTaskLibでは、シーンクラスのコンストラクタに引数を持たせることができます。そのため、遷移元のシーンから必要なデータを受け渡すことができます。
     - Siv3D標準のシーン機能にある`getData()`のような、シーン間でグローバルにデータを受け渡すための機能は提供していません。代わりに、シーンクラスのコンストラクタに引数を用意して受け渡してください。
 - CoTaskLibのシーンクラスでは、毎フレーム実行されるupdate関数の代わりに、`start()`関数というコルーチン関数を実装します。
-    - update関数を使用したい場合、`SceneBase`クラスの代わりに`UpdaterSceneBase`クラスを基底クラスとして使用するか(詳細は後述)、自前で`update()`関数を用意した上で`start()`関数内に`Co::ScopedUpdater updater{ [this] { update(); } };`のように記述して`update()`関数が毎フレーム実行されるようにするかのいずれかの方法を取ってください。※`ScopedUpdater`/`ScopedDrawer`について加筆予定
+    - update関数を使用したい場合、下記のいずれかの方法を使用してください。
+        - 方法1: `SceneBase`クラスの代わりに`UpdaterSceneBase`クラスを基底クラスとして使用する(`UpdaterSceneBase`の詳細は後述)
+        - 方法2: 自前で`update()`関数を用意し、`start()`関数内に`const auto runner = Co::UpdaterTask([this] { update(); }).runScoped();`と記述することで、`update()`関数が毎フレーム実行されるようにする
 
 ### 次のシーンの指定方法
 
@@ -801,6 +803,12 @@ private:
     - マウスの右ボタンが指定領域でクリックされてから離されるまで待機します。
 - `Co::WaitForMouseOver(TArea)` -> `Co::Task<>`
     - マウスカーソルが指定領域内に侵入するまで待機します。
+- `Co::UpdaterTask(std::function<void()>)` -> `Co::Task<>`
+    - 指定された関数を毎フレーム実行し続けるタスクを生成します。
+- `Co::UpdaterTask<TResult>(std::function<void(TaskFinishSource<TResult>&)>)` -> `Co::Task<>`
+    - 指定された関数を毎フレーム実行し続けるタスクを生成します。
+    - 関数に与えられる`TaskFinishSource&`に対して`requestFinish`関数を呼ぶことで、タスクを完了できます。
+        - `requestFinish`関数の第1引数には、`TResult`型の値を設定できます(`void`の場合は不要)。
 - `Co::SimpleDialog(String text)` -> `Co::Task<>`
     - 第1引数で指定した文字列を本文として表示するダイアログを表示し、OKボタンで閉じるまで待機します。
     - 任意で、第2引数にint32型で描画順序のソート値(drawIndex)を指定することもできます。

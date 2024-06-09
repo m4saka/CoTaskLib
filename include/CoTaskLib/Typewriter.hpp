@@ -148,6 +148,16 @@ inline namespace cotasklib
 			{
 				return detail::TypewriterTask(m_callback, calcTotalDuration(), m_text, m_pSteadyClock);
 			}
+
+			ScopedTaskRunner playScoped()
+			{
+				return play().runScoped();
+			}
+
+			void playAddTo(MultiScoped& ms)
+			{
+				play().runAddTo(ms);
+			}
 		};
 
 		class [[nodiscard]] TypewriterCharTaskBuilder
@@ -209,6 +219,16 @@ inline namespace cotasklib
 			Task<void> play()
 			{
 				return detail::TypewriterCharTask(m_callback, calcTotalDuration(), m_text, m_pSteadyClock);
+			}
+
+			ScopedTaskRunner playScoped()
+			{
+				return play().runScoped();
+			}
+
+			void playAddTo(MultiScoped& ms)
+			{
+				play().runAddTo(ms);
 			}
 		};
 

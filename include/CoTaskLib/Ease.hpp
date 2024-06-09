@@ -170,6 +170,16 @@ inline namespace cotasklib
 					};
 				return detail::EaseTask(std::move(lerpedCallback), m_duration, m_easeFunc, m_pSteadyClock);
 			}
+
+			ScopedTaskRunner playScoped()
+			{
+				return play().runScoped();
+			}
+
+			void playAddTo(MultiScoped& ms)
+			{
+				play().runAddTo(ms);
+			}
 		};
 
 		template <detail::Lerpable T>

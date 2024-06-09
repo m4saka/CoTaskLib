@@ -137,16 +137,12 @@ private:
     Co::Task<> fadeIn() override
     {
         // 必要に応じて、フェードイン処理をコルーチンで記述(startと同時に実行される)
+        co_return;
     }
 
     Co::Task<> fadeOut() override
     {
         // 必要に応じて、フェードアウト処理をコルーチンで記述(startの完了後に実行される)
-    }
-
-    Co::Task<> preStart() override
-    {
-        // 必要に応じて、fadeIn・startより前に実行すべき処理(ローディングなど)があればコルーチンで記述
         co_return;
     }
 };
@@ -299,12 +295,6 @@ private:
     {
         // 必要に応じて、フェードアウト処理をコルーチンで記述(updateの完了後に実行される)
         co_await Co::SimpleFadeOut(1s, Palette::Black);
-    }
-
-    Co::Task<> preStart() override
-    {
-        // 必要に応じて、fadeIn・startより前に実行すべき処理(ローディングなど)があればコルーチンで記述
-        co_return;
     }
 };
 ```
@@ -491,13 +481,13 @@ private:
 `Co::EnterScene`関数を開始シーンの型を指定して呼び出すことで、最初のシーンから最後のシーンまでの一連の動作を実行する`Co::Task<>`を取得できます。これに対して通常通り、`runScoped`関数を使用します。  
 もし開始シーンのクラスのコンストラクタに引数が必要な場合、`Co::EnterScene`関数の引数として渡すことができます。
 
-全てのシーンが終了した場合にプログラムを終了するためには、下記のように`isFinished()`関数でタスクの完了を確認してwhileループを抜けます。
+全てのシーンが終了した場合にプログラムを終了するためには、下記のように`done()`関数でタスクの完了を確認してwhileループを抜けます。
 
 ```cpp
 const auto taskRunner = Co::EnterScene<ExampleScene>().runScoped();
 while (System::Update())
 {
-    if (taskRunner.isFinished())
+    if (taskRunner.done())
     {
         break;
     }
@@ -593,12 +583,6 @@ private:
     {
         // 必要に応じて、フェードアウト処理をコルーチンで記述(updateの完了後に実行される)
         co_await Co::ScreenFadeOut(1s, Palette::Black);
-    }
-
-    Co::Task<> preStart() override
-    {
-        // 必要に応じて、fadeIn・startより前に実行すべき処理(ローディングなど)があればコルーチンで記述
-        co_return;
     }
 };
 ```

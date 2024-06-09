@@ -1137,6 +1137,171 @@ TEST_CASE("Co::Any with non-copyable result")
 	REQUIRE(runner.done() == true);
 }
 
+TEST_CASE("UpdaterTask without TaskFinishSource argument")
+{
+	int32 count = 0;
+	auto task = Co::UpdaterTask([&] { ++count; });
+
+	// タスク生成時点ではまだ実行されない
+	REQUIRE(count == 0);
+
+	// runScopedで開始すると最初のsuspendまで実行される
+	const auto runner = std::move(task).runScoped();
+	REQUIRE(count == 1);
+	REQUIRE(runner.done() == false);
+	
+	System::Update();
+	REQUIRE(count == 2);
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+	REQUIRE(count == 3);
+	REQUIRE(runner.done() == false);
+}
+
+TEST_CASE("UpdaterTask with TaskFinishSource argument")
+{
+	int32 count = 0;
+	auto task = Co::UpdaterTask<void>(
+		[&](Co::TaskFinishSource<void>& taskFinishSource)
+		{
+			if (count == 3)
+			{
+				taskFinishSource.requestFinish();
+				return;
+			}
+			++count;
+		});
+
+	// タスク生成時点ではまだ実行されない
+	REQUIRE(count == 0);
+
+	// runScopedで開始すると最初のsuspendまで実行される
+	const auto runner = std::move(task).runScoped();
+	REQUIRE(count == 1);
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+	REQUIRE(count == 2);
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+	REQUIRE(count == 3);
+	REQUIRE(runner.done() == false);
+
+	// requestFinishが呼ばれたら完了する
+	System::Update();
+	REQUIRE(count == 3);
+	REQUIRE(runner.done() == true);
+}
+
+TEST_CASE("UpdaterTask with TaskFinishSource argument that has result")
+{
+	int32 count = 0;
+	auto task = Co::UpdaterTask<int32>(
+		[&](Co::TaskFinishSource<int32>& taskFinishSource)
+		{
+			if (count == 3)
+			{
+				taskFinishSource.requestFinish(42);
+				return;
+			}
+			++count;
+		});
+
+	// タスク生成時点ではまだ実行されない
+	REQUIRE(count == 0);
+
+	int32 result = 0;
+
+	// runScopedで開始すると最初のsuspendまで実行される
+	const auto runner = std::move(task).runScoped([&](int32 r) { result = r; });
+	REQUIRE(count == 1);
+	REQUIRE(runner.done() == false);
+	REQUIRE(result == 0);
+
+	System::Update();
+	REQUIRE(count == 2);
+	REQUIRE(runner.done() == false);
+	REQUIRE(result == 0);
+
+	System::Update();
+	REQUIRE(count == 3);
+	REQUIRE(runner.done() == false);
+	REQUIRE(result == 0);
+
+	// requestFinishが呼ばれたら完了する
+	System::Update();
+	REQUIRE(count == 3);
+	REQUIRE(runner.done() == true);
+	REQUIRE(result == 42);
+}
+
+TEST_CASE("UpdaterTask with TaskFinishSource argument that has immediate result")
+{
+	int32 count = 0;
+	auto task = Co::UpdaterTask<int32>(
+		[&](Co::TaskFinishSource<int32>& taskFinishSource)
+		{
+			++count;
+			taskFinishSource.requestFinish(42);
+		});
+
+	// タスク生成時点ではまだ実行されない
+	REQUIRE(count == 0);
+
+	int32 result = 0;
+
+	// runScopedで開始すると最初のsuspendまで実行されて即座に完了する
+	const auto runner = std::move(task).runScoped([&](int32 r) { result = r; });
+	REQUIRE(count == 1);
+	REQUIRE(runner.done() == true);
+	REQUIRE(result == 42);
+}
+
+TEST_CASE("UpdaterTask with TaskFinishSource argument that has move-only result")
+{
+	int32 count = 0;
+	auto task = Co::UpdaterTask<std::unique_ptr<int32>>(
+		[&](Co::TaskFinishSource<std::unique_ptr<int32>>& taskFinishSource)
+		{
+			if (count == 3)
+			{
+				taskFinishSource.requestFinish(std::make_unique<int32>(42));
+				return;
+			}
+			++count;
+		});
+
+	// タスク生成時点ではまだ実行されない
+	REQUIRE(count == 0);
+
+	std::unique_ptr<int32> result;
+
+	// runScopedで開始すると最初のsuspendまで実行される
+	const auto runner = std::move(task).runScoped([&](std::unique_ptr<int32> r) { result = std::move(r); });
+	REQUIRE(count == 1);
+	REQUIRE(runner.done() == false);
+	REQUIRE(result == nullptr);
+
+	System::Update();
+	REQUIRE(count == 2);
+	REQUIRE(runner.done() == false);
+	REQUIRE(result == nullptr);
+
+	System::Update();
+	REQUIRE(count == 3);
+	REQUIRE(runner.done() == false);
+	REQUIRE(result == nullptr);
+
+	// requestFinishが呼ばれたら完了する
+	System::Update();
+	REQUIRE(count == 3);
+	REQUIRE(runner.done() == true);
+	REQUIRE(result != nullptr);
+	REQUIRE(*result == 42);
+}
+
 struct SequenceProgress
 {
 	bool isPreStartStarted = false;

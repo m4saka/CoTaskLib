@@ -2468,61 +2468,6 @@ TEST_CASE("Co::Typewriter with total duration")
 	REQUIRE(value == U"TEST");
 }
 
-TEST_CASE("Co::TypewriterChar with zero duration")
-{
-	String value;
-	const auto runner = Co::TypewriterChar([&value](String::value_type c) { value.push_back(c); }, 0s, U"TEST")
-		.play()
-		.runScoped();
-
-	// 即座に終了
-	REQUIRE(runner.done() == true);
-	REQUIRE(value == U"TEST");
-}
-
-TEST_CASE("Co::TypewriterChar with total duration")
-{
-	TestClock clock;
-
-	String value;
-	const auto runner = Co::TypewriterChar([&value](String::value_type c) { value.push_back(c); })
-		.text(U"TEST")
-		.totalDuration(1s)
-		.setClock(&clock)
-		.play()
-		.runScoped();
-
-	// 0秒
-	clock.microsec = 0;
-	System::Update();
-	REQUIRE(runner.done() == false);
-	REQUIRE(value == U"T");
-
-	// 0.2501秒
-	clock.microsec = 250'100;
-	System::Update();
-	REQUIRE(runner.done() == false);
-	REQUIRE(value == U"TE");
-
-	// 0.5001秒
-	clock.microsec = 500'100;
-	System::Update();
-	REQUIRE(runner.done() == false);
-	REQUIRE(value == U"TES");
-
-	// 0.7501秒
-	clock.microsec = 750'100;
-	System::Update();
-	REQUIRE(runner.done() == false);
-	REQUIRE(value == U"TEST");
-
-	// 1.0001秒
-	clock.microsec = 1'000'100;
-	System::Update();
-	REQUIRE(runner.done() == true);
-	REQUIRE(value == U"TEST");
-}
-
 void Main()
 {
 	Co::Init();

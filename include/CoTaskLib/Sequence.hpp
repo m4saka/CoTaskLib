@@ -41,7 +41,7 @@ inline namespace cotasklib
 		class [[nodiscard]] SequenceBase
 		{
 			static_assert(!std::is_reference_v<TResult>, "TResult must not be a reference type");
-			static_assert(std::is_copy_constructible_v<TResult> || std::is_void_v<TResult>, "TResult must be copy constructible");
+			static_assert(std::is_move_constructible_v<TResult> || std::is_void_v<TResult>, "TResult must be move constructible");
 			static_assert(!std::is_const_v<TResult>, "TResult must not have 'const' qualifier");
 
 		public:

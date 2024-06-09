@@ -174,19 +174,19 @@ inline namespace cotasklib
 			}
 
 			template <class TScene, typename... Args>
-			void requestNextScene(Args&&... args)
+			bool requestNextScene(Args&&... args)
 			{
-				m_taskFinishSource.requestFinish(MakeSceneFactory<TScene>(std::forward<Args>(args)...));
+				return m_taskFinishSource.requestFinish(MakeSceneFactory<TScene>(std::forward<Args>(args)...));
 			}
 
-			void requestNextScene(SceneFactory sceneFactory)
+			bool requestNextScene(SceneFactory sceneFactory)
 			{
-				m_taskFinishSource.requestFinish(std::move(sceneFactory));
+				return m_taskFinishSource.requestFinish(std::move(sceneFactory));
 			}
 
-			void requestSceneFinish()
+			bool requestSceneFinish()
 			{
-				m_taskFinishSource.requestFinish(nullptr);
+				return m_taskFinishSource.requestFinish(nullptr);
 			}
 
 			[[nodiscard]]

@@ -47,7 +47,7 @@ inline namespace cotasklib
 
 				virtual void resume() = 0;
 
-				virtual bool isFinished() const = 0;
+				virtual bool done() const = 0;
 			};
 
 			struct AwaiterEntry
@@ -58,7 +58,7 @@ inline namespace cotasklib
 
 				void callEndCallback() const
 				{
-					if (awaiter->isFinished())
+					if (awaiter->done())
 					{
 						if (finishCallback)
 						{
@@ -346,15 +346,26 @@ inline namespace cotasklib
 
 				void update()
 				{
+					std::exception_ptr exceptionPtr;
 					for (auto it = m_awaiterEntries.begin(); it != m_awaiterEntries.end();)
 					{
 						m_currentAwaiterID = it->first;
 
 						const auto& entry = it->second;
 						entry.awaiter->resume();
-						if (m_currentAwaiterRemovalNeeded || entry.awaiter->isFinished())
+						if (m_currentAwaiterRemovalNeeded || entry.awaiter->done())
 						{
-							entry.callEndCallback();
+							try
+							{
+								entry.callEndCallback();
+							}
+							catch (...)
+							{
+								if (!exceptionPtr)
+								{
+									exceptionPtr = std::current_exception();
+								}
+							}
 							it = m_awaiterEntries.erase(it);
 							m_currentAwaiterRemovalNeeded = false;
 						}
@@ -364,6 +375,10 @@ inline namespace cotasklib
 						}
 					}
 					m_currentAwaiterID.reset();
+					if (exceptionPtr)
+					{
+						std::rethrow_exception(exceptionPtr);
+					}
 				}
 
 				void draw()
@@ -390,22 +405,43 @@ inline namespace cotasklib
 						throw Error{ U"Backend is not initialized" };
 					}
 					const AwaiterID id = s_pInstance->m_nextAwaiterID++;
-					std::function<void(const IAwaiter*)> finishCallbackTypeErased = nullptr;
-					if (finishCallback)
-					{
-						finishCallbackTypeErased = [finishCallback = std::move(finishCallback)]([[maybe_unused]] const IAwaiter* awaiter)
+					std::function<void(const IAwaiter*)> finishCallbackTypeErased =
+						[finishCallback = std::move(finishCallback), cancelCallback/*コピーキャプチャ*/, id](const IAwaiter* awaiter)
+						{
+							auto fnGetResult = [awaiter, cancelCallback, id]() -> TResult
+								{
+									try
+									{
+										// awaiterの型がTaskAwaiter<TResult>であることは保証されるため、static_castでキャストして問題ない
+										return static_cast<const TaskAwaiter<TResult>*>(awaiter)->value();
+									}
+									catch (...)
+									{
+										// 例外を捕捉した場合はキャンセル扱いにした上で例外を投げ直す
+										if (cancelCallback)
+										{
+											cancelCallback();
+										}
+										throw;
+									}
+								};
+							if constexpr (std::is_void_v<TResult>)
 							{
-								if constexpr (std::is_void_v<TResult>)
+								fnGetResult(); // 例外伝搬のためにvoidでも呼び出す
+								if (finishCallback)
 								{
 									finishCallback();
 								}
-								else
+							}
+							else
+							{
+								auto result = fnGetResult();
+								if (finishCallback)
 								{
-									// awaiterの型がTaskAwaiter<TResult>であることは保証されるため、static_castでキャストして問題ない
-									finishCallback(static_cast<const TaskAwaiter<TResult>*>(awaiter)->value());
+									finishCallback(std::move(result));
 								}
-							};
-					}
+							}
+						};
 					s_pInstance->m_awaiterEntries.emplace(id,
 						AwaiterEntry
 						{
@@ -439,7 +475,7 @@ inline namespace cotasklib
 				}
 
 				[[nodiscard]]
-				static bool IsFinished(AwaiterID id)
+				static bool IsDone(AwaiterID id)
 				{
 					if (!s_pInstance)
 					{
@@ -448,9 +484,18 @@ inline namespace cotasklib
 					const auto it = s_pInstance->m_awaiterEntries.find(id);
 					if (it != s_pInstance->m_awaiterEntries.end())
 					{
-						return it->second.awaiter->isFinished();
+						return it->second.awaiter->done();
 					}
 					return id < s_pInstance->m_nextAwaiterID;
+				}
+
+				static void ManualUpdate()
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+					s_pInstance->update();
 				}
 
 				[[nodiscard]]
@@ -560,9 +605,9 @@ inline namespace cotasklib
 				}
 
 				[[nodiscard]]
-				bool isFinished() const
+				bool done() const
 				{
-					return !m_id.has_value() || Backend::IsFinished(*m_id);
+					return !m_id.has_value() || Backend::IsDone(*m_id);
 				}
 
 				void forget()
@@ -577,28 +622,59 @@ inline namespace cotasklib
 			{
 				const auto fnCallFinishCallback = [&]
 					{
-						if (finishCallback)
+						if constexpr (std::is_void_v<TResult>)
 						{
-							if constexpr (std::is_void_v<TResult>)
+							try
+							{
+								awaiter.value(); // 例外伝搬のためにvoidでも呼び出す
+							}
+							catch (...)
+							{
+								if (cancelCallback)
+								{
+									cancelCallback();
+								}
+								throw;
+							}
+
+							if (finishCallback)
 							{
 								finishCallback();
 							}
-							else
+						}
+						else
+						{
+							auto result = [&]() -> TResult
+								{
+									try
+									{
+										return awaiter.value();
+									}
+									catch (...)
+									{
+										if (cancelCallback)
+										{
+											cancelCallback();
+										}
+										throw;
+									}
+								}();
+							if (finishCallback)
 							{
-								finishCallback(awaiter.value());
+								finishCallback(std::move(result));
 							}
 						}
 					};
 
 				// フレーム待ちなしで終了した場合は登録不要
 				// (ここで一度resumeするのは、runScoped実行まで開始を遅延させるためにinitial_suspendをsuspend_alwaysにしているため)
-				if (awaiter.isFinished())
+				if (awaiter.done())
 				{
 					fnCallFinishCallback();
 					return none;
 				}
 				awaiter.resume();
-				if (awaiter.isFinished())
+				if (awaiter.done())
 				{
 					fnCallFinishCallback();
 					return none;
@@ -684,9 +760,9 @@ inline namespace cotasklib
 			~ScopedTaskRunner() = default;
 
 			[[nodiscard]]
-			bool isFinished() const
+			bool done() const
 			{
-				return m_lifetime.isFinished();
+				return m_lifetime.done();
 			}
 
 			void forget()
@@ -876,7 +952,6 @@ inline namespace cotasklib
 					}
 
 					m_handle.resume();
-					m_handle.promise().rethrowIfException();
 				}
 			};
 		}
@@ -899,14 +974,14 @@ inline namespace cotasklib
 			virtual void resume() = 0;
 
 			[[nodiscard]]
-			virtual bool isFinished() const = 0;
+			virtual bool done() const = 0;
 		};
 
 		template <typename TResult = void>
 		class [[nodiscard]] Task : public ITask
 		{
 			static_assert(!std::is_reference_v<TResult>, "TResult must not be a reference type");
-			static_assert(std::is_copy_constructible_v<TResult> || std::is_void_v<TResult>, "TResult must be copy constructible");
+			static_assert(std::is_move_constructible_v<TResult> || std::is_void_v<TResult>, "TResult must be move constructible");
 			static_assert(!std::is_const_v<TResult>, "TResult must not have 'const' qualifier");
 
 		private:
@@ -954,7 +1029,7 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			bool isFinished() const override
+			bool done() const override
 			{
 				return m_handle.done();
 			}
@@ -1012,7 +1087,7 @@ inline namespace cotasklib
 			class [[nodiscard]] TaskAwaiter : public detail::IAwaiter
 			{
 				static_assert(!std::is_reference_v<TResult>, "TResult must not be a reference type");
-				static_assert(std::is_copy_constructible_v<TResult> || std::is_void_v<TResult>, "TResult must be copy constructible");
+				static_assert(std::is_move_constructible_v<TResult> || std::is_void_v<TResult>, "TResult must be move constructible");
 				static_assert(!std::is_const_v<TResult>, "TResult must not have 'const' qualifier");
 
 			private:
@@ -1038,22 +1113,22 @@ inline namespace cotasklib
 				}
 
 				[[nodiscard]]
-				bool isFinished() const override
+				bool done() const override
 				{
-					return m_task.isFinished();
+					return m_task.done();
 				}
 
 				[[nodiscard]]
 				bool await_ready()
 				{
-					return m_task.isFinished();
+					return m_task.done();
 				}
 
 				template <typename TResultOther>
 				bool await_suspend(std::coroutine_handle<detail::Promise<TResultOther>> handle)
 				{
 					resume();
-					if (m_task.isFinished())
+					if (m_task.done())
 					{
 						// フレーム待ちなしで終了した場合は登録不要
 						return false;
@@ -1078,8 +1153,6 @@ inline namespace cotasklib
 			{
 			protected:
 				IAwaiter* m_pSubAwaiter = nullptr;
-
-				std::exception_ptr m_exception;
 
 			public:
 				virtual ~PromiseBase() = 0;
@@ -1109,19 +1182,6 @@ inline namespace cotasklib
 					return std::suspend_always{};
 				}
 
-				void unhandled_exception()
-				{
-					m_exception = std::current_exception();
-				}
-
-				void rethrowIfException() const
-				{
-					if (m_exception)
-					{
-						std::rethrow_exception(m_exception);
-					}
-				}
-
 				[[nodiscard]]
 				bool resumeSubAwaiter()
 				{
@@ -1132,7 +1192,7 @@ inline namespace cotasklib
 
 					m_pSubAwaiter->resume();
 
-					if (m_pSubAwaiter->isFinished())
+					if (m_pSubAwaiter->done())
 					{
 						m_pSubAwaiter = nullptr;
 						return false;
@@ -1153,11 +1213,13 @@ inline namespace cotasklib
 			class Promise : public PromiseBase
 			{
 				static_assert(!std::is_reference_v<TResult>, "TResult must not be a reference type");
-				static_assert(std::is_copy_constructible_v<TResult> || std::is_void_v<TResult>, "TResult must be copy constructible");
+				static_assert(std::is_move_constructible_v<TResult> || std::is_void_v<TResult>, "TResult must be move constructible");
 				static_assert(!std::is_const_v<TResult>, "TResult must not have 'const' qualifier");
 
 			private:
-				Optional<TResult> m_value;
+				std::promise<TResult> m_value;
+				bool m_isResultSet = false;
+				bool m_resultConsumed = false;
 
 			public:
 				Promise() = default;
@@ -1168,23 +1230,29 @@ inline namespace cotasklib
 
 				void return_value(const TResult& v)
 				{
-					m_value = v;
+					m_value.set_value(v);
+					m_isResultSet = true;
 				}
 
 				void return_value(TResult&& v)
 				{
-					m_value = std::move(v);
+					m_value.set_value(std::move(v));
+					m_isResultSet = true;
 				}
 
 				[[nodiscard]]
-				TResult value() const
+				TResult value()
 				{
-					rethrowIfException();
-					if (!m_value)
+					if (!m_isResultSet)
 					{
 						throw Error{ U"Task is not completed. Make sure that all paths in the coroutine return a value." };
 					}
-					return m_value.value();
+					if (m_resultConsumed)
+					{
+						throw Error{ U"Task result can be get only once." };
+					}
+					m_resultConsumed = true;
+					return m_value.get_future().get();
 				}
 
 				[[nodiscard]]
@@ -1192,11 +1260,22 @@ inline namespace cotasklib
 				{
 					return Task<TResult>{ Task<TResult>::handle_type::from_promise(*this) };
 				}
+
+				void unhandled_exception()
+				{
+					m_value.set_exception(std::current_exception());
+					m_isResultSet = true;
+				}
 			};
 
 			template <>
 			class Promise<void> : public PromiseBase
 			{
+			private:
+				std::promise<void> m_value;
+				bool m_isResultSet = false;
+				bool m_resultConsumed = false;
+
 			public:
 				Promise() = default;
 
@@ -1204,13 +1283,24 @@ inline namespace cotasklib
 
 				Promise<void>& operator=(Promise<void>&&) = default;
 
-				void return_void() const
+				void return_void()
 				{
+					m_value.set_value();
+					m_isResultSet = true;
 				}
 
-				void value() const
+				void value()
 				{
-					rethrowIfException();
+					if (!m_isResultSet)
+					{
+						throw Error{ U"Task is not completed." };
+					}
+					if (m_resultConsumed)
+					{
+						throw Error{ U"Task result can be get only once." };
+					}
+					m_resultConsumed = true;
+					m_value.get_future().get();
 				}
 
 				[[nodiscard]]
@@ -1218,29 +1308,26 @@ inline namespace cotasklib
 				{
 					return Task<void>{ Task<void>::handle_type::from_promise(*this) };
 				}
+
+				void unhandled_exception()
+				{
+					m_value.set_exception(std::current_exception());
+					m_isResultSet = true;
+				}
 			};
-		}
-
-		// voidの参照やvoidを含むタプルは使用できないため、voidの代わりに戻り値として返すための空の構造体を用意
-		struct VoidResult
-		{
-		};
-
-		namespace detail
-		{
-			template <typename TResult>
-			using VoidResultTypeReplace = std::conditional_t<std::is_void_v<TResult>, VoidResult, TResult>;
 		}
 
 		template <typename TResult = void>
 		class [[nodiscard]] TaskFinishSource
 		{
 			static_assert(!std::is_reference_v<TResult>, "TResult must not be a reference type");
-			static_assert(std::is_copy_constructible_v<TResult> || std::is_void_v<TResult>, "TResult must be copy constructible");
+			static_assert(std::is_move_constructible_v<TResult> || std::is_void_v<TResult>, "TResult must be move constructible");
 			static_assert(!std::is_const_v<TResult>, "TResult must not have 'const' qualifier");
 
 		private:
-			Optional<TResult> m_result;
+			std::promise<TResult> m_promise;
+			bool m_isFinishRequested = false;
+			bool m_resultConsumed = false;
 
 		public:
 			TaskFinishSource() = default;
@@ -1255,59 +1342,73 @@ inline namespace cotasklib
 
 			~TaskFinishSource() = default;
 
-			bool requestFinish(const TResult& result)
+			bool requestFinish(const TResult& result) requires std::is_copy_constructible_v<TResult>
 			{
-				if (m_result.has_value())
+				if (m_resultConsumed || hasResult())
 				{
 					return false;
 				}
-				m_result = result;
+				m_promise.set_value(result);
+				m_isFinishRequested = true;
 				return true;
 			}
 
 			bool requestFinish(TResult&& result)
 			{
-				if (m_result.has_value())
+				if (m_resultConsumed || hasResult())
 				{
 					return false;
 				}
-				m_result = std::move(result);
+				m_promise.set_value(std::move(result));
+				m_isFinishRequested = true;
 				return true;
-			}
-
-			[[nodiscard]]
-			Task<TResult> waitForFinish() const
-			{
-				while (!m_result.has_value())
-				{
-					co_await detail::Yield{};
-				}
-
-				co_return *m_result;
-			}
-
-			[[nodiscard]]
-			bool isFinishRequested() const
-			{
-				return m_result.has_value();
 			}
 
 			[[nodiscard]]
 			bool hasResult() const
 			{
-				return m_result.has_value();
+				return m_isFinishRequested && !m_resultConsumed;
+			}
+
+			// hasResult()がtrueを返す場合のみ呼び出し可能。1回だけ取得でき、2回目以降の呼び出しは例外を投げる
+			[[nodiscard]]
+			TResult result()
+			{
+				if (m_resultConsumed)
+				{
+					throw Error{ U"TaskFinishSource: result can be get only once. Make sure to check if hasResult() returns true before calling result()." };
+				}
+				if (!m_isFinishRequested)
+				{
+					throw Error{ U"TaskFinishSource: TaskFinishSource does not have a result. Make sure to check if hasResult() returns true before calling result()." };
+				}
+				m_resultConsumed = true;
+				return m_promise.get_future().get();
 			}
 
 			[[nodiscard]]
-			const TResult& result() const
+			Task<TResult> waitForResult()
 			{
-				return *m_result;
+				while (!hasResult())
+				{
+					co_await detail::Yield{};
+				}
+				co_return m_promise.get_future().get();
 			}
 
 			[[nodiscard]]
-			const Optional<TResult>& resultOpt() const
+			Task<void> waitForFinish() const
 			{
-				return m_result;
+				while (!m_isFinishRequested)
+				{
+					co_await detail::Yield{};
+				}
+			}
+
+			[[nodiscard]]
+			bool isFinishRequested() const
+			{
+				return m_isFinishRequested;
 			}
 		};
 
@@ -1315,7 +1416,7 @@ inline namespace cotasklib
 		class [[nodiscard]] TaskFinishSource<void>
 		{
 		private:
-			Optional<VoidResult> m_result;
+			bool m_finishRequested = false;
 
 		public:
 			TaskFinishSource() = default;
@@ -1330,20 +1431,15 @@ inline namespace cotasklib
 
 			~TaskFinishSource() = default;
 
-			bool requestFinish()
+			void requestFinish()
 			{
-				if (m_result.has_value())
-				{
-					return false;
-				}
-				m_result = VoidResult{};
-				return true;
+				m_finishRequested = true;
 			}
 
 			[[nodiscard]]
 			Task<void> waitForFinish() const
 			{
-				while (!m_result.has_value())
+				while (!isFinishRequested())
 				{
 					co_await detail::Yield{};
 				}
@@ -1352,25 +1448,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			bool isFinishRequested() const
 			{
-				return m_result.has_value();
-			}
-
-			[[nodiscard]]
-			bool hasResult() const
-			{
-				return m_result.has_value();
-			}
-
-			[[nodiscard]]
-			const VoidResult& result() const
-			{
-				return *m_result;
-			}
-
-			[[nodiscard]]
-			const Optional<VoidResult>& resultOpt() const
-			{
-				return m_result;
+				return m_finishRequested;
 			}
 		};
 
@@ -1688,14 +1766,23 @@ inline namespace cotasklib
 			}
 		}
 
+		// voidの参照やvoidを含むタプルは使用できないため、voidの代わりに戻り値として返すための空の構造体を用意
+		struct VoidResult
+		{
+		};
+
 		namespace detail
 		{
+			template <typename TResult>
+			using VoidResultTypeReplace = std::conditional_t<std::is_void_v<TResult>, VoidResult, TResult>;
+
 			template <typename TResult>
 			[[nodiscard]]
 			auto ConvertVoidResult(const Task<TResult>& task) -> VoidResultTypeReplace<TResult>
 			{
 				if constexpr (std::is_void_v<TResult>)
 				{
+					task.value(); // 例外伝搬のためにvoidでも呼び出す
 					return VoidResult{};
 				}
 				else
@@ -1708,13 +1795,14 @@ inline namespace cotasklib
 			[[nodiscard]]
 			auto ConvertOptionalVoidResult(const Task<TResult>& task) -> Optional<VoidResultTypeReplace<TResult>>
 			{
-				if (!task.isFinished())
+				if (!task.done())
 				{
 					return none;
 				}
 
 				if constexpr (std::is_void_v<TResult>)
 				{
+					task.value(); // 例外伝搬のためにvoidでも呼び出す
 					return MakeOptional(VoidResult{});
 				}
 				else
@@ -1733,7 +1821,7 @@ inline namespace cotasklib
 		template <detail::TaskConcept... TTasks>
 		auto All(TTasks... args) -> Task<std::tuple<detail::VoidResultTypeReplace<typename TTasks::result_type>...>>
 		{
-			if ((args.isFinished() && ...))
+			if ((args.done() && ...))
 			{
 				co_return std::make_tuple(detail::ConvertVoidResult(args)...);
 			}
@@ -1741,7 +1829,7 @@ inline namespace cotasklib
 			while (true)
 			{
 				(args.resume(), ...);
-				if ((args.isFinished() && ...))
+				if ((args.done() && ...))
 				{
 					co_return std::make_tuple(detail::ConvertVoidResult(args)...);
 				}
@@ -1752,7 +1840,11 @@ inline namespace cotasklib
 		template <detail::TaskConcept... TTasks>
 		auto Any(TTasks... args) -> Task<std::tuple<Optional<detail::VoidResultTypeReplace<typename TTasks::result_type>>...>>
 		{
-			if ((args.isFinished() || ...))
+			static_assert(
+				((std::is_copy_constructible_v<typename TTasks::result_type> || std::is_void_v<typename TTasks::result_type>) && ...),
+				"Any does not support non-copyable types");
+
+			if ((args.done() || ...))
 			{
 				co_return std::make_tuple(detail::ConvertOptionalVoidResult(args)...);
 			}
@@ -1760,7 +1852,7 @@ inline namespace cotasklib
 			while (true)
 			{
 				(args.resume(), ...);
-				if ((args.isFinished() || ...))
+				if ((args.done() || ...))
 				{
 					co_return std::make_tuple(detail::ConvertOptionalVoidResult(args)...);
 				}

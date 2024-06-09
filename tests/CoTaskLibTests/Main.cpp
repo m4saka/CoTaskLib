@@ -1830,6 +1830,36 @@ TEST_CASE("requestNextScene")
 	REQUIRE(progress2.isPostFadeOutFinished == true);
 }
 
+class TestUpdaterScene : public Co::UpdaterSceneBase
+{
+private:
+	int m_count = 0;
+
+	void update() override
+	{
+		if (m_count == 3)
+		{
+			requestSceneFinish();
+		}
+		++m_count;
+	}
+};
+
+TEST_CASE("UpdaterScene")
+{
+	const auto runner = Co::EnterScene<TestUpdaterScene>().runScoped();
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+	REQUIRE(runner.done() == true);
+}
+
 TEST_CASE("Co::Ease")
 {
 	TestClock clock;

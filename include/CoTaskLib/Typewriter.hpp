@@ -225,6 +225,12 @@ inline namespace cotasklib
 		}
 
 		[[nodiscard]]
+		inline TypewriterCharTaskBuilder TypewriterChar(String::value_type* pChar, Duration oneLetterDuration = 0s, StringView text = U"", ISteadyClock* pSteadyClock = nullptr)
+		{
+			return TypewriterCharTaskBuilder([pChar](String::value_type c) { *pChar = c; }, oneLetterDuration, text, pSteadyClock);
+		}
+
+		[[nodiscard]]
 		inline TypewriterCharTaskBuilder TypewriterChar(std::function<void(String::value_type)> callback, Duration oneLetterDuration = 0s, StringView text = U"", ISteadyClock* pSteadyClock = nullptr)
 		{
 			return TypewriterCharTaskBuilder(std::move(callback), oneLetterDuration, text, pSteadyClock);

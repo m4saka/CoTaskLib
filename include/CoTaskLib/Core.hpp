@@ -687,6 +687,12 @@ inline namespace cotasklib
 			Optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(const TaskAwaiter<TResult>& awaiter) = delete;
 		}
 
+		[[nodiscard]]
+		inline auto NextFrame()
+		{
+			return std::suspend_always{};
+		}
+
 		class MultiScoped;
 
 		class IScoped
@@ -862,22 +868,6 @@ inline namespace cotasklib
 
 		namespace detail
 		{
-			struct Yield
-			{
-				bool await_ready() const
-				{
-					return false;
-				}
-
-				void await_suspend(std::coroutine_handle<>) const
-				{
-				}
-
-				void await_resume() const
-				{
-				}
-			};
-
 			template <typename TResult>
 			class Promise;
 
@@ -1404,7 +1394,7 @@ inline namespace cotasklib
 			{
 				while (!hasResult())
 				{
-					co_await detail::Yield{};
+					co_await NextFrame();
 				}
 				m_resultConsumed = true;
 				co_return m_promise.get_future().get();
@@ -1415,7 +1405,7 @@ inline namespace cotasklib
 			{
 				while (!m_isFinishRequested)
 				{
-					co_await detail::Yield{};
+					co_await NextFrame();
 				}
 			}
 
@@ -1460,7 +1450,7 @@ inline namespace cotasklib
 			{
 				while (!isFinishRequested())
 				{
-					co_await detail::Yield{};
+					co_await NextFrame();
 				}
 			}
 
@@ -1477,7 +1467,7 @@ inline namespace cotasklib
 			while (true)
 			{
 				updateFunc();
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1494,7 +1484,7 @@ inline namespace cotasklib
 				{
 					co_return taskFinishSource.result();
 				}
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1511,7 +1501,7 @@ inline namespace cotasklib
 				{
 					co_return;
 				}
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1595,17 +1585,11 @@ inline namespace cotasklib
 		}
 
 		[[nodiscard]]
-		inline Task<void> DelayFrame()
-		{
-			co_await detail::Yield{};
-		}
-
-		[[nodiscard]]
 		inline Task<void> DelayFrame(int32 frames)
 		{
 			for (int32 i = 0; i < frames; ++i)
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1615,7 +1599,7 @@ inline namespace cotasklib
 			const Timer timer{ duration, StartImmediately::Yes, pSteadyClock };
 			while (!timer.reachedZero())
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1624,7 +1608,7 @@ inline namespace cotasklib
 		{
 			while (true)
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1633,7 +1617,7 @@ inline namespace cotasklib
 		{
 			while (!predicate())
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1643,7 +1627,7 @@ inline namespace cotasklib
 		{
 			while (!pOptional->has_value())
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 			co_return **pOptional;
 		}
@@ -1654,7 +1638,7 @@ inline namespace cotasklib
 		{
 			while (!pOptional->has_value())
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 			co_return **pOptional;
 		}
@@ -1665,7 +1649,7 @@ inline namespace cotasklib
 		{
 			while (!pOptional->has_value())
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1675,7 +1659,7 @@ inline namespace cotasklib
 		{
 			while (!pOptional->has_value())
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1686,7 +1670,7 @@ inline namespace cotasklib
 			const T initialValue = *pValue;
 			while (*pValue == initialValue)
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1695,7 +1679,7 @@ inline namespace cotasklib
 		{
 			while (!pTimer->reachedZero())
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1705,7 +1689,7 @@ inline namespace cotasklib
 		{
 			while (!input.down())
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1715,7 +1699,7 @@ inline namespace cotasklib
 		{
 			while (!input.up())
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1725,7 +1709,7 @@ inline namespace cotasklib
 		{
 			while (!area.leftClicked())
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1735,7 +1719,7 @@ inline namespace cotasklib
 		{
 			while (!area.leftReleased())
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1753,7 +1737,7 @@ inline namespace cotasklib
 						break;
 					}
 				}
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1763,7 +1747,7 @@ inline namespace cotasklib
 		{
 			while (!area.rightClicked())
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1773,7 +1757,7 @@ inline namespace cotasklib
 		{
 			while (!area.rightReleased())
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1791,7 +1775,7 @@ inline namespace cotasklib
 						break;
 					}
 				}
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1801,7 +1785,7 @@ inline namespace cotasklib
 		{
 			while (!area.mouseOver())
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1810,7 +1794,7 @@ inline namespace cotasklib
 		{
 			while (predicate())
 			{
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1881,7 +1865,7 @@ inline namespace cotasklib
 				{
 					co_return std::make_tuple(detail::ConvertVoidResult(args)...);
 				}
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 
@@ -1904,7 +1888,7 @@ inline namespace cotasklib
 				{
 					co_return std::make_tuple(detail::ConvertOptionalVoidResult(args)...);
 				}
-				co_await detail::Yield{};
+				co_await NextFrame();
 			}
 		}
 	}

@@ -86,8 +86,8 @@ co_await ExampleTask();
 Co::Task<> ExampleTask()
 {
     // Task1とTask2を同時に実行開始し、10秒間経ったらタスクの完了を待たずに終了
-    const auto anotherTask1Runner = Task1().runScoped();
-    const auto anotherTask2Runner = Task2().runScoped();
+    const auto taskRunner1 = Task1().runScoped();
+    const auto taskRunner2 = Task2().runScoped();
 
     co_await Co::Delay(10s);
 }
@@ -757,8 +757,11 @@ private:
 - `Co::Init()`
     - CoTaskLibライブラリを初期化します。
     - ライブラリの機能を使用する前に、必ず一度だけ実行してください。
-- `Co::DelayFrame()` -> `Co::Task<>`
-    - 1フレーム待機します。
+- `Co::NextFrame()` -> `std::suspend_always`
+    - `co_await`に渡すことで、1フレーム待機できます。
+    - 型が`Co::Task<>`ではないため、`runScoped`等のメンバ関数が使用できない点に注意してください。
+        - `runScoped`等のメンバ関数を使用したい場合、代わりに`Co::DelayFrame(1)`を使用してください。
+        - `Co::NextFrame()`は新たなタスクを発行しないため、`Co::DelayFrame(1)`よりも軽量に使用できます。
 - `Co::DelayFrame(int32 frames)` -> `Co::Task<>`
     - 指定されたフレーム数だけ待機します。
 - `Co::Delay(Duration)` -> `Co::Task<>`
@@ -906,7 +909,7 @@ Co::Task<String> ShowQuestion(const String question) // 注意: コルーチン�
             co_return textEditState.text;
         }
 
-        co_await Co::DelayFrame();
+        co_await Co::NextFrame();
     }
 }
 

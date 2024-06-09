@@ -6,7 +6,7 @@
 Co::Task<void> DelayFrameTest(int32* pValue)
 {
 	*pValue = 1;
-	co_await Co::DelayFrame();
+	co_await Co::NextFrame();
 	*pValue = 2;
 	co_await Co::DelayFrame(3);
 	*pValue = 3;
@@ -25,7 +25,7 @@ TEST_CASE("DelayFrame")
 	REQUIRE(runner.done() == false);
 
 	System::Update();
-	REQUIRE(value == 2); // DelayFrame()の後が実行される
+	REQUIRE(value == 2); // DelayFrame(1)の後が実行される
 	REQUIRE(runner.done() == false);
 
 	System::Update();
@@ -198,7 +198,7 @@ TEST_CASE("co_return")
 
 Co::Task<int32> CoReturnWithDelayTest()
 {
-	co_await Co::DelayFrame();
+	co_await Co::NextFrame();
 	co_return 42;
 }
 
@@ -219,7 +219,7 @@ TEST_CASE("co_return with delay")
 	REQUIRE(value == 1); // runScopedにより実行が開始される
 
 	System::Update();
-	REQUIRE(value == 42); // DelayFrame()の後が実行され、co_awaitで受け取った値が返る
+	REQUIRE(value == 42); // DelayFrame(1)の後が実行され、co_awaitで受け取った値が返る
 
 	System::Update();
 	REQUIRE(value == 42); // すでに完了しているので何も起こらない
@@ -249,7 +249,7 @@ TEST_CASE("co_return with move-only type")
 
 Co::Task<std::unique_ptr<int32>> CoReturnWithMoveOnlyTypeAndDelayTest()
 {
-	co_await Co::DelayFrame();
+	co_await Co::NextFrame();
 	co_return std::make_unique<int32>(42);
 }
 
@@ -270,7 +270,7 @@ TEST_CASE("co_return with move-only type and delay")
 	REQUIRE(value == 0); // runScopedにより実行が開始される
 
 	System::Update();
-	REQUIRE(value == 42); // DelayFrame()の後が実行され、co_awaitで受け取った値が返る
+	REQUIRE(value == 42); // DelayFrame(1)の後が実行され、co_awaitで受け取った値が返る
 
 	System::Update();
 	REQUIRE(value == 42); // すでに完了しているので何も起こらない
@@ -316,7 +316,7 @@ TEST_CASE("Throw exception with non-void result")
 
 Co::Task<void> ThrowExceptionWithDelayTest()
 {
-	co_await Co::DelayFrame();
+	co_await Co::NextFrame();
 	throw std::runtime_error("test exception");
 }
 
@@ -338,7 +338,7 @@ TEST_CASE("Throw exception with delay")
 
 Co::Task<int32> ThrowExceptionWithDelayAndNonVoidResultTest()
 {
-	co_await Co::DelayFrame();
+	co_await Co::NextFrame();
 	throw std::runtime_error("test exception");
 	co_return 42;
 }
@@ -972,7 +972,7 @@ TEST_CASE("Co::All return value")
 Co::Task<void> PushBackValueWithDelayFrame(std::vector<int32>* pVec, int32 value)
 {
 	pVec->push_back(value);
-	co_await Co::DelayFrame();
+	co_await Co::NextFrame();
 	pVec->push_back(value * 10);
 }
 
@@ -1180,7 +1180,7 @@ Co::Task<void> AnyWithImmediateTasks()
 {
 	const auto [a, b] = co_await Co::Any(
 		CoReturnTest(),
-		Co::DelayFrame());
+		Co::DelayFrame(1));
 
 	REQUIRE(a == 42);
 	REQUIRE((bool)b == false);
@@ -1196,7 +1196,7 @@ Co::Task<void> AnyWithNonCopyableResult()
 {
 	const auto [a, b, c] = co_await Co::Any(
 		CoReturnWithMoveOnlyTypeAndDelayTest().discardResult(),
-		Co::DelayFrame(),
+		Co::DelayFrame(1),
 		Co::DelayFrame(2));
 
 	REQUIRE((bool)a == true);
@@ -1414,21 +1414,21 @@ private:
 	Co::Task<void> preStart() override
 	{
 		m_pProgress->isPreStartStarted = true;
-		co_await Co::DelayFrame();
+		co_await Co::NextFrame();
 		m_pProgress->isPreStartFinished = true;
 	}
 
 	Co::Task<void> fadeIn() override
 	{
 		m_pProgress->isFadeInStarted = true;
-		co_await Co::DelayFrame();
+		co_await Co::NextFrame();
 		m_pProgress->isFadeInFinished = true;
 	}
 
 	Co::Task<int32> start() override
 	{
 		m_pProgress->isStartStarted = true;
-		co_await Co::DelayFrame();
+		co_await Co::NextFrame();
 		m_pProgress->isStartFinished = true;
 		co_return m_argValue;
 	}
@@ -1436,14 +1436,14 @@ private:
 	Co::Task<void> fadeOut() override
 	{
 		m_pProgress->isFadeOutStarted = true;
-		co_await Co::DelayFrame();
+		co_await Co::NextFrame();
 		m_pProgress->isFadeOutFinished = true;
 	}
 
 	Co::Task<void> postFadeOut() override
 	{
 		m_pProgress->isPostFadeOutStarted = true;
-		co_await Co::DelayFrame();
+		co_await Co::NextFrame();
 		m_pProgress->isPostFadeOutFinished = true;
 	}
 };
@@ -1613,7 +1613,7 @@ class SequenceWithVoidResult : public Co::SequenceBase<void>
 private:
 	Co::Task<void> start() override
 	{
-		co_await Co::DelayFrame();
+		co_await Co::NextFrame();
 	}
 };
 
@@ -1631,7 +1631,7 @@ class SequenceWithMoveOnlyResult : public Co::SequenceBase<std::unique_ptr<int32
 private:
 	Co::Task<std::unique_ptr<int32>> start() override
 	{
-		co_await Co::DelayFrame();
+		co_await Co::NextFrame();
 		co_return std::make_unique<int32>(42);
 	}
 
@@ -1767,35 +1767,35 @@ private:
 	Co::Task<void> preStart() override
 	{
 		m_pProgress->isPreStartStarted = true;
-		co_await Co::DelayFrame();
+		co_await Co::NextFrame();
 		m_pProgress->isPreStartFinished = true;
 	}
 
 	Co::Task<void> fadeIn() override
 	{
 		m_pProgress->isFadeInStarted = true;
-		co_await Co::DelayFrame();
+		co_await Co::NextFrame();
 		m_pProgress->isFadeInFinished = true;
 	}
 
 	Co::Task<void> start() override
 	{
 		m_pProgress->isStartStarted = true;
-		co_await Co::DelayFrame();
+		co_await Co::NextFrame();
 		m_pProgress->isStartFinished = true;
 	}
 
 	Co::Task<void> fadeOut() override
 	{
 		m_pProgress->isFadeOutStarted = true;
-		co_await Co::DelayFrame();
+		co_await Co::NextFrame();
 		m_pProgress->isFadeOutFinished = true;
 	}
 
 	Co::Task<void> postFadeOut() override
 	{
 		m_pProgress->isPostFadeOutStarted = true;
-		co_await Co::DelayFrame();
+		co_await Co::NextFrame();
 		m_pProgress->isPostFadeOutFinished = true;
 	}
 };
@@ -1889,21 +1889,21 @@ private:
 	Co::Task<void> preStart() override
 	{
 		m_pProgress1->isPreStartStarted = true;
-		co_await Co::DelayFrame();
+		co_await Co::NextFrame();
 		m_pProgress1->isPreStartFinished = true;
 	}
 
 	Co::Task<void> fadeIn() override
 	{
 		m_pProgress1->isFadeInStarted = true;
-		co_await Co::DelayFrame();
+		co_await Co::NextFrame();
 		m_pProgress1->isFadeInFinished = true;
 	}
 
 	Co::Task<void> start() override
 	{
 		m_pProgress1->isStartStarted = true;
-		co_await Co::DelayFrame();
+		co_await Co::NextFrame();
 		REQUIRE(isRequested() == false);
 		REQUIRE(requestNextScene<TestScene>(m_pProgress2) == true);
 		REQUIRE(isRequested() == true);
@@ -1913,14 +1913,14 @@ private:
 	Co::Task<void> fadeOut() override
 	{
 		m_pProgress1->isFadeOutStarted = true;
-		co_await Co::DelayFrame();
+		co_await Co::NextFrame();
 		m_pProgress1->isFadeOutFinished = true;
 	}
 
 	Co::Task<void> postFadeOut() override
 	{
 		m_pProgress1->isPostFadeOutStarted = true;
-		co_await Co::DelayFrame();
+		co_await Co::NextFrame();
 		m_pProgress1->isPostFadeOutFinished = true;
 	}
 };

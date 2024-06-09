@@ -79,7 +79,7 @@ inline namespace cotasklib
 					{
 						co_return;
 					}
-					co_await detail::Yield{};
+					co_await NextFrame();
 				}
 			}
 		}

@@ -169,7 +169,7 @@ inline namespace cotasklib
 
 				while (m_isFadingIn)
 				{
-					co_await detail::Yield{};
+					co_await NextFrame();
 				}
 			}
 
@@ -297,7 +297,7 @@ inline namespace cotasklib
 					{
 						co_return;
 					}
-					co_await detail::Yield{};
+					co_await NextFrame();
 				}
 			}
 

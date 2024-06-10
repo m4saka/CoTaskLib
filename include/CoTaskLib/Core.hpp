@@ -684,6 +684,12 @@ inline namespace cotasklib
 			}
 
 			void addTo(MultiRunner& mr)&&;
+
+			[[nodiscard]]
+			Task<void> waitUntilDone() const&;
+
+			[[nodiscard]]
+			Task<void> waitUntilDone() const&& = delete;
 		};
 
 		class MultiRunner
@@ -732,10 +738,16 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			Task<void> waitUntilAllDone();
+			Task<void> waitUntilAllDone() const&;
 
 			[[nodiscard]]
-			Task<void> waitUntilAnyDone();
+			Task<void> waitUntilAllDone() const&& = delete;
+
+			[[nodiscard]]
+			Task<void> waitUntilAnyDone() const&;
+
+			[[nodiscard]]
+			Task<void> waitUntilAnyDone() const&& = delete;
 		};
 
 		inline void ScopedTaskRunner::addTo(MultiRunner& mr)&&
@@ -1256,8 +1268,15 @@ inline namespace cotasklib
 			};
 		}
 
-		[[nodiscard]]
-		Task<void> MultiRunner::waitUntilAllDone()
+		inline Task<void> ScopedTaskRunner::waitUntilDone() const&
+		{
+			while (!done())
+			{
+				co_await NextFrame();
+			}
+		}
+
+		inline Task<void> MultiRunner::waitUntilAllDone() const&
 		{
 			while (!allDone())
 			{
@@ -1265,8 +1284,7 @@ inline namespace cotasklib
 			}
 		}
 
-		[[nodiscard]]
-		Task<void> MultiRunner::waitUntilAnyDone()
+		inline Task<void> MultiRunner::waitUntilAnyDone() const&
 		{
 			while (!anyDone())
 			{

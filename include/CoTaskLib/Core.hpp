@@ -561,49 +561,6 @@ inline namespace cotasklib
 				}
 			};
 
-			class ScopedTaskRunLifetime
-			{
-			private:
-				Optional<AwaiterID> m_id;
-
-			public:
-				explicit ScopedTaskRunLifetime(const Optional<AwaiterID>& id)
-					: m_id(id)
-				{
-				}
-
-				ScopedTaskRunLifetime(const ScopedTaskRunLifetime&) = delete;
-
-				ScopedTaskRunLifetime& operator=(const ScopedTaskRunLifetime&) = delete;
-
-				ScopedTaskRunLifetime(ScopedTaskRunLifetime&& rhs) noexcept
-					: m_id(rhs.m_id)
-				{
-					rhs.m_id.reset();
-				}
-
-				ScopedTaskRunLifetime& operator=(ScopedTaskRunLifetime&& rhs) = delete;
-
-				~ScopedTaskRunLifetime()
-				{
-					if (m_id.has_value())
-					{
-						Backend::Remove(*m_id);
-					}
-				}
-
-				[[nodiscard]]
-				bool done() const
-				{
-					return !m_id.has_value() || Backend::IsDone(*m_id);
-				}
-
-				void forget()
-				{
-					m_id.reset();
-				}
-			};
-
 			template <typename TResult>
 			[[nodiscard]]
 			Optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(TaskAwaiter<TResult>&& awaiter, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)
@@ -681,65 +638,17 @@ inline namespace cotasklib
 			return std::suspend_always{};
 		}
 
-		class MultiScoped;
+		class MultiRunner;
 
-		class IScoped
-		{
-		public:
-			IScoped() = default;
-			virtual ~IScoped() = default;
-			IScoped(const IScoped&) = delete;
-			IScoped& operator=(const IScoped&) = delete;
-			IScoped(IScoped&&) = default;
-			IScoped& operator=(IScoped&&) = default;
-
-			virtual void addTo(MultiScoped& ms) && = 0;
-		};
-
-		class MultiScoped
+		class ScopedTaskRunner
 		{
 		private:
-			std::vector<std::unique_ptr<IScoped>> m_scopedInstances;
-
-		public:
-			MultiScoped() = default;
-
-			MultiScoped(const MultiScoped&) = delete;
-
-			MultiScoped& operator=(const MultiScoped&) = delete;
-
-			MultiScoped(MultiScoped&&) = default;
-
-			MultiScoped& operator=(MultiScoped&&) = default;
-
-			~MultiScoped() = default;
-
-			template <typename TScoped>
-			void add(TScoped&& runner) requires std::derived_from<TScoped, IScoped>
-			{
-				m_scopedInstances.push_back(std::make_unique<TScoped>(std::forward<TScoped>(runner)));
-			}
-
-			void reserve(std::size_t size)
-			{
-				m_scopedInstances.reserve(size);
-			}
-
-			void clear()
-			{
-				m_scopedInstances.clear();
-			}
-		};
-
-		class ScopedTaskRunner : public IScoped
-		{
-		private:
-			detail::ScopedTaskRunLifetime m_lifetime;
+			Optional<detail::AwaiterID> m_id;
 
 		public:
 			template <typename TResult>
 			explicit ScopedTaskRunner(Task<TResult>&& task, FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)
-				: m_lifetime(ResumeAwaiterOnceAndRegisterIfNotDone(detail::TaskAwaiter<TResult>{ std::move(task) }, std::move(finishCallback), std::move(cancelCallback)))
+				: m_id(ResumeAwaiterOnceAndRegisterIfNotDone(detail::TaskAwaiter<TResult>{ std::move(task) }, std::move(finishCallback), std::move(cancelCallback)))
 			{
 			}
 
@@ -747,28 +656,92 @@ inline namespace cotasklib
 
 			ScopedTaskRunner& operator=(const ScopedTaskRunner&) = delete;
 
-			ScopedTaskRunner(ScopedTaskRunner&&) noexcept = default;
+			ScopedTaskRunner(ScopedTaskRunner&& rhs) noexcept
+				: m_id(rhs.m_id)
+			{
+				rhs.m_id.reset();
+			}
 
 			ScopedTaskRunner& operator=(ScopedTaskRunner&&) = delete;
 
-			~ScopedTaskRunner() = default;
+			~ScopedTaskRunner()
+			{
+				if (m_id.has_value())
+				{
+					detail::Backend::Remove(*m_id);
+				}
+			}
 
 			[[nodiscard]]
 			bool done() const
 			{
-				return m_lifetime.done();
+				return !m_id.has_value() || detail::Backend::IsDone(*m_id);
 			}
 
 			void forget()
 			{
-				m_lifetime.forget();
+				m_id.reset();
 			}
 
-			void addTo(MultiScoped& ms) && override
-			{
-				ms.add(std::move(*this));
-			}
+			void addTo(MultiRunner& mr)&&;
 		};
+
+		class MultiRunner
+		{
+		private:
+			std::vector<ScopedTaskRunner> m_runners;
+
+		public:
+			MultiRunner() = default;
+
+			MultiRunner(const MultiRunner&) = delete;
+
+			MultiRunner& operator=(const MultiRunner&) = delete;
+
+			MultiRunner(MultiRunner&&) = default;
+
+			MultiRunner& operator=(MultiRunner&&) = default;
+
+			~MultiRunner() = default;
+
+			void add(ScopedTaskRunner&& runner)
+			{
+				m_runners.push_back(std::move(runner));
+			}
+
+			void reserve(std::size_t size)
+			{
+				m_runners.reserve(size);
+			}
+
+			void clear()
+			{
+				m_runners.clear();
+			}
+
+			[[nodiscard]]
+			bool allDone() const
+			{
+				return std::ranges::all_of(m_runners, [](const ScopedTaskRunner& runner) { return runner.done(); });
+			}
+
+			[[nodiscard]]
+			bool anyDone() const
+			{
+				return std::ranges::any_of(m_runners, [](const ScopedTaskRunner& runner) { return runner.done(); });
+			}
+
+			[[nodiscard]]
+			Task<void> waitUntilAllDone();
+
+			[[nodiscard]]
+			Task<void> waitUntilAnyDone();
+		};
+
+		inline void ScopedTaskRunner::addTo(MultiRunner& mr)&&
+		{
+			mr.add(std::move(*this));
+		}
 
 		namespace DrawIndex
 		{
@@ -795,7 +768,7 @@ inline namespace cotasklib
 			constexpr int32 FadeOutMax = 399999;
 		}
 
-		class ScopedDrawer : public IScoped
+		class ScopedDrawer
 		{
 		private:
 			Optional<detail::DrawerID> m_id;
@@ -834,11 +807,6 @@ inline namespace cotasklib
 				{
 					detail::Backend::RemoveDrawer(*m_id);
 				}
-			}
-
-			void addTo(MultiScoped& ms)&& override
-			{
-				ms.add(std::move(*this));
 			}
 		};
 
@@ -1042,9 +1010,9 @@ inline namespace cotasklib
 			}
 			
 			[[nodiscard]]
-			void runAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)&&
+			void runAddTo(MultiRunner& mr, FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)&&
 			{
-				ms.add(ScopedTaskRunner{ std::move(*this), std::move(finishCallback), std::move(cancelCallback) });
+				mr.add(ScopedTaskRunner{ std::move(*this), std::move(finishCallback), std::move(cancelCallback) });
 			}
 		};
 
@@ -1286,6 +1254,24 @@ inline namespace cotasklib
 					m_isResultSet = true;
 				}
 			};
+		}
+
+		[[nodiscard]]
+		Task<void> MultiRunner::waitUntilAllDone()
+		{
+			while (!allDone())
+			{
+				co_await NextFrame();
+			}
+		}
+
+		[[nodiscard]]
+		Task<void> MultiRunner::waitUntilAnyDone()
+		{
+			while (!anyDone())
+			{
+				co_await NextFrame();
+			}
 		}
 
 		template <typename TResult = void>

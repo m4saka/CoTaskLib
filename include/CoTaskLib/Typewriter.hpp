@@ -129,9 +129,9 @@ inline namespace cotasklib
 				return play().runScoped();
 			}
 
-			void playAddTo(MultiScoped& ms)
+			void playAddTo(MultiRunner& mr)
 			{
-				play().runAddTo(ms);
+				play().runAddTo(mr);
 			}
 		};
 

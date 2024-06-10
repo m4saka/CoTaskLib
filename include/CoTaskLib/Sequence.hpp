@@ -256,12 +256,12 @@ inline namespace cotasklib
 			[[nodiscard]]
 			ScopedTaskRunner playScoped(FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr) && = delete;
 
-			void playAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)&
+			void playAddTo(MultiRunner& mr, FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)&
 			{
-				play().runAddTo(ms, std::move(finishCallback), std::move(cancelCallback));
+				play().runAddTo(mr, std::move(finishCallback), std::move(cancelCallback));
 			}
 
-			void playAddTo(MultiScoped& ms, FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr) && = delete;
+			void playAddTo(MultiRunner& mr, FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr) && = delete;
 
 			[[nodiscard]]
 			bool done() const

@@ -192,7 +192,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			bool isRequested() const
 			{
-				return m_taskFinishSource.isFinishRequested();
+				return m_taskFinishSource.done();
 			}
 
 		public:

@@ -309,6 +309,12 @@ inline namespace cotasklib
 				m_taskFinishSource.requestFinish(std::move(result));
 			}
 
+			[[nodiscard]]
+			bool isFinishRequested() const
+			{
+				return m_taskFinishSource.done();
+			}
+
 		public:
 			UpdaterSequenceBase() = default;
 
@@ -344,12 +350,6 @@ inline namespace cotasklib
 			}
 
 			virtual void update() = 0;
-
-			[[nodiscard]]
-			bool isFinishRequested() const
-			{
-				return m_taskFinishSource.isFinishRequested();
-			}
 		};
 
 		// 毎フレーム呼ばれるupdate関数を記述するタイプのシーケンス基底クラス(void特殊化)
@@ -365,13 +365,19 @@ inline namespace cotasklib
 				m_taskFinishSource.requestFinish();
 			}
 
+			[[nodiscard]]
+			bool isFinishRequested() const
+			{
+				return m_taskFinishSource.done();
+			}
+
 		public:
 			UpdaterSequenceBase() = default;
 
 			[[nodiscard]]
 			virtual Task<void> start() override final
 			{
-				if (m_taskFinishSource.isFinishRequested())
+				if (m_taskFinishSource.done())
 				{
 					// コンストラクタやpreStart内でrequestFinishが呼ばれた場合は即座に終了
 					co_return;
@@ -380,7 +386,7 @@ inline namespace cotasklib
 				while (true)
 				{
 					update();
-					if (m_taskFinishSource.isFinishRequested())
+					if (m_taskFinishSource.done())
 					{
 						co_return;
 					}
@@ -389,12 +395,6 @@ inline namespace cotasklib
 			}
 
 			virtual void update() = 0;
-
-			[[nodiscard]]
-			bool isFinishRequested() const
-			{
-				return m_taskFinishSource.isFinishRequested();
-			}
 		};
 
 #ifdef __cpp_deleted_function_with_reason

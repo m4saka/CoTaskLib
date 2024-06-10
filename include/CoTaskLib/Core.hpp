@@ -1390,16 +1390,16 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			Task<void> waitForFinish() const
+			Task<void> waitUntilDone() const
 			{
-				while (!m_isFinishRequested)
+				while (!done())
 				{
 					co_await NextFrame();
 				}
 			}
 
 			[[nodiscard]]
-			bool isFinishRequested() const noexcept
+			bool done() const noexcept
 			{
 				return m_isFinishRequested;
 			}
@@ -1435,16 +1435,16 @@ inline namespace cotasklib
 			}
 
 			[[nodiscard]]
-			Task<void> waitForFinish() const
+			Task<void> waitUntilDone() const
 			{
-				while (!isFinishRequested())
+				while (!done())
 				{
 					co_await NextFrame();
 				}
 			}
 
 			[[nodiscard]]
-			bool isFinishRequested() const noexcept
+			bool done() const noexcept
 			{
 				return m_finishRequested;
 			}
@@ -1486,7 +1486,7 @@ inline namespace cotasklib
 			while (true)
 			{
 				updateFunc(taskFinishSource);
-				if (taskFinishSource.isFinishRequested())
+				if (taskFinishSource.done())
 				{
 					co_return;
 				}

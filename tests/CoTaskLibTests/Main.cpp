@@ -362,44 +362,44 @@ TEST_CASE("Throw exception with delay and non-void result")
 TEST_CASE("TaskFinishSource<void>")
 {
 	Co::TaskFinishSource<void> taskFinishSource;
-	REQUIRE(taskFinishSource.isFinishRequested() == false);
+	REQUIRE(taskFinishSource.done() == false);
 
 	// 初回のリクエストではtrueが返る
 	REQUIRE(taskFinishSource.requestFinish() == true);
-	REQUIRE(taskFinishSource.isFinishRequested() == true);
+	REQUIRE(taskFinishSource.done() == true);
 
 	// 2回目以降のリクエストは受け付けない
 	REQUIRE(taskFinishSource.requestFinish() == false);
-	REQUIRE(taskFinishSource.isFinishRequested() == true);
+	REQUIRE(taskFinishSource.done() == true);
 }
 
-TEST_CASE("TaskFinishSource<void>::waitForFinish")
+TEST_CASE("TaskFinishSource<void>::waitUntilDone")
 {
 	Co::TaskFinishSource<void> taskFinishSource;
-	const auto runner = taskFinishSource.waitForFinish().runScoped();
+	const auto runner = taskFinishSource.waitUntilDone().runScoped();
 
 	// まだ完了していない
 	REQUIRE(runner.done() == false);
-	REQUIRE(taskFinishSource.isFinishRequested() == false);
+	REQUIRE(taskFinishSource.done() == false);
 
 	// 完了リクエスト
 	taskFinishSource.requestFinish();
 
 	// System::Updateが呼ばれるまでは完了しない
 	REQUIRE(runner.done() == false);
-	REQUIRE(taskFinishSource.isFinishRequested() == true);
+	REQUIRE(taskFinishSource.done() == true);
 
 	System::Update();
 
 	// System::Updateが呼ばれたら完了する
 	REQUIRE(runner.done() == true);
-	REQUIRE(taskFinishSource.isFinishRequested() == true);
+	REQUIRE(taskFinishSource.done() == true);
 }
 
 TEST_CASE("TaskFinishSource<int32>")
 {
 	Co::TaskFinishSource<int32> taskFinishSource;
-	REQUIRE(taskFinishSource.isFinishRequested() == false);
+	REQUIRE(taskFinishSource.done() == false);
 	REQUIRE(taskFinishSource.hasResult() == false);
 
 	// 結果が入るまではresultは例外を投げる
@@ -407,7 +407,7 @@ TEST_CASE("TaskFinishSource<int32>")
 
 	// 初回のリクエストではtrueが返る
 	REQUIRE(taskFinishSource.requestFinish(42) == true);
-	REQUIRE(taskFinishSource.isFinishRequested() == true);
+	REQUIRE(taskFinishSource.done() == true);
 
 	// 結果が取得できる
 	REQUIRE(taskFinishSource.hasResult() == true);
@@ -416,36 +416,36 @@ TEST_CASE("TaskFinishSource<int32>")
 	// 2回目以降の結果取得はできない
 	REQUIRE(taskFinishSource.hasResult() == false);
 	REQUIRE_THROWS_AS(taskFinishSource.result(), Error);
-	REQUIRE(taskFinishSource.isFinishRequested() == true);
+	REQUIRE(taskFinishSource.done() == true);
 
 	// 2回目以降のリクエストは受け付けない
 	REQUIRE(taskFinishSource.requestFinish(4242) == false);
 	REQUIRE(taskFinishSource.hasResult() == false);
 	REQUIRE_THROWS_AS(taskFinishSource.result(), Error);
-	REQUIRE(taskFinishSource.isFinishRequested() == true);
+	REQUIRE(taskFinishSource.done() == true);
 }
 
-TEST_CASE("TaskFinishSource<int32>::waitForFinish")
+TEST_CASE("TaskFinishSource<int32>::waitUntilDone")
 {
 	Co::TaskFinishSource<int32> taskFinishSource;
-	const auto runner = taskFinishSource.waitForFinish().runScoped();
+	const auto runner = taskFinishSource.waitUntilDone().runScoped();
 
 	// まだ完了していない
 	REQUIRE(runner.done() == false);
-	REQUIRE(taskFinishSource.isFinishRequested() == false);
+	REQUIRE(taskFinishSource.done() == false);
 
 	// 完了リクエスト
 	taskFinishSource.requestFinish(42);
 
 	// System::Updateが呼ばれるまでは完了しない
 	REQUIRE(runner.done() == false);
-	REQUIRE(taskFinishSource.isFinishRequested() == true);
+	REQUIRE(taskFinishSource.done() == true);
 
 	System::Update();
 
 	// System::Updateが呼ばれたら完了する
 	REQUIRE(runner.done() == true);
-	REQUIRE(taskFinishSource.isFinishRequested() == true);
+	REQUIRE(taskFinishSource.done() == true);
 	REQUIRE(taskFinishSource.hasResult() == true);
 	REQUIRE(taskFinishSource.result() == 42);
 }
@@ -458,7 +458,7 @@ TEST_CASE("TaskFinishSource<int32>::waitForResult")
 
 	// まだ完了していない
 	REQUIRE(runner.done() == false);
-	REQUIRE(taskFinishSource.isFinishRequested() == false);
+	REQUIRE(taskFinishSource.done() == false);
 	REQUIRE(result == none);
 
 	// 完了リクエスト
@@ -466,20 +466,331 @@ TEST_CASE("TaskFinishSource<int32>::waitForResult")
 
 	// System::Updateが呼ばれるまでは完了しない
 	REQUIRE(runner.done() == false);
-	REQUIRE(taskFinishSource.isFinishRequested() == true);
+	REQUIRE(taskFinishSource.done() == true);
 	REQUIRE(result == none);
 
 	System::Update();
 
 	// System::Updateが呼ばれたら完了する
 	REQUIRE(runner.done() == true);
-	REQUIRE(taskFinishSource.isFinishRequested() == true);
+	REQUIRE(taskFinishSource.done() == true);
 	REQUIRE(result == 42);
 
 	// 2回目以降の結果取得はできない
 	// (waitForResult内で既に結果取得しているため2回目となる)
 	REQUIRE_THROWS_AS(taskFinishSource.result(), Error);
-	REQUIRE(taskFinishSource.isFinishRequested() == true);
+	REQUIRE(taskFinishSource.done() == true);
+}
+
+TEST_CASE("ScopedTaskRunner::requestCancel")
+{
+	int32 finishCallbackCount = 0;
+	int32 cancelCallbackCount = 0;
+
+	auto runner = Co::DelayFrame(3).runScoped([&] { ++finishCallbackCount; }, [&] { ++cancelCallbackCount; });
+
+	REQUIRE(runner.done() == false);
+
+	// キャンセル
+	runner.requestCancel();
+
+	// 即時でキャンセルされる
+	REQUIRE(runner.done() == true);
+	REQUIRE(finishCallbackCount == 0);
+	REQUIRE(cancelCallbackCount == 1);
+}
+
+TEST_CASE("ScopedTaskRunner::waitUntilDone")
+{
+	const auto runner = Co::DelayFrame(3).runScoped();
+	const auto runner2 = runner.waitUntilDone().runScoped();
+
+	REQUIRE(runner.done() == false);
+	REQUIRE(runner2.done() == false);
+
+	System::Update();
+
+	REQUIRE(runner.done() == false);
+	REQUIRE(runner2.done() == false);
+
+	System::Update();
+
+	REQUIRE(runner.done() == false);
+	REQUIRE(runner2.done() == false);
+
+	System::Update();
+
+	REQUIRE(runner.done() == true);
+	REQUIRE(runner2.done() == true);
+}
+
+TEST_CASE("ScopedTaskRunner::waitUntilDone immediate")
+{
+	const auto runner = Co::DelayFrame(0).runScoped();
+	const auto runner2 = runner.waitUntilDone().runScoped();
+
+	REQUIRE(runner.done() == true);
+	REQUIRE(runner2.done() == true);
+}
+
+TEST_CASE("ScopedTaskRunner::waitUntilDone canceled")
+{
+	Optional<Co::ScopedTaskRunner> runner = Co::DelayFrame(3).runScoped();
+	const auto runner2 = runner->waitUntilDone().runScoped();
+
+	REQUIRE(runner->done() == false);
+	REQUIRE(runner2.done() == false);
+
+	System::Update();
+
+	// キャンセル
+	runner = none;
+
+	// キャンセルされてもSystem::Updateが呼ばれるまでは完了しない
+	REQUIRE(runner2.done() == false);
+
+	System::Update();
+
+	// System::Updateが呼ばれたら完了する(doneとは、finishまたはcancelのことを指す)
+	REQUIRE(runner2.done() == true);
+}
+
+TEST_CASE("MultiRunner finish")
+{
+	Co::MultiRunner mr;
+	int32 runner1FinishCount = 0;
+	int32 runner1CancelCount = 0;
+	int32 runner2FinishCount = 0;
+	int32 runner2CancelCount = 0;
+
+	Co::DelayFrame(1).runAddTo(mr, [&] { ++runner1FinishCount; }, [&] { ++runner1CancelCount; });
+	Co::DelayFrame(2).runAddTo(mr, [&] { ++runner2FinishCount; }, [&] { ++runner2CancelCount; });
+
+	// まだ完了していない
+	REQUIRE(runner1FinishCount == 0);
+	REQUIRE(runner1CancelCount == 0);
+	REQUIRE(runner2FinishCount == 0);
+	REQUIRE(runner2CancelCount == 0);
+	REQUIRE(mr.allDone() == false);
+	REQUIRE(mr.anyDone() == false);
+
+	System::Update();
+
+	// 1個目のタスクが完了
+	REQUIRE(runner1FinishCount == 1);
+	REQUIRE(runner1CancelCount == 0);
+	REQUIRE(runner2FinishCount == 0);
+	REQUIRE(runner2CancelCount == 0);
+	REQUIRE(mr.allDone() == false);
+	REQUIRE(mr.anyDone() == true);
+
+	System::Update();
+
+	// 2個目のタスクが完了
+	REQUIRE(runner1FinishCount == 1);
+	REQUIRE(runner1CancelCount == 0);
+	REQUIRE(runner2FinishCount == 1);
+	REQUIRE(runner2CancelCount == 0);
+	REQUIRE(mr.allDone() == true);
+	REQUIRE(mr.anyDone() == true);
+}
+
+TEST_CASE("MultiRunner::requestCancelAll")
+{
+	Co::MultiRunner mr;
+	int32 runner1FinishCount = 0;
+	int32 runner1CancelCount = 0;
+	int32 runner2FinishCount = 0;
+	int32 runner2CancelCount = 0;
+	int32 runner3FinishCount = 0;
+	int32 runner3CancelCount = 0;
+
+	Co::DelayFrame(1).runAddTo(mr, [&] { ++runner1FinishCount; }, [&] { ++runner1CancelCount; });
+	Co::DelayFrame(2).runAddTo(mr, [&] { ++runner2FinishCount; }, [&] { ++runner2CancelCount; });
+	Co::DelayFrame(3).runAddTo(mr, [&] { ++runner3FinishCount; }, [&] { ++runner3CancelCount; });
+
+	// まだ完了していない
+	REQUIRE(runner1FinishCount == 0);
+	REQUIRE(runner1CancelCount == 0);
+	REQUIRE(runner2FinishCount == 0);
+	REQUIRE(runner2CancelCount == 0);
+	REQUIRE(runner3FinishCount == 0);
+	REQUIRE(runner3CancelCount == 0);
+	REQUIRE(mr.allDone() == false);
+	REQUIRE(mr.anyDone() == false);
+
+	System::Update();
+
+	// 1個目のタスクが完了
+	REQUIRE(runner1FinishCount == 1);
+	REQUIRE(runner1CancelCount == 0);
+	REQUIRE(runner2FinishCount == 0);
+	REQUIRE(runner2CancelCount == 0);
+	REQUIRE(runner3FinishCount == 0);
+	REQUIRE(runner3CancelCount == 0);
+	REQUIRE(mr.allDone() == false);
+	REQUIRE(mr.anyDone() == true);
+
+	// キャンセル
+	mr.requestCancelAll();
+
+	// キャンセルされたので2個目のタスクは完了しない
+	REQUIRE(runner1FinishCount == 1);
+	REQUIRE(runner1CancelCount == 0);
+	REQUIRE(runner2FinishCount == 0);
+	REQUIRE(runner2CancelCount == 1);
+	REQUIRE(runner3FinishCount == 0);
+	REQUIRE(runner3CancelCount == 1);
+	REQUIRE(mr.allDone() == true);
+	REQUIRE(mr.anyDone() == true);
+}
+
+TEST_CASE("MultiRunner::waitUntilAllDone")
+{
+	Co::MultiRunner mr;
+	Co::DelayFrame(3).runAddTo(mr);
+	Co::DelayFrame(1).runAddTo(mr);
+	Co::DelayFrame(2).runAddTo(mr);
+
+	const auto runner = mr.waitUntilAllDone().runScoped();
+
+	// まだ完了していない
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+
+	// 1個のタスクが完了
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+
+	// 2個のタスクが完了
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+
+	// 3個のタスクが完了
+	REQUIRE(runner.done() == true);
+}
+
+TEST_CASE("MultiRunner::waitUntilAllDone immediate")
+{
+	Co::MultiRunner mr;
+	Co::DelayFrame(0).runAddTo(mr);
+	Co::DelayFrame(0).runAddTo(mr);
+	Co::DelayFrame(0).runAddTo(mr);
+
+	const auto runner = mr.waitUntilAllDone().runScoped();
+
+	REQUIRE(runner.done() == true);
+}
+
+TEST_CASE("MultiRunner::waitUntilAllDone empty")
+{
+	Co::MultiRunner mr;
+
+	const auto runner = mr.waitUntilAllDone().runScoped();
+
+	REQUIRE(runner.done() == true);
+}
+
+TEST_CASE("MultiRunner::waitUntilAllDone added while running")
+{
+	Co::MultiRunner mr;
+	Co::DelayFrame(1).runAddTo(mr);
+
+	const auto runner = mr.waitUntilAllDone().runScoped();
+	REQUIRE(runner.done() == false);
+
+	// タスクを後から追加
+	Co::DelayFrame(2).runAddTo(mr);
+
+	System::Update();
+
+	// 後から追加されたタスクが完了していないのでまだ完了しない
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+
+	// 2個のタスクが完了
+	REQUIRE(mr.allDone() == true);
+
+	// ただし、後から追加されたタスクはwaitUntilAllDoneより実行順が後ろなので、waitUntilAllDoneはまだ完了しない
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+
+	// ここでwaitUntilAllDoneが完了
+	REQUIRE(runner.done() == true);
+}
+
+TEST_CASE("MultiRunner::waitUntilAnyDone")
+{
+	Co::MultiRunner mr;
+	Co::DelayFrame(3).runAddTo(mr);
+	Co::DelayFrame(1).runAddTo(mr);
+	Co::DelayFrame(2).runAddTo(mr);
+
+	const auto runner = mr.waitUntilAnyDone().runScoped();
+
+	// まだ完了していない
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+
+	// 1個のタスクが完了
+	REQUIRE(runner.done() == true);
+}
+
+TEST_CASE("MultiRunner::waitUntilAnyDone immediate")
+{
+	Co::MultiRunner mr;
+	Co::DelayFrame(0).runAddTo(mr);
+	Co::DelayFrame(0).runAddTo(mr);
+	Co::DelayFrame(0).runAddTo(mr);
+
+	const auto runner = mr.waitUntilAnyDone().runScoped();
+
+	REQUIRE(runner.done() == true);
+}
+
+TEST_CASE("MultiRunner::waitUntilAnyDone empty")
+{
+	Co::MultiRunner mr;
+
+	const auto runner = mr.waitUntilAnyDone().runScoped();
+
+	// 10フレーム待っても完了しない
+	for (int32 i = 0; i < 10; ++i)
+	{
+		System::Update();
+		REQUIRE(runner.done() == false);
+	}
+}
+
+TEST_CASE("MultiRunner::waitUntilAnyDone added while running")
+{
+	Co::MultiRunner mr;
+	Co::DelayFrame(3).runAddTo(mr);
+
+	const auto runner = mr.waitUntilAnyDone().runScoped();
+	REQUIRE(runner.done() == false);
+
+	// タスクを後から追加
+	Co::DelayFrame(1).runAddTo(mr);
+
+	System::Update();
+
+	// 後から追加されたタスクが完了
+	REQUIRE(mr.anyDone() == true);
+
+	// ただし、後から追加されたタスクはwaitUntilAnyDoneより実行順が後ろなので、waitUntilAnyDoneはまだ完了しない
+	REQUIRE(runner.done() == false);
+
+	System::Update();
+
+	// ここでwaitUntilAnyDoneが完了
+	REQUIRE(runner.done() == true);
 }
 
 Co::Task<void> WaitForeverTest(int32* pValue)

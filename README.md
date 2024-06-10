@@ -478,13 +478,13 @@ private:
     - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番で描画されます。
 
 ### シーンの実行方法
-`Co::EnterScene`関数を開始シーンの型を指定して呼び出すことで、最初のシーンから最後のシーンまでの一連の動作を実行する`Co::Task<>`を取得できます。これに対して通常通り、`runScoped`関数を使用します。  
-もし開始シーンのクラスのコンストラクタに引数が必要な場合、`Co::EnterScene`関数の引数として渡すことができます。
+`Co::PlaySceneFrom`関数を開始シーンの型を指定して呼び出すことで、最初のシーンから最後のシーンまでの一連の動作を実行する`Co::Task<>`を取得できます。これに対して通常通り、`runScoped`関数を使用します。  
+もし開始シーンのクラスのコンストラクタに引数が必要な場合、`Co::PlaySceneFrom`関数の引数として渡すことができます。
 
 全てのシーンが終了した場合にプログラムを終了するためには、下記のように`done()`関数でタスクの完了を確認してwhileループを抜けます。
 
 ```cpp
-const auto taskRunner = Co::EnterScene<ExampleScene>().runScoped();
+const auto taskRunner = Co::PlaySceneFrom<ExampleScene>().runScoped();
 while (System::Update())
 {
     if (taskRunner.done())
@@ -498,7 +498,7 @@ while (System::Update())
 
 下記の点が異なります。
 
-- CoTaskLibのシーン機能には、SceneManagerのようなマネージャークラスがありません。遷移先シーンのクラスは直接`Co::EnterScene()`関数または`requestNextScene()`関数のテンプレート引数として指定するため、シーン名の登録などが必要ありません。
+- CoTaskLibのシーン機能には、SceneManagerのようなマネージャークラスがありません。遷移先シーンのクラスは直接`Co::PlaySceneFrom()`関数または`requestNextScene()`関数のテンプレート引数として指定するため、シーン名の登録などが必要ありません。
 - CoTaskLibでは、シーンクラスのコンストラクタに引数を持たせることができます。そのため、遷移元のシーンから必要なデータを受け渡すことができます。
     - Siv3D標準のシーン機能にある`getData()`のような、シーン間でグローバルにデータを受け渡すための機能は提供していません。代わりに、シーンクラスのコンストラクタに引数を用意して受け渡してください。
 - CoTaskLibのシーンクラスでは、毎フレーム実行されるupdate関数の代わりに、`start()`関数というコルーチン関数を実装します。
@@ -836,7 +836,7 @@ private:
     - `TSequence`クラスのインスタンスを構築し、それを実行するタスクを返します。
     - `TSequence`クラスは`Co::SequenceBase<TResult>`の派生クラスである必要があります。
     - 引数には、`TSequence`のコンストラクタの引数を指定します。
-- `Co::EnterScene<TScene>(...)` -> `Co::Task<>`
+- `Co::PlaySceneFrom<TScene>(...)` -> `Co::Task<>`
     - `TScene`クラスのインスタンスを構築し、それを開始シーンとした一連のシーン実行のタスクを返します。
     - `TScene`クラスは`Co::SceneBase`の派生クラスである必要があります。
     - 引数には、`TScene`のコンストラクタの引数を指定します。

@@ -1800,10 +1800,10 @@ private:
 	}
 };
 
-TEST_CASE("Co::EnterScene<TScene>")
+TEST_CASE("Co::PlaySceneFrom<TScene>")
 {
 	SequenceProgress progress;
-	const auto runner = Co::EnterScene<TestScene>(&progress).runScoped();
+	const auto runner = Co::PlaySceneFrom<TestScene>(&progress).runScoped();
 	REQUIRE(runner.done() == false);
 	REQUIRE(progress.isPreStartStarted == true); // 呼び出し時点で最初のsuspendまでは実行される
 	REQUIRE(progress.isPreStartFinished == false);
@@ -1929,7 +1929,7 @@ TEST_CASE("requestNextScene")
 {
 	SequenceProgress progress1;
 	SequenceProgress progress2;
-	const auto runner = Co::EnterScene<ChainedTestScene>(&progress1, &progress2).runScoped();
+	const auto runner = Co::PlaySceneFrom<ChainedTestScene>(&progress1, &progress2).runScoped();
 	REQUIRE(runner.done() == false);
 	REQUIRE(progress1.isPreStartStarted == true); // 呼び出し時点で最初のsuspendまでは実行される
 	REQUIRE(progress1.isPreStartFinished == false);
@@ -2087,7 +2087,7 @@ private:
 
 TEST_CASE("UpdaterScene")
 {
-	const auto runner = Co::EnterScene<TestUpdaterScene>().runScoped();
+	const auto runner = Co::PlaySceneFrom<TestUpdaterScene>().runScoped();
 	REQUIRE(runner.done() == false);
 
 	System::Update();

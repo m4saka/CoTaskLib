@@ -683,6 +683,15 @@ inline namespace cotasklib
 				m_id.reset();
 			}
 
+			void requestCancel()
+			{
+				if (m_id.has_value())
+				{
+					detail::Backend::Remove(*m_id);
+					m_id.reset();
+				}
+			}
+
 			void addTo(MultiRunner& mr)&&;
 
 			[[nodiscard]]
@@ -723,6 +732,14 @@ inline namespace cotasklib
 			void clear()
 			{
 				m_runners.clear();
+			}
+
+			void requestCancelAll()
+			{
+				for (ScopedTaskRunner& runner : m_runners)
+				{
+					runner.requestCancel();
+				}
 			}
 
 			[[nodiscard]]

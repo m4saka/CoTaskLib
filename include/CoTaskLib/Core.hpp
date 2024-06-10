@@ -1539,10 +1539,27 @@ inline namespace cotasklib
 			}
 		}
 
+		namespace detail
+		{
+			template <class T>
+			concept Predicate = std::invocable<T> && std::same_as<std::invoke_result_t<T>, bool>;
+		}
+
+		template <detail::Predicate TPredicate>
 		[[nodiscard]]
-		inline Task<void> WaitUntil(std::function<bool()> predicate)
+		inline Task<void> WaitUntil(TPredicate predicate)
 		{
 			while (!predicate())
+			{
+				co_await NextFrame();
+			}
+		}
+
+		template <detail::Predicate TPredicate>
+		[[nodiscard]]
+		inline Task<void> WaitWhile(TPredicate predicate)
+		{
+			while (predicate())
 			{
 				co_await NextFrame();
 			}
@@ -1711,15 +1728,6 @@ inline namespace cotasklib
 		Task<void> WaitForMouseOver(const TArea area)
 		{
 			while (!area.mouseOver())
-			{
-				co_await NextFrame();
-			}
-		}
-
-		[[nodiscard]]
-		inline Task<void> WaitWhile(std::function<bool()> predicate)
-		{
-			while (predicate())
 			{
 				co_await NextFrame();
 			}

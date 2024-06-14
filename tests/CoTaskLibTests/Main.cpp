@@ -2778,7 +2778,7 @@ TEST_CASE("Co::Typewriter with total duration")
 TEST_CASE("AsyncThread immediate")
 {
 	int32 value = 0;
-	const auto runner = Co::AsyncThread<int32>([] { return 42; }).runScoped([&value](int32 result) { value = result; });
+	const auto runner = Co::AsyncThread([] { return 42; }).runScoped([&value](int32 result) { value = result; });
 
 	// 通常の即時returnとは違って別スレッドなので、完了までに最低限の待機は必要
 	System::Update();
@@ -2793,7 +2793,7 @@ TEST_CASE("AsyncThread with sleep")
 	// 完了に十分な時間待つ
 	const auto wait = Co::Delay(0.5s).runScoped();
 	{
-		const auto runner = Co::AsyncThread<int32>([] { std::this_thread::sleep_for(0.01s); return 42; }).runScoped([&value](int32 result) { value = result; });
+		const auto runner = Co::AsyncThread([] { std::this_thread::sleep_for(0.01s); return 42; }).runScoped([&value](int32 result) { value = result; });
 		REQUIRE(runner.done() == false);
 		REQUIRE(value == 0);
 
@@ -2814,7 +2814,7 @@ TEST_CASE("AsyncThread with sleep canceled")
 
 	// 完了に不十分な時間しか待たない場合も、タスク自体はキャンセルされるが、std::futureの破棄タイミングでスレッド終了を待機するため実行は最後までされることを確認
 	{
-		const auto runner = Co::AsyncThread<void>([&] { std::this_thread::sleep_for(0.2s); value = 42; })
+		const auto runner = Co::AsyncThread([&] { std::this_thread::sleep_for(0.2s); value = 42; })
 			.runScoped([&]() { ++finishCallbackCOunt; }, [&]() { ++cancelCallbackCount; });
 		REQUIRE(runner.done() == false);
 		REQUIRE(value == 0);
@@ -2836,7 +2836,7 @@ TEST_CASE("AsyncThread with exception")
 	int32 finishCallbackCOunt = 0;
 	int32 cancelCallbackCount = 0;
 
-	auto task = Co::AsyncThread<void>([&] { std::this_thread::sleep_for(0.01s); throw std::runtime_error("test exception"); value = 42; })
+	auto task = Co::AsyncThread([&] { std::this_thread::sleep_for(0.01s); throw std::runtime_error("test exception"); value = 42; })
 		.runScoped([&]() { ++finishCallbackCOunt; }, [&]() { ++cancelCallbackCount; });
 	REQUIRE(value == 0);
 
@@ -2863,14 +2863,14 @@ TEST_CASE("AsyncThread with move-only result")
 	std::unique_ptr<int32> result = nullptr;
 
 	// ムーブオンリー型の結果も取得できる
-	const auto runner = Co::AsyncThread<std::unique_ptr<int32>>([] { return std::make_unique<int32>(42); })
+	const auto runner = Co::AsyncThread([](int32 value) { return std::make_unique<int32>(value * 10); }, 42)
 		.runScoped([&](std::unique_ptr<int32>&& r) { result = std::move(r); });
 
 	// 通常の即時returnとは違って別スレッドなので、完了までに最低限の待機は必要
 	System::Update();
 	REQUIRE(runner.done() == true);
 	REQUIRE(result != nullptr);
-	REQUIRE(*result == 42);
+	REQUIRE(*result == 420);
 }
 
 void Main()

@@ -3,6 +3,37 @@
 #include <Catch2/catch.hpp>
 #include <CoTaskLib.hpp>
 
+Co::Task<void> FromResultTest(int32* pValue)
+{
+	*pValue = co_await Co::FromResult(42);
+}
+
+TEST_CASE("FromResult")
+{
+	int32 value = 0;
+
+	auto task = FromResultTest(&value);
+	REQUIRE(value == 0); // タスク生成時点ではまだ実行されない
+	const auto runner = std::move(task).runScoped();
+	REQUIRE(value == 42); // runScopedにより実行が開始される
+}
+
+Co::Task<void> FromResultWithMoveOnlyTypeTest(std::unique_ptr<int32>* pValue)
+{
+	*pValue = co_await Co::FromResult(std::make_unique<int32>(42));
+}
+
+TEST_CASE("FromResult with move-only type")
+{
+	std::unique_ptr<int32> value;
+
+	auto task = FromResultWithMoveOnlyTypeTest(&value);
+	REQUIRE(value == nullptr); // タスク生成時点ではまだ実行されない
+	const auto runner = std::move(task).runScoped();
+	REQUIRE(value != nullptr); // runScopedにより実行が開始される
+	REQUIRE(*value == 42);
+}
+
 Co::Task<void> DelayFrameTest(int32* pValue)
 {
 	*pValue = 1;

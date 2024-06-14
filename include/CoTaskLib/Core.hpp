@@ -1546,6 +1546,13 @@ inline namespace cotasklib
 			return HasActiveFadeIn() || HasActiveFadeOut();
 		}
 
+		template <typename TResult>
+		[[nodiscard]]
+		Task<TResult> FromResult(TResult result)
+		{
+			co_return result;
+		}
+
 		[[nodiscard]]
 		inline Task<void> DelayFrame(int32 frames)
 		{

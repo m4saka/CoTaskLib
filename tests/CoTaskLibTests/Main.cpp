@@ -2775,6 +2775,104 @@ TEST_CASE("Co::Typewriter with total duration")
 	REQUIRE(value == U"TEST");
 }
 
+TEST_CASE("AsyncThread immediate")
+{
+	int32 value = 0;
+	const auto runner = Co::AsyncThread<int32>([] { return 42; }).runScoped([&value](int32 result) { value = result; });
+
+	// 通常の即時returnとは違って別スレッドなので、完了までに最低限の待機は必要
+	System::Update();
+	REQUIRE(runner.done() == true);
+	REQUIRE(value == 42);
+}
+
+TEST_CASE("AsyncThread with sleep")
+{
+	std::atomic<int32> value = 0;
+
+	// 完了に十分な時間待つ
+	const auto wait = Co::Delay(0.5s).runScoped();
+	{
+		const auto runner = Co::AsyncThread<int32>([] { std::this_thread::sleep_for(0.01s); return 42; }).runScoped([&value](int32 result) { value = result; });
+		REQUIRE(runner.done() == false);
+		REQUIRE(value == 0);
+
+		while (!wait.done())
+		{
+			System::Update();
+		}
+	}
+
+	REQUIRE(value == 42);
+}
+
+TEST_CASE("AsyncThread with sleep canceled")
+{
+	std::atomic<int32> value = 0;
+	int32 finishCallbackCOunt = 0;
+	int32 cancelCallbackCount = 0;
+
+	// 完了に不十分な時間しか待たない場合も、タスク自体はキャンセルされるが、std::futureの破棄タイミングでスレッド終了を待機するため実行は最後までされることを確認
+	{
+		const auto runner = Co::AsyncThread<void>([&] { std::this_thread::sleep_for(0.2s); value = 42; })
+			.runScoped([&]() { ++finishCallbackCOunt; }, [&]() { ++cancelCallbackCount; });
+		REQUIRE(runner.done() == false);
+		REQUIRE(value == 0);
+
+		const auto wait = Co::Delay(0.01s).runScoped();
+		while (!wait.done())
+		{
+			System::Update();
+		}
+	}
+	REQUIRE(value == 42);
+	REQUIRE(finishCallbackCOunt == 0);
+	REQUIRE(cancelCallbackCount == 1);
+}
+
+TEST_CASE("AsyncThread with exception")
+{
+	std::atomic<int32> value = 0;
+	int32 finishCallbackCOunt = 0;
+	int32 cancelCallbackCount = 0;
+
+	auto task = Co::AsyncThread<void>([&] { std::this_thread::sleep_for(0.01s); throw std::runtime_error("test exception"); value = 42; })
+		.runScoped([&]() { ++finishCallbackCOunt; }, [&]() { ++cancelCallbackCount; });
+	REQUIRE(value == 0);
+
+	const auto fnWait = [&task]
+		{
+			while (!task.done())
+			{
+				std::this_thread::sleep_for(0.01s);
+
+				// System::Update内で例外が発生すると以降のテスト実行に影響が出る可能性があるため、手動resumeでテスト
+				Co::detail::Backend::ManualUpdate();
+			}
+		};
+
+	// 他スレッドで発生した例外が捕捉できることを確認
+	REQUIRE_THROWS_WITH(fnWait(), "test exception");
+	REQUIRE(value == 0);
+	REQUIRE(finishCallbackCOunt == 0);
+	REQUIRE(cancelCallbackCount == 1);
+}
+
+TEST_CASE("AsyncThread with move-only result")
+{
+	std::unique_ptr<int32> result = nullptr;
+
+	// ムーブオンリー型の結果も取得できる
+	const auto runner = Co::AsyncThread<std::unique_ptr<int32>>([] { return std::make_unique<int32>(42); })
+		.runScoped([&](std::unique_ptr<int32>&& r) { result = std::move(r); });
+
+	// 通常の即時returnとは違って別スレッドなので、完了までに最低限の待機は必要
+	System::Update();
+	REQUIRE(runner.done() == true);
+	REQUIRE(result != nullptr);
+	REQUIRE(*result == 42);
+}
+
 void Main()
 {
 	Co::Init();

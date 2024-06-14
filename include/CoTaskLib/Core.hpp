@@ -1861,5 +1861,14 @@ inline namespace cotasklib
 				co_await NextFrame();
 			}
 		}
+
+		template <typename TResult>
+		[[nodiscard]]
+		Task<TResult> AsyncThread(std::function<TResult()> func)
+		{
+			auto future = std::async(std::launch::async, std::move(func));
+			co_await WaitUntil([&future] { return future.valid() && future.wait_for(std::chrono::seconds(0)) == std::future_status::ready; });
+			co_return future.get();
+		}
 	}
 }

@@ -1317,8 +1317,7 @@ inline namespace cotasklib
 			static_assert(!std::is_const_v<TResult>, "TResult must not have 'const' qualifier");
 
 		private:
-			std::promise<TResult> m_promise;
-			bool m_isFinishRequested = false;
+			std::unique_ptr<TResult> m_result;
 			bool m_resultConsumed = false;
 
 		public:
@@ -1340,8 +1339,7 @@ inline namespace cotasklib
 				{
 					return false;
 				}
-				m_promise.set_value(result);
-				m_isFinishRequested = true;
+				m_result = std::make_unique<TResult>(result);
 				return true;
 			}
 
@@ -1351,15 +1349,14 @@ inline namespace cotasklib
 				{
 					return false;
 				}
-				m_promise.set_value(std::move(result));
-				m_isFinishRequested = true;
+				m_result = std::make_unique<TResult>(std::move(result));
 				return true;
 			}
 
 			[[nodiscard]]
 			bool hasResult() const noexcept
 			{
-				return m_isFinishRequested && !m_resultConsumed;
+				return m_result != nullptr;
 			}
 
 			// hasResult()がtrueを返す場合のみ呼び出し可能。1回だけ取得でき、2回目以降の呼び出しは例外を投げる
@@ -1370,12 +1367,15 @@ inline namespace cotasklib
 				{
 					throw Error{ U"TaskFinishSource: result can be get only once. Make sure to check if hasResult() returns true before calling result()." };
 				}
-				if (!m_isFinishRequested)
+				if (m_result == nullptr)
 				{
 					throw Error{ U"TaskFinishSource: TaskFinishSource does not have a result. Make sure to check if hasResult() returns true before calling result()." };
 				}
 				m_resultConsumed = true;
-				return m_promise.get_future().get();
+
+				auto result = std::move(*m_result);
+				m_result.reset();
+				return result;
 			}
 
 			[[nodiscard]]
@@ -1386,7 +1386,7 @@ inline namespace cotasklib
 					co_await NextFrame();
 				}
 				m_resultConsumed = true;
-				co_return m_promise.get_future().get();
+				co_return *m_result;
 			}
 
 			[[nodiscard]]
@@ -1401,7 +1401,7 @@ inline namespace cotasklib
 			[[nodiscard]]
 			bool done() const noexcept
 			{
-				return m_isFinishRequested;
+				return m_result != nullptr || m_resultConsumed;
 			}
 		};
 

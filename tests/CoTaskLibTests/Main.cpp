@@ -2932,6 +2932,57 @@ TEST_CASE("WaitForResult(s3d::AsyncTask)")
 	REQUIRE(result == 42);
 }
 
+class ScopedComponentTest : public Co::ScopedComponentBase
+{
+private:
+	int32 m_drawIndex;
+	String m_name;
+	Array<String>* m_pArr;
+
+	void updateInput() override
+	{
+		m_pArr->push_back(U"updateInput " + m_name);
+	}
+
+	void draw() const override
+	{
+		m_pArr->push_back(U"draw " + m_name);
+	}
+
+	int32 drawIndex() const override
+	{
+		return m_drawIndex;
+	}
+
+public:
+	ScopedComponentTest(int32 drawIndex, StringView name, Array<String>* pArr)
+		: m_drawIndex(drawIndex)
+		, m_name(name)
+		, m_pArr(pArr)
+	{
+	}
+};
+
+TEST_CASE("ScopedComponent")
+{
+	Array<String> arr;
+	ScopedComponentTest def{ Co::DrawIndex::Default, U"default", &arr };
+	ScopedComponentTest back{ Co::DrawIndex::Back, U"back", &arr };
+	ScopedComponentTest front{ Co::DrawIndex::Front, U"front", &arr };
+
+	REQUIRE(arr.isEmpty());
+
+	System::Update();
+
+	REQUIRE(arr == Array<String>({
+		U"updateInput front",
+		U"updateInput default",
+		U"updateInput back",
+		U"draw back",
+		U"draw default",
+		U"draw front"}));
+}
+
 void Main()
 {
 	Co::Init();

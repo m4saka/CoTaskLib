@@ -76,6 +76,8 @@ namespace cotasklib
 
 			using UpdaterID = uint64;
 
+			using UpdateInputCallerID = uint64;
+
 			using DrawerID = uint64;
 
 			template <typename TResult>
@@ -334,6 +336,8 @@ namespace cotasklib
 
 				std::map<AwaiterID, AwaiterEntry> m_awaiterEntries;
 
+				OrderedExecutor<UpdateInputCallerID> m_updateInputExecutor;
+
 				OrderedExecutor<DrawerID> m_drawExecutor;
 
 				SceneFactory m_currentSceneFactory;
@@ -380,6 +384,7 @@ namespace cotasklib
 
 				void draw()
 				{
+					m_updateInputExecutor.call();
 					m_drawExecutor.call();
 				}
 
@@ -493,6 +498,26 @@ namespace cotasklib
 						throw Error{ U"Backend is not initialized" };
 					}
 					s_pInstance->update();
+				}
+
+				[[nodiscard]]
+				static UpdateInputCallerID AddUpdateInputCaller(std::function<void()> func, std::function<int32()> negativeDrawIndexFunc)
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+					return s_pInstance->m_updateInputExecutor.add(std::move(func), std::move(negativeDrawIndexFunc));
+				}
+
+				static void RemoveUpdateInputCaller(UpdateInputCallerID id)
+				{
+					if (!s_pInstance)
+					{
+						// Note: ユーザーがインスタンスをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
+						return;
+					}
+					s_pInstance->m_updateInputExecutor.remove(id);
 				}
 
 				[[nodiscard]]
@@ -793,6 +818,38 @@ namespace cotasklib
 			constexpr int32 FadeOutFront = 350001;
 			constexpr int32 FadeOutMax = 399999;
 		}
+
+		class ScopedUpdateInputCaller
+		{
+		private:
+			Optional<detail::UpdateInputCallerID> m_id;
+
+		public:
+			ScopedUpdateInputCaller(std::function<void()> func, std::function<int32()> negativeDrawIndexFunc)
+				: m_id(detail::Backend::AddUpdateInputCaller(std::move(func), std::move(negativeDrawIndexFunc)))
+			{
+			}
+
+			ScopedUpdateInputCaller(const ScopedUpdateInputCaller&) = delete;
+
+			ScopedUpdateInputCaller& operator=(const ScopedUpdateInputCaller&) = delete;
+
+			ScopedUpdateInputCaller(ScopedUpdateInputCaller&& rhs) noexcept
+				: m_id(rhs.m_id)
+			{
+				rhs.m_id.reset();
+			}
+
+			ScopedUpdateInputCaller& operator=(ScopedUpdateInputCaller&& rhs) = delete;
+
+			~ScopedUpdateInputCaller()
+			{
+				if (m_id.has_value())
+				{
+					detail::Backend::RemoveUpdateInputCaller(*m_id);
+				}
+			}
+		};
 
 		class ScopedDrawer
 		{

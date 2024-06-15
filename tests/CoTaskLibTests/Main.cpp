@@ -2904,11 +2904,42 @@ TEST_CASE("AsyncThread with move-only result")
 	REQUIRE(*result == 420);
 }
 
+Co::Task<int32> CoAwaitS3dAsyncTaskTest()
+{
+	const auto result = co_await s3d::Async([] { return 42; });
+	co_return result;
+}
+
+TEST_CASE("co_await s3d::AsyncTask")
+{
+	int32 result = 0;
+	const auto runner = CoAwaitS3dAsyncTaskTest().runScoped([&](int32 r) { result = r; });
+
+	// 通常の即時returnとは違って別スレッドなので、完了までに最低限の待機は必要
+	System::Update();
+	REQUIRE(runner.done() == true);
+	REQUIRE(result == 42);
+}
+
+TEST_CASE("WaitForResult(s3d::AsyncTask)")
+{
+	int32 result = 0;
+	const auto runner = Co::WaitForResult(s3d::Async([] { return 42; })).runScoped([&](int32 r) { result = r; });
+
+	// 通常の即時returnとは違って別スレッドなので、完了までに最低限の待機は必要
+	System::Update();
+	REQUIRE(runner.done() == true);
+	REQUIRE(result == 42);
+}
+
 void Main()
 {
 	Co::Init();
 
 	Console.open();
 	Catch::Session().run();
-	(void)std::getchar();
+
+	while (System::Update())
+	{
+	}
 }

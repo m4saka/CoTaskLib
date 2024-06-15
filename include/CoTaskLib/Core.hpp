@@ -30,11 +30,7 @@
 #include <Siv3D.hpp>
 #include <coroutine>
 
-#ifdef NO_COTASKLIB_USING
 namespace cotasklib
-#else
-inline namespace cotasklib
-#endif
 {
 	namespace Co
 	{
@@ -47,6 +43,7 @@ inline namespace cotasklib
 
 				virtual void resume() = 0;
 
+				[[nodiscard]]
 				virtual bool done() const = 0;
 			};
 
@@ -1880,3 +1877,7 @@ inline namespace cotasklib
 		}
 	}
 }
+
+#ifndef NO_COTASKLIB_USING
+using namespace cotasklib;
+#endif

@@ -29,11 +29,7 @@
 #pragma once
 #include "Core.hpp"
 
-#ifdef NO_COTASKLIB_USING
 namespace cotasklib
-#else
-inline namespace cotasklib
-#endif
 {
 	namespace Co
 	{
@@ -367,3 +363,7 @@ inline namespace cotasklib
 #endif
 	}
 }
+
+#ifndef NO_COTASKLIB_USING
+using namespace cotasklib;
+#endif

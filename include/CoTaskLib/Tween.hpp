@@ -30,11 +30,7 @@
 #include "Core.hpp"
 #include "Ease.hpp"
 
-#ifdef NO_COTASKLIB_USING
 namespace cotasklib
-#else
-inline namespace cotasklib
-#endif
 {
 	namespace Co
 	{
@@ -278,3 +274,7 @@ inline namespace cotasklib
 		};
 	}
 }
+
+#ifndef NO_COTASKLIB_USING
+using namespace cotasklib;
+#endif

@@ -35,3 +35,4 @@
 #include "CoTaskLib/Sequence.hpp"
 #include "CoTaskLib/ScreenFade.hpp"
 #include "CoTaskLib/SimpleDialog.hpp"
+#include "CoTaskLib/S3dAsyncTask.hpp"

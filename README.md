@@ -15,26 +15,26 @@ C++20の`co_await`/`co_return`キーワードを利用して、複数フレー�
 
 Co::Task<> MainTask()
 {
-	Print << U"Hello,";
-	co_await Co::Delay(1s); // 1秒待つ
+    Print << U"Hello,";
+    co_await Co::Delay(1s); // 1秒待つ
 
-	Print << U"World!";
-	co_await Co::Delay(1s); // 1秒待つ
+    Print << U"World!";
+    co_await Co::Delay(1s); // 1秒待つ
 
-	Print << U"Hello,";
-	co_await Co::Delay(1s); // 1秒待つ
+    Print << U"Hello,";
+    co_await Co::Delay(1s); // 1秒待つ
 
-	Print << U"CoTaskLib!";
+    Print << U"CoTaskLib!";
 }
 
 void Main()
 {
-	Co::Init();
+    Co::Init();
 
-	const auto _ = MainTask().runScoped();
-	while (System::Update())
-	{
-	}
+    const auto _ = MainTask().runScoped();
+    while (System::Update())
+    {
+    }
 }
 ```
 
@@ -48,34 +48,34 @@ void Main()
 
 Co::Task<> MainTask()
 {
-	co_await Co::SimpleDialog(U"こんにちは！\n私はCoTaskLibのサンプルプログラムです。");
+    co_await Co::SimpleDialog(U"こんにちは！\n私はCoTaskLibのサンプルプログラムです。");
 
-	// 「はい」を選ぶまで質問ダイアログを出し続ける
-	while (true)
-	{
-		const String choice = co_await Co::SimpleDialog(U"C++はお好きですか？", { U"はい", U"いいえ" });
-		if (choice == U"はい")
-		{
-			// 「はい」を選択した場合、ループを抜ける
-			co_await Co::SimpleDialog(U"素晴らしい！行ってよろしい。");
-			break;
-		}
-		else
-		{
-			// 「いいえ」を選択した場合、ループ継続
-			co_await Co::SimpleDialog(U"よく聞こえませんでしたねえ！\nもう一度聞きますね？？");
-		}
-	}
+    // 「はい」を選ぶまで質問ダイアログを出し続ける
+    while (true)
+    {
+        const String choice = co_await Co::SimpleDialog(U"C++はお好きですか？", { U"はい", U"いいえ" });
+        if (choice == U"はい")
+        {
+            // 「はい」を選択した場合、ループを抜ける
+            co_await Co::SimpleDialog(U"素晴らしい！行ってよろしい。");
+            break;
+        }
+        else
+        {
+            // 「いいえ」を選択した場合、ループ継続
+            co_await Co::SimpleDialog(U"よく聞こえませんでしたねえ！\nもう一度聞きますね？？");
+        }
+    }
 }
 
 void Main()
 {
-	Co::Init();
+    Co::Init();
 
-	const auto _ = MainTask().runScoped();
-	while (System::Update())
-	{
-	}
+    const auto _ = MainTask().runScoped();
+    while (System::Update())
+    {
+    }
 }
 ```
 
@@ -825,39 +825,39 @@ private:
 class EaseExample : public Co::SequenceBase<>
 {
 private:
-	Co::Tweener m_tweener;
+    Co::Tweener m_tweener;
 
-	Co::Task<> fadeIn() override
-	{
-		// 0.5秒かけて、左からフェードイン＆スケール拡大
-		co_await Co::All(
-			m_tweener.tweenPosition(0.5s).from(-100, 0).to(0, 0).play(),
-			m_tweener.fadeInAlpha(0.5s).play(),
-			m_tweener.tweenScale(0.5s).from(0.75, 0.75).to(1.0, 1.0).play());
-	}
+    Co::Task<> fadeIn() override
+    {
+        // 0.5秒かけて、左からフェードイン＆スケール拡大
+        co_await Co::All(
+            m_tweener.tweenPosition(0.5s).from(-100, 0).to(0, 0).play(),
+            m_tweener.fadeInAlpha(0.5s).play(),
+            m_tweener.tweenScale(0.5s).from(0.75, 0.75).to(1.0, 1.0).play());
+    }
 
-	Co::Task<> start() override
-	{
-		// Enterキーが押されるまで待機
-		co_await Co::WaitForDown(KeyEnter);
-	}
+    Co::Task<> start() override
+    {
+        // Enterキーが押されるまで待機
+        co_await Co::WaitForDown(KeyEnter);
+    }
 
-	Co::Task<> fadeOut() override
-	{
-		// 0.5秒かけて、右へフェードアウト＆スケール縮小
-		co_await Co::All(
-			m_tweener.tweenPosition(0.5s).from(0, 0).to(100, 0).play(),
-			m_tweener.fadeOutAlpha(0.5s).play(),
-			m_tweener.tweenScale(0.5s).from(1.0, 1.0).to(0.75, 0.75).play());
-	}
+    Co::Task<> fadeOut() override
+    {
+        // 0.5秒かけて、右へフェードアウト＆スケール縮小
+        co_await Co::All(
+            m_tweener.tweenPosition(0.5s).from(0, 0).to(100, 0).play(),
+            m_tweener.fadeOutAlpha(0.5s).play(),
+            m_tweener.tweenScale(0.5s).from(1.0, 1.0).to(0.75, 0.75).play());
+    }
 
-	void draw() const override
-	{
-		// トゥイーンをこのスコープに適用
-		const auto _ = m_tweener.applyScoped();
+    void draw() const override
+    {
+        // トゥイーンをこのスコープに適用
+        const auto _ = m_tweener.applyScoped();
 
-		Circle{ Scene::Center(), 100 }.draw();
-	}
+        Circle{ Scene::Center(), 100 }.draw();
+    }
 };
 ```
 

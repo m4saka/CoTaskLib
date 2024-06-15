@@ -3,7 +3,7 @@ Siv3D用コルーチンタスクライブラリ。ヘッダオンリー。
 
 C++20の`co_await`/`co_return`キーワードを利用して、複数フレームにまたがる処理を見通しの良いシンプルなコードで実装できます。
 
-本ライブラリでは、タスクはSiv3Dの`System::Update()`内でメインスレッドのみを使用して実行されるため、メインスレッドの使用が想定されているSiv3Dの各種機能についても問題なく使用できます。
+本ライブラリはSiv3Dの`System::Update()`が実行されるタイミングでメインスレッドのみを使用してタスク実行しているため、Siv3Dのメインスレッド専用の各種機能についても問題なく使用できます。
 
 ## `Co::Task<TResult>`クラス
 コルーチンで実行するタスクのクラスです。結果の型をテンプレートパラメータ`TResult`で指定します。  
@@ -858,10 +858,55 @@ private:
 - `Co::HasActiveFadeOut()` -> `bool`
     - FadeOutカテゴリのdrawIndexを持つDrawerが存在するかどうかを返します。
     - `Co::HasActiveDrawerInRange(Co::DrawIndex::FadeOutMin, Co::DrawIndex::FadeOutMax)`と同義です。
-- `Co::AsyncThread(Func, Args...)` -> `Co::Task<TResult>`
-    - 関数を別スレッドで実行して完了まで待機し、その関数の戻り値を返します。
-    - 第2引数以降に、関数に渡す引数を指定することができます。
-    - Co名前空間内の関数およびOpenSiv3Dの多くの機能はメインスレッド以外での使用が想定されていないため、別スレッドで実行する関数内で使用することはできません。
+
+## `co_await`で待機可能なSiv3Dクラス一覧
+
+### `s3d::AsyncTask<TResult>`
+`isReady()`がtrueを返すまで待機し、`TResult`型の結果を返します。
+
+このクラスはコピー構築不可のため、変数を介さずに直接`co_await`に渡すか、変数を`std::move`を使用して右辺値参照へキャストしてから`co_await`に渡してください。
+
+なお、`s3d::Async()`へ渡した関数はメインスレッドとは別のスレッドで実行されます。Siv3Dの各種機能や、本ライブラリの機能(`Co`名前空間内の関数等)はメインスレッド以外のスレッドでは使用できないためご注意ください。
+
+```cpp
+int32 HeavyFunction()
+{
+    // 例として重い処理を時間待ちで再現
+    std::this_thread::sleep_for(1s);
+    return 42;
+}
+
+Co::Task<> ProcessHeavyFunction()
+{
+    // Siv3DのAsync関数でs3d::AsyncTaskを生成し、結果を待機
+    int32 result = co_await Async(HeavyFunction);
+
+    // ...
+}
+```
+
+### `s3d::AsyncHTTPTask`
+`isReady()`がtrueを返すまで待機し、`getResponse()`の結果を`HTTPResponse`型で返します。
+
+このクラスは内部でshared_ptrを使用しておりコピー構築可能なので、変数に持っておいて`co_await`にコピーを渡す形で使用できます。
+
+```cpp
+Co::Task<> JSONAPITest()
+{
+    // Siv3DのSimpleHTTPでHTTPアクセスし、結果を待機する
+    AsyncHTTPTask httpTask = SimpleHTTP::GetAsync(U"https://jsonplaceholder.typicode.com/posts/1", {});
+    HTTPResponse res = co_await httpTask;
+    if (res.isOK())
+    {
+        // 取得結果を表示
+        Print << httpTask.getAsJSON();
+    }
+    else
+    {
+        Print << U"取得に失敗";
+    }
+}
+```
 
 ## サンプル
 

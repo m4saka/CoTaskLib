@@ -5,6 +5,28 @@ C++20の`co_await`/`co_return`キーワードを利用して、複数フレー�
 
 本ライブラリは基本的にメインスレッドのみで動作するため、Siv3Dのメインスレッド専用の各種機能も問題なく使用できます。
 
+## 主な機能一覧
+- タスク(`Co::Task`):
+    - 複数フレームにまたがる処理を1つの関数として記述できます。
+    - 戻り値を返すこともできます。
+- シーケンス(`Co::SequenceBase`):
+    - タスクに加えて、毎フレームの描画処理(draw関数)を実装できます。
+    - 必要に応じて、フェードイン・フェードアウト処理を実装するための仮想関数も用意されています。
+    - タスクと同様、戻り値を返すこともできます。
+- シーン(`Co::SceneBase`)
+    - ゲーム内のシーンをコルーチンで記述できます。
+    - シーン同士は互いに遷移できます。それ以外の使い方はシーケンスとほぼ同じです。
+- Updater(`Co::UpdaterTask`、`Co::UpdaterSeqenceBase`、`Co::UpdaterSceneBase`)
+    - 毎フレームの処理(update関数)で記述した既存処理を、そのままタスク・シーケンス・シーンとして移植できます
+- イージング(`Co::Ease`)
+    - 変数の値を時間をかけて滑らかに推移できます
+- トゥイーン(`Co::Tween`)
+    - 描画するものの位置・スケール・不透明度・色などを時間をかけて滑らかに推移できます
+- 文字送り(`Co::Typewriter`)
+    - ノベルゲームのように文字列を1文字ずつ表示する処理が簡単に実装できます
+- Siv3D標準の非同期タスク機能(`s3d::AsyncTask`/`s3d::AsyncHTTPTask`)との連携
+    - `co_await`キーワードでタスクの代わりとしてそのまま使用できます
+
 ## `Co::Task<TResult>`クラス
 コルーチンで実行するタスクを表すクラスです。結果の型はテンプレートパラメータ`TResult`で指定します。
 結果が不要な場合は、`Co::Task<>`(`Co::Task<void>`と同じ)を使用します。
@@ -719,7 +741,7 @@ private:
     - イージングを再生するタスクを取得します。
 
 ## 文字送り
-`Co::Typewriter()`関数を使うと、ノベルゲームのように1文字ずつ文字を表示する処理が簡単に実装できます。
+`Co::Typewriter()`関数を使うと、ノベルゲームのように文字列を1文字ずつ表示する処理が簡単に実装できます。
 
 ```cpp
 class TypewriterExample : public Co::SequenceBase<void>
@@ -861,6 +883,8 @@ private:
 
 ## `co_await`で待機可能なSiv3Dクラス一覧
 
+Siv3D標準の下記クラスは`co_await`キーワードで使用することができます。
+
 ### `s3d::AsyncTask<TResult>`
 `isReady()`がtrueを返すまで待機し、`TResult`型の結果を返します。
 
@@ -904,100 +928,6 @@ Co::Task<> JSONAPITest()
     else
     {
         Print << U"取得に失敗";
-    }
-}
-```
-
-## サンプル
-
-### サンプル1: 時間待ち
-
-「Hello, ○○!」、「Nice to meet you!」というメッセージを、1秒間の時間待ちを挟みながら順番に表示するサンプルです。
-
-```cpp
-#include <Siv3D.hpp>
-#include <CoTaskLib.hpp>
-
-Co::Task<> Greet(const String name) // 注意: コルーチンには参照を渡さないこと
-{
-    Print << U"Hello, " << name << U"!";
-    co_await Co::Delay(1s);
-    Print << U"Nice to meet you!";
-    co_await Co::Delay(1s);
-}
-
-Co::Task<> ShowMessages()
-{
-    co_await Greet(U"World");
-    co_await Greet(U"Siv3D");
-    co_await Greet(U"Co::Task");
-}
-
-void Main()
-{
-    Co::Init();
-
-    const auto runner = ShowMessages().runScoped();
-    while (System::Update())
-    {
-    }
-}
-```
-
-### サンプル2: 質問ダイアログ
-
-質問文とテキストボックスを表示し、ユーザーが「OK」ボタンを押したタイミングでテキストボックスの内容を返却するサンプルです。
-コルーチンからco_returnで返却した戻り値はco_awaitで受け取ることができます。
-
-```cpp
-#include <Siv3D.hpp>
-#include <CoTaskLib.hpp>
-
-Co::Task<String> ShowQuestion(const String question) // 注意: コルーチンには参照を渡さないこと
-{
-    Font font(30);
-    TextEditState textEditState;
-
-    while (true)
-    {
-        font(question).draw(40, 40);
-
-        SimpleGUI::TextBox(textEditState, { 40, 120 }, 400);
-
-        if (SimpleGUI::Button(U"OK", { 450, 120 }, 100))
-        {
-            MouseL.clearInput();
-            co_return textEditState.text;
-        }
-
-        co_await Co::NextFrame();
-    }
-}
-
-Co::Task<> MainTask()
-{
-    const String name = co_await ShowQuestion(U"あなたの名前は？");
-
-    const int32 rand1 = Random(1, 10);
-    const int32 rand2 = Random(1, 10);
-    const String answer = co_await ShowQuestion(U"こんにちは、{}さん！{}+{}は何でしょう？"_fmt(name, rand1, rand2));
-    if (ParseOpt<int32>(answer) == rand1 + rand2)
-    {
-        Print << U"正解！";
-    }
-    else
-    {
-        Print << U"不正解！";
-    }
-}
-
-void Main()
-{
-    Co::Init();
-
-    const auto mainTaskRunner = MainTask().runScoped();
-    while (System::Update())
-    {
     }
 }
 ```

@@ -1,7 +1,9 @@
 # CoTaskLib for Siv3D
-Siv3D用コルーチンタスクライブラリ(試験的)。ヘッダオンリー。
+Siv3D用コルーチンタスクライブラリ。ヘッダオンリー。
 
 C++20の`co_await`/`co_return`キーワードを利用して、複数フレームにまたがる処理を見通しの良いシンプルなコードで実装できます。
+
+本ライブラリでは、タスクはSiv3Dの`System::Update()`内でメインスレッドのみを使用して実行されるため、メインスレッドの使用が想定されているSiv3Dの各種機能についても問題なく使用できます。
 
 ## `Co::Task<TResult>`クラス
 コルーチンで実行するタスクのクラスです。結果の型をテンプレートパラメータ`TResult`で指定します。  
@@ -644,7 +646,7 @@ private:
 - `requestSceneFinish()`関数
     - シーンを完了し、次のシーンへ遷移しません。
 
-これらの関数は、`update()`関数(またはコンストラクタ)内で呼び出されることが想定されています。それ以降のタイミング(`fadeOut()`関数等)で呼び出すことにより次シーンを上書きすることも可能ですが、その前提として`update()`のループ実行を終了させておく必要があるため、一度`update()`関数(またはコンストラクタ)内で呼び出しておく必要があります。
+`Co::UpdaterSceneBase`では、次シーンのリクエスト操作が`update()`の終了条件にも使用されます。そのため、通常の`Co::SceneBase`とは異なり`update()`より後に実行される関数(`fadeOut()`等)で次シーンを設定することはできません。
 
 ```cpp
 void update() override
@@ -717,7 +719,7 @@ private:
     - イージングを再生するタスクを取得します。
 
 ## 文字送り
-`Co::Typewriter()`関数を使うと、1文字ずつ文字表示する処理が簡単に実装できます。
+`Co::Typewriter()`関数を使うと、ノベルゲームのように1文字ずつ文字を表示する処理が簡単に実装できます。
 
 ```cpp
 class TypewriterExample : public Co::SequenceBase<void>
@@ -771,9 +773,9 @@ private:
 - `Co::WaitForever()` -> `Co::Task<>`
     - 永久に待機します。
     - Tips: 終了しないシーケンスの`start()`関数に使用できます。
-- `Co::WaitUntil(std::function<bool()>)` -> `Co::Task<>`
+- `Co::WaitUntil(Func<bool()>)` -> `Co::Task<>`
     - 指定された関数を毎フレーム実行し、結果がfalseの間、待機します。
-- `Co::WaitWhile(std::function<bool()>)` -> `Co::Task<>`
+- `Co::WaitWhile(Func<bool()>)` -> `Co::Task<>`
     - 指定された関数を毎フレーム実行し、結果がtrueの間、待機します。
 - `Co::WaitForResult(const Optional<T>*)` -> `Co::Task<T>`
     - `Optional`の`has_value()`関数がtrueを返すまで待機し、値を返します。
@@ -803,6 +805,8 @@ private:
     - マウスの右ボタンが指定領域でクリックされてから離されるまで待機します。
 - `Co::WaitForMouseOver(TArea)` -> `Co::Task<>`
     - マウスカーソルが指定領域内に侵入するまで待機します。
+- `Co::FromResult(TResult)` -> `Co::Task<TResult>`
+    - 指定した値を即座に返すタスクを生成します。
 - `Co::UpdaterTask(std::function<void()>)` -> `Co::Task<>`
     - 指定された関数を毎フレーム実行し続けるタスクを生成します。
 - `Co::UpdaterTask<TResult>(std::function<void(TaskFinishSource<TResult>&)>)` -> `Co::Task<>`
@@ -836,7 +840,7 @@ private:
     - `TSequence`クラスのインスタンスを構築し、それを実行するタスクを返します。
     - `TSequence`クラスは`Co::SequenceBase<TResult>`の派生クラスである必要があります。
     - 引数には、`TSequence`のコンストラクタの引数を指定します。
-- `Co::PlaySceneFrom<TScene>(...)` -> `Co::Task<>`
+- `Co::PlaySceneFrom<TScene>(Args...)` -> `Co::Task<>`
     - `TScene`クラスのインスタンスを構築し、それを開始シーンとした一連のシーン実行のタスクを返します。
     - `TScene`クラスは`Co::SceneBase`の派生クラスである必要があります。
     - 引数には、`TScene`のコンストラクタの引数を指定します。
@@ -854,6 +858,10 @@ private:
 - `Co::HasActiveFadeOut()` -> `bool`
     - FadeOutカテゴリのdrawIndexを持つDrawerが存在するかどうかを返します。
     - `Co::HasActiveDrawerInRange(Co::DrawIndex::FadeOutMin, Co::DrawIndex::FadeOutMax)`と同義です。
+- `Co::AsyncThread(Func, Args...)` -> `Co::Task<TResult>`
+    - 関数を別スレッドで実行して完了まで待機し、その関数の戻り値を返します。
+    - 第2引数以降に、関数に渡す引数を指定することができます。
+    - Co名前空間内の関数およびOpenSiv3Dの多くの機能はメインスレッド以外での使用が想定されていないため、別スレッドで実行する関数内で使用することはできません。
 
 ## サンプル
 

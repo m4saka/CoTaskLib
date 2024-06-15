@@ -155,7 +155,6 @@ namespace cotasklib
 
 				HTTPResponse await_resume()
 				{
-					Print << U"await_resume";
 					return m_asyncHTTPTask.getResponse();
 				}
 			};
@@ -178,7 +177,6 @@ namespace cotasklib
 	[[nodiscard]]
 	inline auto operator co_await(const AsyncHTTPTask& asyncHTTPTask)
 	{
-		Print << U"co_await";
 		return Co::detail::S3dAsyncHTTPTaskAwaiter{ asyncHTTPTask };
 	}
 

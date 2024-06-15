@@ -1865,16 +1865,6 @@ namespace cotasklib
 				co_await NextFrame();
 			}
 		}
-
-		template <typename TFunc, typename... Args>
-		[[nodiscard]]
-		auto AsyncThread(TFunc func, Args... args) -> Task<std::invoke_result_t<TFunc, Args...>>
-			requires std::invocable<TFunc, Args...>
-		{
-			auto future = std::async(std::launch::async, std::move(func), std::move(args)...);
-			co_await WaitUntil([&future] { return future.valid() && future.wait_for(std::chrono::seconds(0)) == std::future_status::ready; });
-			co_return future.get();
-		}
 	}
 }
 

@@ -2806,10 +2806,17 @@ TEST_CASE("Co::Typewriter with total duration")
 	REQUIRE(value == U"TEST");
 }
 
-TEST_CASE("AsyncThread immediate")
+template <typename Func, typename... Args>
+auto AsyncTaskCaller(Func func, Args... args) -> Co::Task<std::invoke_result_t<Func, Args...>>
+	requires std::is_invocable_v<Func, Args...>
+{
+	co_return co_await Async(func, std::move(args)...);
+}
+
+TEST_CASE("s3d::AsyncTask immediate")
 {
 	int32 value = 0;
-	const auto runner = Co::AsyncThread([] { return 42; }).runScoped([&value](int32 result) { value = result; });
+	const auto runner = AsyncTaskCaller([] { return 42; }).runScoped([&value](int32 result) { value = result; });
 
 	// 通常の即時returnとは違って別スレッドなので、完了までに最低限の待機は必要
 	System::Update();
@@ -2817,14 +2824,14 @@ TEST_CASE("AsyncThread immediate")
 	REQUIRE(value == 42);
 }
 
-TEST_CASE("AsyncThread with sleep")
+TEST_CASE("s3d::AsyncTask with sleep")
 {
 	std::atomic<int32> value = 0;
 
 	// 完了に十分な時間待つ
 	const auto wait = Co::Delay(0.5s).runScoped();
 	{
-		const auto runner = Co::AsyncThread([] { std::this_thread::sleep_for(0.01s); return 42; }).runScoped([&value](int32 result) { value = result; });
+		const auto runner = AsyncTaskCaller([] { std::this_thread::sleep_for(0.01s); return 42; }).runScoped([&value](int32 result) { value = result; });
 		REQUIRE(runner.done() == false);
 		REQUIRE(value == 0);
 
@@ -2837,7 +2844,7 @@ TEST_CASE("AsyncThread with sleep")
 	REQUIRE(value == 42);
 }
 
-TEST_CASE("AsyncThread with sleep canceled")
+TEST_CASE("s3d::AsyncTask with sleep canceled")
 {
 	std::atomic<int32> value = 0;
 	int32 finishCallbackCOunt = 0;
@@ -2845,7 +2852,7 @@ TEST_CASE("AsyncThread with sleep canceled")
 
 	// 完了に不十分な時間しか待たない場合も、タスク自体はキャンセルされるが、std::futureの破棄タイミングでスレッド終了を待機するため実行は最後までされることを確認
 	{
-		const auto runner = Co::AsyncThread([&] { std::this_thread::sleep_for(0.2s); value = 42; })
+		const auto runner = AsyncTaskCaller([&] { std::this_thread::sleep_for(0.2s); value = 42; })
 			.runScoped([&]() { ++finishCallbackCOunt; }, [&]() { ++cancelCallbackCount; });
 		REQUIRE(runner.done() == false);
 		REQUIRE(value == 0);
@@ -2861,13 +2868,13 @@ TEST_CASE("AsyncThread with sleep canceled")
 	REQUIRE(cancelCallbackCount == 1);
 }
 
-TEST_CASE("AsyncThread with exception")
+TEST_CASE("s3d::AsyncTask with exception")
 {
 	std::atomic<int32> value = 0;
 	int32 finishCallbackCOunt = 0;
 	int32 cancelCallbackCount = 0;
 
-	auto task = Co::AsyncThread([&] { std::this_thread::sleep_for(0.01s); throw std::runtime_error("test exception"); value = 42; })
+	auto task = AsyncTaskCaller([&] { std::this_thread::sleep_for(0.01s); throw std::runtime_error("test exception"); value = 42; })
 		.runScoped([&]() { ++finishCallbackCOunt; }, [&]() { ++cancelCallbackCount; });
 	REQUIRE(value == 0);
 
@@ -2889,12 +2896,12 @@ TEST_CASE("AsyncThread with exception")
 	REQUIRE(cancelCallbackCount == 1);
 }
 
-TEST_CASE("AsyncThread with move-only result")
+TEST_CASE("s3d::AsyncTask with move-only result")
 {
 	std::unique_ptr<int32> result = nullptr;
 
 	// ムーブオンリー型の結果も取得できる
-	const auto runner = Co::AsyncThread([](int32 value) { return std::make_unique<int32>(value * 10); }, 42)
+	const auto runner = AsyncTaskCaller([](int32 value) { return std::make_unique<int32>(value * 10); }, 42)
 		.runScoped([&](std::unique_ptr<int32>&& r) { result = std::move(r); });
 
 	// 通常の即時returnとは違って別スレッドなので、完了までに最低限の待機は必要
@@ -2902,23 +2909,6 @@ TEST_CASE("AsyncThread with move-only result")
 	REQUIRE(runner.done() == true);
 	REQUIRE(result != nullptr);
 	REQUIRE(*result == 420);
-}
-
-Co::Task<int32> CoAwaitS3dAsyncTaskTest()
-{
-	const auto result = co_await s3d::Async([] { return 42; });
-	co_return result;
-}
-
-TEST_CASE("co_await s3d::AsyncTask")
-{
-	int32 result = 0;
-	const auto runner = CoAwaitS3dAsyncTaskTest().runScoped([&](int32 r) { result = r; });
-
-	// 通常の即時returnとは違って別スレッドなので、完了までに最低限の待機は必要
-	System::Update();
-	REQUIRE(runner.done() == true);
-	REQUIRE(result == 42);
 }
 
 TEST_CASE("WaitForResult(s3d::AsyncTask)")

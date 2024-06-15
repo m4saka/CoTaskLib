@@ -5,6 +5,37 @@ C++20の`co_await`/`co_return`キーワードを利用して、複数フレー�
 
 本ライブラリは基本的にメインスレッドのみで動作するため、Siv3Dのメインスレッド専用の各種機能も問題なく使用できます。
 
+![サンプルコード実行の様子](docs/screenshot_1.gif)
+
+```cpp
+#include <Siv3D.hpp>
+#include <CoTaskLib.hpp>
+
+Co::Task<> MainTask()
+{
+	Print << U"Hello,";
+	co_await Co::Delay(1s); // 1秒待つ
+
+	Print << U"World!";
+	co_await Co::Delay(1s); // 1秒待つ
+
+	Print << U"Hello,";
+	co_await Co::Delay(1s); // 1秒待つ
+
+	Print << U"CoTaskLib!";
+}
+
+void Main()
+{
+	Co::Init();
+
+	const auto _ = MainTask().runScoped();
+	while (System::Update())
+	{
+	}
+}
+```
+
 ## 主な機能一覧
 - タスク(`Co::Task`):
     - 複数フレームにまたがる処理を1つの関数として記述できます。
@@ -14,7 +45,7 @@ C++20の`co_await`/`co_return`キーワードを利用して、複数フレー�
     - 必要に応じて、フェードイン・フェードアウト処理を実装するための仮想関数も用意されています。
     - タスクと同様、戻り値を返すこともできます。
 - シーン(`Co::SceneBase`)
-    - ゲーム内のシーンをコルーチンで記述できます。
+    - ゲーム内のシーンをタスクで記述できます。
     - シーン同士は互いに遷移できます。それ以外の使い方はシーケンスとほぼ同じです。
 - Updater(`Co::UpdaterTask`、`Co::UpdaterSeqenceBase`、`Co::UpdaterSceneBase`)
     - 毎フレームの処理(update関数)で記述した既存処理を、そのままタスク・シーケンス・シーンとして移植できます

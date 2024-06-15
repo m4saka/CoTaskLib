@@ -3,14 +3,14 @@ Siv3D用コルーチンタスクライブラリ。ヘッダオンリー。
 
 C++20の`co_await`/`co_return`キーワードを利用して、複数フレームにまたがる処理を見通しの良いシンプルなコードで実装できます。
 
-本ライブラリはSiv3Dの`System::Update()`が実行されるタイミングでメインスレッドのみを使用してタスク実行しているため、Siv3Dのメインスレッド専用の各種機能についても問題なく使用できます。
+本ライブラリは基本的にメインスレッドのみで動作するため、Siv3Dのメインスレッド専用の各種機能についても問題なく使用できます。
 
 ## `Co::Task<TResult>`クラス
 コルーチンで実行するタスクのクラスです。結果の型をテンプレートパラメータ`TResult`で指定します。  
 結果を返す必要がない場合、`Co::Task<>`(`Co::Task<void>`)を使用します。
 
 #### 戻り値がない場合の例:
-クリックしたタイミングで完了します。
+クリックしたタイミングで完了する例です。
 
 ```cpp
 Co::Task<> ExampleTask()
@@ -23,7 +23,7 @@ Co::Task<> ExampleTask()
 ```
 
 #### 戻り値がある場合の例:
-クリックまたは右クリックしたタイミングで完了し、呼び出し元へ文字列を返します。
+クリックまたは右クリックしたタイミングで完了し、呼び出し元へ文字列を返す例です。
 
 ```cpp
 Co::Task<String> ExampleTaskWithResult()
@@ -72,8 +72,10 @@ Co::Task<String> ExampleTaskWithResult()
 `runScoped`関数を使用します。
 
 ```cpp
-const auto taskRunner = ExampleTask().runScoped();
+const auto runner = ExampleTask().runScoped();
 ```
+
+タスクは、上記の`runner`変数(`Co::ScopedTaskRunner`型)が有効な間、バックグラウンドで実行されます。もしタスク実行の途中で`runner`が破棄された場合、タスク実行は途中で終了されます。
 
 #### コルーチン内から実行する場合
 `co_await`へ渡すことで、`Co::Task`を実行して完了まで待機できます。
@@ -207,7 +209,7 @@ private:
 もしシーケンスクラスのコンストラクタに引数が必要な場合、`Co::Play`関数の引数として渡すことができます。
 
 ```cpp
-const auto taskRunner = Co::Play<ExampleSequence>().runScoped();
+const auto runner = Co::Play<ExampleSequence>().runScoped();
 ```
 
 上記の書き方では、シーケンスのインスタンスへ外部からアクセスすることはできません。  
@@ -215,7 +217,7 @@ const auto taskRunner = Co::Play<ExampleSequence>().runScoped();
 
 ```cpp
 ExampleSequence exampleSequence{};
-const auto taskRunner = exampleSequence.playScoped();
+const auto runner = exampleSequence.playScoped();
 
 // シーケンスクラスのインスタンスへ操作可能(※一例)
 exampleSequence.setText(U"テキスト");
@@ -486,10 +488,10 @@ private:
 全てのシーンが終了した場合にプログラムを終了するためには、下記のように`done()`関数でタスクの完了を確認してwhileループを抜けます。
 
 ```cpp
-const auto taskRunner = Co::PlaySceneFrom<ExampleScene>().runScoped();
+const auto runner = Co::PlaySceneFrom<ExampleScene>().runScoped();
 while (System::Update())
 {
-    if (taskRunner.done())
+    if (runner.done())
     {
         break;
     }
@@ -937,7 +939,7 @@ void Main()
 {
     Co::Init();
 
-    const auto taskRunner = ShowMessages().runScoped();
+    const auto runner = ShowMessages().runScoped();
     while (System::Update())
     {
     }

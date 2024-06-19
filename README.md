@@ -221,7 +221,7 @@ Co::Task<> ExampleTask()
 シーケンス同士は`co_await`を利用して入れ子構造にできます。そのため、単純なシーケンスを複数組み合わせて複雑なシーケンスを作成することができます。
 
 ```cpp
-class ExampleSequence : public Co::SequenceBase<void>
+class ExampleSequence : public Co::SequenceBase<>
 {
 private:
     Co::Task<> start() override
@@ -351,7 +351,7 @@ Co::Task<> ExampleTask()
 このような誤操作を防ぐために、`start`関数などをオーバーライドする際はアクセス指定子をprivate(継承を想定する場合はprotected)にしておくことを推奨します。
 
 ```cpp
-class ExampleSequence : public Co::SequenceBase<void>
+class ExampleSequence : public Co::SequenceBase<>
 {
 private: // 基本的にprivateにしておくことを推奨
     Co::Task<> start() override
@@ -369,7 +369,7 @@ private: // 基本的にprivateにしておくことを推奨
 `Co::UpdaterSequenceBase`は`Co::SequenceBase`の派生クラスです。したがって、`Co::UpdaterSequenceBase`を継承した場合でもシーケンスの実行方法に違いはありません。
 
 ```cpp
-class ExampleUpdaterSequence : public Co::UpdaterSequenceBase<void>
+class ExampleUpdaterSequence : public Co::UpdaterSequenceBase<>
 {
 private:
     void update() override
@@ -594,18 +594,6 @@ while (System::Update())
 }
 ```
 
-### Siv3D標準のシーン機能との比較
-
-下記の点が異なります。
-
-- CoTaskLibのシーン機能には、SceneManagerのようなマネージャークラスがありません。遷移先シーンのクラスは直接`Co::PlaySceneFrom()`関数または`requestNextScene()`関数のテンプレート引数として指定するため、シーン名の登録などが必要ありません。
-- CoTaskLibでは、シーンクラスのコンストラクタに引数を持たせることができます。そのため、遷移元のシーンから必要なデータを受け渡すことができます。
-    - Siv3D標準のシーン機能にある`getData()`のような、シーン間でグローバルにデータを受け渡すための機能は提供していません。代わりに、シーンクラスのコンストラクタに引数を用意して受け渡してください。
-- CoTaskLibのシーンクラスでは、毎フレーム実行されるupdate関数の代わりに、`start()`関数というコルーチン関数を実装します。
-    - update関数を使用したい場合、下記のいずれかの方法を使用してください。
-        - 方法1: `SceneBase`クラスの代わりに`UpdaterSceneBase`クラスを基底クラスとして使用する(`UpdaterSceneBase`の詳細は後述)
-        - 方法2: 自前で`update()`関数を用意し、`start()`関数内に`const auto runner = Co::UpdaterTask([this] { update(); }).runScoped();`と記述することで、`update()`関数が毎フレーム実行されるようにする
-
 ### 次のシーンの指定方法
 
 次のシーンへ遷移するには、基底クラスに実装されている`requestNextScene()`関数を実行します。  
@@ -638,6 +626,19 @@ Co::Task<> start() override
     }
 }
 ```
+
+### Siv3D標準のシーン機能との比較
+
+下記の点が異なります。
+
+- CoTaskLibのシーン機能には、SceneManagerのようなマネージャークラスがありません。遷移先シーンのクラスは直接`Co::PlaySceneFrom()`関数または`requestNextScene()`関数のテンプレート引数として指定するため、シーン名の登録などが必要ありません。
+- CoTaskLibでは、シーンクラスのコンストラクタに引数を持たせることができます。そのため、遷移元のシーンから必要なデータを受け渡すことができます。
+    - Siv3D標準のシーン機能にある`getData()`のような、シーン間でグローバルにデータを受け渡すための機能は提供していません。代わりに、シーンクラスのコンストラクタに引数を用意して受け渡してください。
+- CoTaskLibのシーンクラスでは、毎フレーム実行されるupdate関数の代わりに、`start()`関数というコルーチン関数を実装します。
+    - update関数を使用したい場合、下記のいずれかの方法を使用してください。
+        - 方法1: `SceneBase`クラスの代わりに`UpdaterSceneBase`クラスを基底クラスとして使用する(`UpdaterSceneBase`の詳細は後述)
+        - 方法2: 自前で`update()`関数を用意し、`start()`関数内に`const auto runner = Co::UpdaterTask([this] { update(); }).runScoped();`と記述することで、`update()`関数が毎フレーム実行されるようにする
+        - 方法3: `start()`関数内に`while (true) { /*毎フレーム実行したい処理*/ co_await NextFrame(); }`のように記述し、1フレームおきに処理が実行されるようにする
 
 ## `Co::UpdaterSceneBase`クラス
 
@@ -772,7 +773,7 @@ void update() override
 `Co::Ease<T>()`および`Co::LinearEase<T>()`関数を使うと、ある値からある値へ滑らかに値を推移させるタスクを実行できます。
 
 ```cpp
-class EaseExample : public Co::SequenceBase<void>
+class EaseExample : public Co::SequenceBase<>
 {
 private:
     Vec2 m_position;
@@ -780,7 +781,7 @@ private:
     Co::Task<> start() override
     {
         // 3秒かけて(100,100)から(700,500)へ推移させる。その値を毎フレームm_positionへ代入
-        co_await Co::Ease<Vec2>(&m_position, 3s)
+        co_await Co::Ease(&m_position, 3s)
             .from(100, 100)
             .to(700, 500)
             .play();
@@ -865,7 +866,7 @@ private:
 `Co::Typewriter()`関数を使うと、ノベルゲームのように文字列を1文字ずつ表示する処理が簡単に実装できます。
 
 ```cpp
-class TypewriterExample : public Co::SequenceBase<void>
+class TypewriterExample : public Co::SequenceBase<>
 {
 private:
     Font m_font{ 30 };

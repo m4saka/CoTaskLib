@@ -233,10 +233,7 @@ namespace cotasklib
 
 				{
 					const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
-
-					// start内の先頭でwaitForFadeInを呼んだ場合に正常に待てるよう、先にfadeInTaskを生成して初回resumeでm_isFadingInをtrueにしている点に注意
-					auto fadeInTask = fadeInInternal();
-					co_await startAndFadeOut().with(std::move(fadeInTask), WithTiming::Before);
+					co_await startAndFadeOut().with(fadeInInternal(), WithTiming::Before);
 				}
 
 				{

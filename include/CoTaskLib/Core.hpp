@@ -1182,8 +1182,8 @@ namespace cotasklib
 				static_assert(!std::is_const_v<TResult>, "TResult must not have 'const' qualifier");
 
 			private:
-				std::promise<TResult> m_value;
-				bool m_isResultSet = false;
+				std::unique_ptr<TResult> m_value;
+				std::exception_ptr m_exception;
 				bool m_resultConsumed = false;
 
 			public:
@@ -1195,20 +1195,18 @@ namespace cotasklib
 
 				void return_value(const TResult& v) requires std::is_copy_constructible_v<TResult>
 				{
-					m_value.set_value(v);
-					m_isResultSet = true;
+					m_value = std::make_unique<TResult>(v);
 				}
 
 				void return_value(TResult&& v)
 				{
-					m_value.set_value(std::move(v));
-					m_isResultSet = true;
+					m_value = std::make_unique<TResult>(std::move(v));
 				}
 
 				[[nodiscard]]
 				TResult value()
 				{
-					if (!m_isResultSet)
+					if (!m_value && !m_exception)
 					{
 						throw Error{ U"Task is not completed. Make sure that all paths in the coroutine return a value." };
 					}
@@ -1217,7 +1215,11 @@ namespace cotasklib
 						throw Error{ U"Task result can be get only once." };
 					}
 					m_resultConsumed = true;
-					return m_value.get_future().get();
+					if (m_exception)
+					{
+						std::rethrow_exception(m_exception);
+					}
+					return std::move(*m_value);
 				}
 
 				[[nodiscard]]
@@ -1228,8 +1230,7 @@ namespace cotasklib
 
 				void unhandled_exception()
 				{
-					m_value.set_exception(std::current_exception());
-					m_isResultSet = true;
+					m_exception = std::current_exception();
 				}
 			};
 
@@ -1237,7 +1238,7 @@ namespace cotasklib
 			class Promise<void> : public PromiseBase
 			{
 			private:
-				std::promise<void> m_value;
+				std::exception_ptr m_exception;
 				bool m_isResultSet = false;
 				bool m_resultConsumed = false;
 
@@ -1250,13 +1251,12 @@ namespace cotasklib
 
 				void return_void()
 				{
-					m_value.set_value();
 					m_isResultSet = true;
 				}
 
 				void value()
 				{
-					if (!m_isResultSet)
+					if (!m_isResultSet && !m_exception)
 					{
 						throw Error{ U"Task is not completed." };
 					}
@@ -1265,7 +1265,10 @@ namespace cotasklib
 						throw Error{ U"Task result can be get only once." };
 					}
 					m_resultConsumed = true;
-					m_value.get_future().get();
+					if (m_exception)
+					{
+						std::rethrow_exception(m_exception);
+					}
 				}
 
 				[[nodiscard]]
@@ -1276,8 +1279,7 @@ namespace cotasklib
 
 				void unhandled_exception()
 				{
-					m_value.set_exception(std::current_exception());
-					m_isResultSet = true;
+					m_exception = std::current_exception();
 				}
 			};
 		}

@@ -96,7 +96,7 @@ namespace cotasklib
 			[[nodiscard]]
 			virtual Task<void> preStart()
 			{
-				co_return;
+				return EmptyTask();
 			}
 
 			virtual void preStartDraw() const
@@ -125,19 +125,19 @@ namespace cotasklib
 			[[nodiscard]]
 			virtual Task<void> fadeIn()
 			{
-				co_return;
+				return EmptyTask();
 			}
 
 			[[nodiscard]]
 			virtual Task<void> fadeOut()
 			{
-				co_return;
+				return EmptyTask();
 			}
 
 			[[nodiscard]]
 			virtual Task<void> postFadeOut()
 			{
-				co_return;
+				return EmptyTask();
 			}
 
 			virtual void postFadeOutDraw() const
@@ -225,22 +225,34 @@ namespace cotasklib
 			Task<SceneFactory> playInternal()&
 			{
 				{
-					const ScopedDrawer drawer{ [this] { preStartDraw(); }, [this] { return preStartDrawIndex(); } };
-					m_isPreStart = true;
-					co_await preStart();
-					m_isPreStart = false;
+					Task<void> preStartTask = preStart();
+					if (!preStartTask.empty())
+					{
+						const ScopedDrawer drawer{ [this] { preStartDraw(); }, [this] { return preStartDrawIndex(); } };
+						m_isPreStart = true;
+						co_await std::move(preStartTask);
+						m_isPreStart = false;
+					}
 				}
 
 				{
-					const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
-					co_await startAndFadeOut().with(fadeInInternal(), WithTiming::Before);
+					Task<void> startAndFadeOutTask = startAndFadeOut();
+					if (!startAndFadeOutTask.empty())
+					{
+						const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
+						co_await std::move(startAndFadeOutTask).with(fadeInInternal(), WithTiming::Before);
+					}
 				}
 
 				{
-					const ScopedDrawer drawer{ [this] { postFadeOutDraw(); }, [this] { return postFadeOutDrawIndex(); } };
-					m_isPostFadeOut = true;
-					co_await postFadeOut();
-					m_isPostFadeOut = false;
+					Task<void> postFadeOutTask = postFadeOut();
+					if (!postFadeOutTask.empty())
+					{
+						const ScopedDrawer drawer{ [this] { postFadeOutDraw(); }, [this] { return postFadeOutDrawIndex(); } };
+						m_isPostFadeOut = true;
+						co_await std::move(postFadeOutTask);
+						m_isPostFadeOut = false;
+					}
 				}
 
 				if (m_taskFinishSource.hasResult())

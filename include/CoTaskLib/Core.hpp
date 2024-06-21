@@ -878,7 +878,29 @@ namespace cotasklib
 				[[nodiscard]]
 				TResult value() const
 				{
-					return m_handle.promise().value();
+					if constexpr (std::is_void_v<TResult>)
+					{
+						if (m_handle)
+						{
+							m_handle.promise().value(); // 例外伝搬のためにvoidでも呼び出す
+						}
+						return;
+					}
+					else
+					{
+						if (!m_handle)
+						{
+							// 戻り値ありの場合は空のハンドルを許容しない
+							throw Error{ U"CoroutineHandleWrapper: value() called on empty handle" };
+						}
+						return m_handle.promise().value();
+					}
+				}
+
+				[[nodiscard]]
+				bool empty() const
+				{
+					return !m_handle;
 				}
 
 				[[nodiscard]]
@@ -990,6 +1012,12 @@ namespace cotasklib
 			}
 
 			[[nodiscard]]
+			bool empty() const
+			{
+				return m_handle.empty();
+			}
+
+			[[nodiscard]]
 			TResult value() const
 			{
 				return m_handle.value();
@@ -999,6 +1027,10 @@ namespace cotasklib
 			[[nodiscard]]
 			Task<TResult> with(Task<TResultOther>&& task)&&
 			{
+				if (m_handle.done())
+				{
+					return std::move(*this);
+				}
 				m_concurrentTasksAfter.push_back(std::make_unique<Task<TResultOther>>(std::move(task)));
 				return std::move(*this);
 			}
@@ -1007,6 +1039,11 @@ namespace cotasklib
 			[[nodiscard]]
 			Task<TResult> with(Task<TResultOther>&& task, WithTiming timing)&&
 			{
+				if (m_handle.done())
+				{
+					return std::move(*this);
+				}
+
 				switch (timing)
 				{
 				case WithTiming::Before:
@@ -1041,6 +1078,12 @@ namespace cotasklib
 				mr.add(ScopedTaskRunner{ std::move(*this), std::move(finishCallback), std::move(cancelCallback) });
 			}
 		};
+
+		[[nodiscard]]
+		inline Task<void> EmptyTask()
+		{
+			return Task<void>{ nullptr };
+		}
 
 		namespace detail
 		{

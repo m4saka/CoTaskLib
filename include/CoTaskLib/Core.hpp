@@ -108,13 +108,15 @@ namespace cotasklib
 		{
 			Default,
 			Modal,
+			PostModal,
 			Transition,
+			PostTransition,
 			Debug,
 		};
 
 		namespace detail
 		{
-			constexpr uint8 NumLayers = 4;
+			constexpr uint8 NumLayers = 6;
 
 			struct DrawerKey
 			{

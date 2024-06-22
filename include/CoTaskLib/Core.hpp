@@ -983,11 +983,7 @@ namespace cotasklib
 
 		enum class WithTiming
 		{
-			// with実行タイミングで既に初回resumeは既に完了してしまっているので、
-			// もし初回resumeも前に実行する必要がある場合は、withに渡す子Taskを
-			// 親Taskより先に生成し、withへ子タスクをstd::moveで渡す必要がある点に注意
 			Before,
-
 			After,
 		};
 

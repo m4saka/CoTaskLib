@@ -987,7 +987,7 @@ namespace cotasklib
 			}
 		}
 
-		enum class WithTiming
+		enum class WithTiming : uint8
 		{
 			Before,
 			After,

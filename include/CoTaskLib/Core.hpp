@@ -855,11 +855,14 @@ namespace cotasklib
 			{
 			private:
 				DrawerID m_drawerID;
+				ScopedDrawerInternal** m_pThis;
 
 			public:
-				ScopedDrawerInternal(IDrawerInternal* pDrawer, Layer layer, int32 drawIndex)
+				ScopedDrawerInternal(IDrawerInternal* pDrawer, Layer layer, int32 drawIndex, ScopedDrawerInternal** pThis)
 					: m_drawerID(Backend::AddDrawer(pDrawer, layer, drawIndex))
+					, m_pThis(pThis)
 				{
+					*m_pThis = this;
 				}
 
 				ScopedDrawerInternal(const ScopedDrawerInternal&) = delete;
@@ -873,6 +876,7 @@ namespace cotasklib
 				~ScopedDrawerInternal()
 				{
 					Backend::RemoveDrawer(m_drawerID);
+					*m_pThis = nullptr;
 				}
 
 				void setLayer(Layer layer)

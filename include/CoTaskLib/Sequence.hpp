@@ -240,40 +240,19 @@ namespace cotasklib
 				}
 				m_onceRun = true;
 
+				detail::ScopedDrawerInternal drawer{ this, m_layer, m_drawIndex, &m_pCurrentScopedDrawer };
+
 				{
 					m_isPreStart = true;
-					Task<void> preStartTask = preStart();
-					if (!preStartTask.empty())
-					{
-						detail::ScopedDrawerInternal drawer{ this, m_layer, m_drawIndex };
-						m_pCurrentScopedDrawer = &drawer;
-						co_await std::move(preStartTask);
-						m_pCurrentScopedDrawer = nullptr;
-					}
+					co_await preStart();
 					m_isPreStart = false;
 				}
 
-				{
-					Task<void> startAndFadeOutTask = startAndFadeOut();
-					if (!startAndFadeOutTask.empty())
-					{
-						detail::ScopedDrawerInternal drawer{ this, m_layer, m_drawIndex };
-						m_pCurrentScopedDrawer = &drawer;
-						co_await std::move(startAndFadeOutTask).with(fadeInInternal(), WithTiming::Before);
-						m_pCurrentScopedDrawer = nullptr;
-					}
-				}
+				co_await startAndFadeOut().with(fadeInInternal(), WithTiming::Before);
 
 				{
 					m_isPostFadeOut = true;
-					Task<void> postFadeOutTask = postFadeOut();
-					if (!postFadeOutTask.empty())
-					{
-						detail::ScopedDrawerInternal drawer{ this, m_layer, m_drawIndex };
-						m_pCurrentScopedDrawer = &drawer;
-						co_await std::move(postFadeOutTask);
-						m_pCurrentScopedDrawer = nullptr;
-					}
+					co_await postFadeOut();
 					m_isPostFadeOut = false;
 				}
 

@@ -114,7 +114,7 @@ void Main()
 Co::Task<> ExampleTask()
 {
     // マウスクリックされるまで待機
-    co_await Co::WaitForDown(MouseL);
+    co_await Co::WaitUntilDown(MouseL);
 
     Print << U"クリックされました！";
 }
@@ -128,8 +128,8 @@ Co::Task<String> ExampleTaskWithResult()
 {
     // 左クリックまたは右クリックされるまで待機
     const auto [isMouseL, isMouseR] = co_await Co::Any(
-        Co::WaitForDown(MouseL),
-        Co::WaitForDown(MouseR));
+        Co::WaitUntilDown(MouseL),
+        Co::WaitUntilDown(MouseR));
 
     // どちらが押されたかに応じて、文字列を返す
     if (isMouseL)
@@ -261,10 +261,6 @@ private:
     - この関数は、毎フレーム実行されます。
         - `start`関数内で`co_await`を使用して別のコルーチンの実行完了まで待機している間も、`draw`関数は実行され続けます。
 
-- `drawIndex() const` -> `int32`
-    - 描画順序のソート値(drawIndex)を設定します。
-    - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番と同じ順序で描画されます。
-
 - `fadeIn()` -> `Co::Task<>`
     - シーケンス開始時に実行されるフェードイン用のコルーチンです。
     - `start()`と同時に実行されます。もし同時に実行したくない場合は、`start()`内の先頭で`co_await waitForFadeIn()`を実行し、フェードイン完了まで待機してください。
@@ -283,20 +279,12 @@ private:
 - `preStartDraw() const`
     - `preStart()`の実行中に毎フレーム呼び出される描画処理です。
 
-- `preStartDrawIndex()` -> `int32`
-    - `preStart()`の実行中の描画順序のソート値(drawIndex)を設定します。
-    - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番で描画されます。
-
 - `postFadeOut()` -> `Co::Task<>`
     - `fadeOut()`より後に呼び出されるコルーチンです。
     - フェードアウト後に何か処理を実行したい場合に使用します。
 
 - `postFadeOutDraw() const`
     - `postFadeOut()`の実行中に毎フレーム呼び出される描画処理です。
-
-- `postFadeOutDrawIndex()` -> `int32`
-    - `postFadeOut()`の実行中の描画順序のソート値(drawIndex)を設定します。
-    - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番で描画されます。
 
 ### シーケンスの実行方法
 
@@ -361,6 +349,104 @@ private: // 基本的にprivateにしておくことを推奨
 };
 ```
 
+### 描画順序の制御方法
+シーケンス同士の描画順序(`draw`関数が実行される順序)は、デフォルトではシーケンスの開始順です。そのため、後に開始されたシーケンスの方が手前に描画されます。
+
+これで問題になるケースはさほど多くないですが、レイヤーまたはdrawIndexを設定することで明示的に描画順序を制御することが可能です。
+
+#### レイヤー(layer)
+描画内容の大まかな分類ごとにいくつかのレイヤーが用意されています。`Co::Layer`型の列挙子で指定します。
+
+下記の順番で描画されます。
+- `Co::Layer::Default`: デフォルトのレイヤーです。
+- `Co::Layer::Modal`: ダイアログなどのモーダルを表示するためのレイヤーです。デフォルトより手前に描画されます。
+- `Co::Layer::Transition`: 画面全体のフェードイン・フェードアウトなどのトランジションを表示するためのレイヤーです。モーダルより手前に描画されます。
+- `Co::Layer::Debug`: デバッグ情報を表示するためのレイヤーです。最前面に描画されます。
+※他にも`Co::Layer::PostModal`、`Co::Layer::PostTransition`がありますが、それらについては後述します。
+
+下記のように、`SequenceBase`クラスのコンストラクタの第1引数にレイヤーを指定することができます。
+
+```cpp
+class ModalExample : public Co::SequenceBase<>
+{
+public:
+    ModalExample()
+        : Co::SequenceBase(Co::Layer::Modal) // Modalレイヤーを指定
+    {
+    }
+
+private:
+    // ... (シーケンスの実装内容はここでは記載省略)
+};
+```
+
+シーケンス実行の途中でレイヤーを変更することもできます。途中で変更したい場合は、下記のようにシーケンスクラス内で`setLayer`関数を実行します。
+
+```cpp
+class ModalExample : public Co::SequenceBase<>
+{
+private:
+    Co::Task<> start() override
+    {
+        // ... (何らかの処理)
+
+        // レイヤーを変更
+        setLayer(Co::Layer::Modal);
+    }
+};
+```
+
+なお、ModalレイヤーおよびTransitionレイヤーには、表示中のものがあるかどうかを下記の関数で取得することができます。  
+これを利用することで、モーダル表示中は特定の操作を無効にするといった実装が可能です。
+
+- `Co::HasActiveModal()`: Modalレイヤーに表示中のものがあるかどうかを返します。
+- `Co::HasActiveTransition()`: Transitionレイヤーに表示中のものがあるかどうかを返します。
+
+モーダルやトランジション自体ではないものの手前に表示したいものがある場合は、下記のレイヤーを使用することができます。
+
+- `Co::Layer::PostModal`: Modalレイヤーの手前に描画される、用途を絞らないレイヤーです。
+- `Co::Layer::PostTransition`: Transitionレイヤーの手前に描画される、用途を絞らないレイヤーです。
+
+#### drawIndex
+drawIndexは、同一レイヤー内での描画順序を指定するための値です。
+
+`int32`型の自由な値で指定することができますが、意図をより明確にしたい場合は下記の定数を使用することもできます。
+- `Co::DrawIndex::Back`(=-1): 後ろに描画されます。
+- `Co::DrawIndex::Default`(=0): デフォルトのdrawIndexです。
+- `Co::DrawIndex::Front`(=1): 手前に描画されます。
+
+下記のように、`SequenceBase`クラスのコンストラクタの第2引数にdrawIndexを指定することができます。
+
+```cpp
+class ModalExample : public Co::SequenceBase<>
+{
+public:
+    ModalExample()
+        : Co::SequenceBase(Co::Layer::Default, Co::DrawIndex::Front) // Defaultレイヤー内で手前(drawIndex=1)に表示
+    {
+    }
+
+private:
+    // ... (シーケンスの実装内容はここでは記載省略)
+};
+```
+
+シーケンス実行の途中でdrawIndexを変更することもできます。途中で変更したい場合は、下記のようにシーケンスクラス内で`setDrawIndex`関数を実行します。
+
+```cpp
+class ModalExample : public Co::SequenceBase<>
+{
+private:
+    Co::Task<> start() override
+    {
+        // ... (何らかの処理)
+
+        // drawIndexを変更
+        setDrawIndex(Co::DrawIndex::Front);
+    }
+};
+```
+
 ## `Co::UpdaterSequenceBase<TResult>`クラス
 `Co::UpdaterSequenceBase<TResult>`は、毎フレーム実行される`update()`関数を持つシーケンスの基底クラスです。コルーチンを使用せずにシーケンスを作成する場合にこのクラスを継承します。
 
@@ -411,10 +497,6 @@ private:
     - この関数は、毎フレーム実行されます。
         - `start`関数内で別のコルーチンを`co_await`で待機している間も、`draw`関数は実行され続けます。
 
-- `drawIndex() const` -> `int32`
-    - 描画順序のソート値(drawIndex)を設定します。
-    - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番と同じ順序で描画されます。
-
 - `fadeIn()` -> `Co::Task<>`
     - シーン開始時に実行されるフェードイン用のコルーチンです。
     - `update()`と同時に実行されます。もし同時に実行したくない場合は、`update`関数内で`isFadingIn()`がtrueの場合は処理をスキップするなどしてください。
@@ -432,10 +514,6 @@ private:
 - `preStartDraw() const`
     - `preStart()`の実行中に毎フレーム呼び出される描画処理です。
 
-- `preStartDrawIndex()` -> `int32`
-    - `preStart()`の実行中の描画順序のソート値(drawIndex)を設定します。
-    - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番で描画されます。
-
 - `postFadeOut()` -> `Co::Task<>`
     - `fadeOut()`より後に呼び出されるコルーチンです。
     - フェードアウト後に何か処理を実行したい場合に使用します。
@@ -443,20 +521,12 @@ private:
 - `postFadeOutDraw() const`
     - `postFadeOut()`の実行中に毎フレーム呼び出される描画処理です。
 
-- `postFadeOutDrawIndex()` -> `int32`
-    - `postFadeOut()`の実行中の描画順序のソート値(drawIndex)を設定します。
-    - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番で描画されます。
-
 - `postFadeOut()` -> `Co::Task<>`
     - `fadeOut()`より後に呼び出されるコルーチンです。
     - フェードアウト後に何か処理を実行したい場合に使用します。
 
 - `postFadeOutDraw() const`
     - `postFadeOut()`の実行中に毎フレーム呼び出される描画処理です。
-
-- `postFadeOutDrawIndex()` -> `int32`
-    - `postFadeOut()`の実行中の描画順序のソート値(drawIndex)を設定します。
-    - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番で描画されます。
 
 ### update関数からシーケンスを完了するには
 `update()`関数内で`requestFinish()`関数を実行し、シーケンスを完了できます。
@@ -494,8 +564,8 @@ private:
 
         // EnterキーかEscキーを押すまで待機
         const auto [isEnter, isEsc] = co_await Co::Any(
-            Co::WaitForDown(KeyEnter),
-            Co::WaitForDown(KeyEsc));
+            Co::WaitUntilDown(KeyEnter),
+            Co::WaitUntilDown(KeyEsc));
 
         if (isEnter)
         {
@@ -540,10 +610,6 @@ private:
     - この関数は、毎フレーム実行されます。
         - `start`関数内で`co_await`を使用して別のコルーチンの実行完了まで待機している間も、`draw`関数は実行され続けます。
 
-- `drawIndex() const` -> `int32`
-    - 描画順序のソート値(drawIndex)を設定します。
-    - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番で描画されます。
-
 - `fadeIn()` -> `Co::Task<>`
     - シーン開始時に実行されるフェードイン用のコルーチンです。
     - `start()`と同時に実行されます。もし同時に実行したくない場合は、`start()`内の先頭で`co_await waitForFadeIn()`を実行し、フェードイン完了まで待機してください。
@@ -562,20 +628,12 @@ private:
 - `preStartDraw() const`
     - `preStart()`の実行中に毎フレーム呼び出される描画処理です。
 
-- `preStartDrawIndex()` -> `int32`
-    - `preStart()`の実行中の描画順序のソート値(drawIndex)を設定します。
-    - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番で描画されます。
-
 - `postFadeOut()` -> `Co::Task<>`
     - `fadeOut()`より後に呼び出されるコルーチンです。
     - フェードアウト後に何か処理を実行したい場合に使用します。
 
 - `postFadeOutDraw() const`
     - `postFadeOut()`の実行中に毎フレーム呼び出される描画処理です。
-
-- `postFadeOutDrawIndex()` -> `int32`
-    - `postFadeOut()`の実行中の描画順序のソート値(drawIndex)を設定します。
-    - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番で描画されます。
 
 ### シーンの実行方法
 `Co::PlaySceneFrom`関数を開始シーンの型を指定して呼び出すことで、最初のシーンから最後のシーンまでの一連の動作を実行する`Co::Task<>`を取得できます。これに対して通常通り、`runScoped`関数を使用します。  
@@ -701,10 +759,6 @@ private:
     - この関数は、毎フレーム実行されます。
         - `start`関数内で`co_await`を使用して別のコルーチンの実行完了まで待機している間も、`draw`関数は実行され続けます。
 
-- `drawIndex() const` -> `int32`
-    - 描画順序のソート値(drawIndex)を設定します。
-    - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番で描画されます。
-
 - `fadeIn()` -> `Co::Task<>`
     - シーン開始時に実行されるフェードイン用のコルーチンです。
     - `update()`と同時に実行されます。もし同時に実行したくない場合は、`update`関数内で`isFadingIn()`がtrueの場合は処理をスキップするなどしてください。
@@ -722,17 +776,8 @@ private:
 - `preStartDraw() const`
     - `preStart()`の実行中に毎フレーム呼び出される描画処理です。
 
-- `preStartDrawIndex()` -> `int32`
-    - `preStart()`の実行中の描画順序のソート値(drawIndex)を設定します。
-    - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番で描画されます。
-
 - `postFadeOutDraw() const`
     - `postFadeOut()`の実行中に毎フレーム呼び出される描画処理です。
-
-- `postFadeOutDrawIndex()` -> `int32`
-    - `postFadeOut()`の実行中の描画順序のソート値(drawIndex)を設定します。
-    - デフォルト値は0です。drawIndexが同一のもの同士は、実行を開始した順番で描画されます。
-
 
 ### シーンを完了するには
 シーンを終了して次のシーンへ遷移するには、基底クラスに実装されている下記のいずれかの関数を実行します。
@@ -840,7 +885,7 @@ private:
     Co::Task<> start() override
     {
         // Enterキーが押されるまで待機
-        co_await Co::WaitForDown(KeyEnter);
+        co_await Co::WaitUntilDown(KeyEnter);
     }
 
     Co::Task<> fadeOut() override
@@ -878,7 +923,7 @@ private:
         co_await Co::Typewriter(&m_text, 50ms, U"Hello, CoTaskLib!").play();
 
         // クリックされるまで待つ
-        co_await Co::WaitForDown(MouseL);
+        co_await Co::WaitUntilDown(MouseL);
     }
 
     void draw() const override
@@ -931,23 +976,23 @@ private:
     - 呼び出し時点での値と現在の値を`operator==`で毎フレーム比較し、falseとなった時点で終了します。
 - `Co::WaitForTimer(const Timer*)` -> `Co::Task<>`
     - `Timer`が0になるまで待機します。この関数は`Timer`を自動的に開始しないので、あらかじめ開始しておく必要があります。
-- `Co::WaitForDown(TInput)` -> `Co::Task<>`
+- `Co::WaitUntilDown(TInput)` -> `Co::Task<>`
     - 入力が押されるまで待機します。
-- `Co::WaitForUp(TInput)` -> `Co::Task<>`
+- `Co::WaitUntilUp(TInput)` -> `Co::Task<>`
     - 入力が離されるまで待機します。
-- `Co::WaitForLeftClicked(TArea)` -> `Co::Task<>`
+- `Co::WaitUntilLeftClicked(TArea)` -> `Co::Task<>`
     - マウスの左ボタンが指定領域で押されるまで待機します。
-- `Co::WaitForLeftReleased(TArea)` -> `Co::Task<>`
+- `Co::WaitUntilLeftReleased(TArea)` -> `Co::Task<>`
     - マウスの左ボタンが指定領域で離されるまで待機します。
-- `Co::WaitForLeftClickedThenReleased(TArea)` -> `Co::Task<>`
+- `Co::WaitUntilLeftClickedThenReleased(TArea)` -> `Co::Task<>`
     - マウスの左ボタンが指定領域でクリックされてから離されるまで待機します。
-- `Co::WaitForRightClicked(TArea)` -> `Co::Task<>`
+- `Co::WaitUntilRightClicked(TArea)` -> `Co::Task<>`
     - マウスの右ボタンが指定領域で押されるまで待機します。
-- `Co::WaitForRightReleased(TArea)` -> `Co::Task<>`
+- `Co::WaitUntilRightReleased(TArea)` -> `Co::Task<>`
     - マウスの右ボタンが指定領域で離されるまで待機します。
-- `Co::WaitForRightClickedThenReleased(TArea)` -> `Co::Task<>`
+- `Co::WaitUntilRightClickedThenReleased(TArea)` -> `Co::Task<>`
     - マウスの右ボタンが指定領域でクリックされてから離されるまで待機します。
-- `Co::WaitForMouseOver(TArea)` -> `Co::Task<>`
+- `Co::WaitUntilMouseOver(TArea)` -> `Co::Task<>`
     - マウスカーソルが指定領域内に侵入するまで待機します。
 - `Co::FromResult(TResult)` -> `Co::Task<TResult>`
     - 指定した値を即座に返すタスクを生成します。
@@ -959,21 +1004,13 @@ private:
         - `requestFinish`関数の第1引数には、`TResult`型の値を設定できます(`void`の場合は不要)。
 - `Co::SimpleDialog(String text)` -> `Co::Task<>`
     - 第1引数で指定した文字列を本文として表示するダイアログを表示し、OKボタンで閉じるまで待機します。
-    - 任意で、第2引数にint32型で描画順序のソート値(drawIndex)を指定することもできます。
-        - デフォルト値は`Co::DrawIndex::Modal`(=150000)で、通常描画(0)よりも手前に表示されるようになっています。
 - `Co::SimpleDialog(String text, Array<String> buttonTexts)` -> `Co::Task<String>`
     - 第1引数で指定した文字列を本文とし、第2引数で指定した文字列のボタンで選択するダイアログを表示します。
         - いずれかのボタンを押すとダイアログが閉じ、押したボタンの文字列が返されます。
-    - 任意で、第3引数にint32型で描画順序のソート値(drawIndex)を指定することもできます。
-        - デフォルト値は`Co::DrawIndex::Modal`(=150000)で、通常描画(0)よりも手前に表示されるようになっています。
 - `Co::ScreenFadeIn(Duration, ColorF)` -> `Co::Task<>`
     - 指定色からの画面フェードインを開始し、完了まで待機します。
-    - 任意で、第3引数にint32型で描画順序のソート値(drawIndex)を指定することもできます。
-        - デフォルト値は`Co::DrawIndex::FadeIn`(=250000)で、通常描画(0)よりも手前に表示されるようになっています。
 - `Co::ScreenFadeOut(Duration, ColorF)` -> `Co::Task<>`
     - 指定色への画面フェードアウトを開始し、完了まで待機します。
-    - 任意で、第3引数にint32型で描画順序のソート値(drawIndex)を指定することもできます。
-        - デフォルト値は`Co::DrawIndex::FadeOut`(=350000)で、通常描画(0)よりも手前に表示されるようになっています。
 - `Co::All(TTasks&&...)` -> `Co::Task<std::tuple<...>>`
     - 全ての`Co::Task`が完了するまで待機します。各`Co::Task`の結果が`std::tuple`で返されます。
     - `Co::Task`の結果が`void`型の場合、`Co::VoidResult`型(空の構造体)に置換して返されます。
@@ -988,20 +1025,14 @@ private:
     - `TScene`クラスのインスタンスを構築し、それを開始シーンとした一連のシーン実行のタスクを返します。
     - `TScene`クラスは`Co::SceneBase`の派生クラスである必要があります。
     - 引数には、`TScene`のコンストラクタの引数を指定します。
-- `Co::HasActiveDrawer(int32 drawIndex)` -> `bool`
-    - 指定したdrawIndexを持つDrawerが存在するかどうかを返します。
-- `Co::HasActiveDrawerInRange(int32 drawIndexMin, int32 drawIndexMax)` -> `bool`
-    - 最小値、最大値を指定して、その範囲内のdrawIndexを持つDrawerが存在するかどうかを返します。
-        - `drawIndexMin`以上`drawIndexMax`以下のものが対象となります。範囲には`drawIndexMax`を含みます。
+- `Co::HasActiveDrawerInLayer(Co::Layer layer)` -> `bool`
+    - 指定したレイヤーにDrawerが存在するかどうかを返します。
 - `Co::HasActiveModal()` -> `bool`
-    - ModalカテゴリのdrawIndexを持つDrawerが存在するかどうかを返します。
-    - `Co::HasActiveDrawerInRange(Co::DrawIndex::ModalMin, Co::DrawIndex::ModalMax)`と同義です。
-- `Co::HasActiveFadeIn()` -> `bool`
-    - FadeInカテゴリのdrawIndexを持つDrawerが存在するかどうかを返します。
-    - `Co::HasActiveDrawerInRange(Co::DrawIndex::FadeInMin, Co::DrawIndex::FadeInMax)`と同義です。
-- `Co::HasActiveFadeOut()` -> `bool`
-    - FadeOutカテゴリのdrawIndexを持つDrawerが存在するかどうかを返します。
-    - `Co::HasActiveDrawerInRange(Co::DrawIndex::FadeOutMin, Co::DrawIndex::FadeOutMax)`と同義です。
+    - ModalレイヤーにDrawerが存在するかどうかを返します。
+    - `Co::HasActiveDrawerInLayer(Co::Layer::Modal)`と同義です。
+- `Co::HasActiveTransition()` -> `bool`
+    - TransitionレイヤーにDrawerが存在するかどうかを返します。
+    - `Co::HasActiveDrawerInLayer(Co::Layer::Transition)`と同義です。
 
 ## `co_await`で待機可能なSiv3Dクラス一覧
 

@@ -1749,7 +1749,7 @@ namespace cotasklib
 
 		template <class TInput>
 		[[nodiscard]]
-		Task<void> WaitForDown(const TInput input)
+		Task<void> WaitUntilDown(const TInput input)
 		{
 			while (!input.down())
 			{
@@ -1759,7 +1759,7 @@ namespace cotasklib
 
 		template <class TInput>
 		[[nodiscard]]
-		Task<void> WaitForUp(const TInput input)
+		Task<void> WaitUntilUp(const TInput input)
 		{
 			while (!input.up())
 			{
@@ -1769,7 +1769,7 @@ namespace cotasklib
 
 		template <class TArea>
 		[[nodiscard]]
-		Task<void> WaitForLeftClicked(const TArea area)
+		Task<void> WaitUntilLeftClicked(const TArea area)
 		{
 			while (!area.leftClicked())
 			{
@@ -1779,7 +1779,7 @@ namespace cotasklib
 
 		template <class TArea>
 		[[nodiscard]]
-		Task<void> WaitForLeftReleased(const TArea area)
+		Task<void> WaitUntilLeftReleased(const TArea area)
 		{
 			while (!area.leftReleased())
 			{
@@ -1789,13 +1789,13 @@ namespace cotasklib
 
 		template <class TArea>
 		[[nodiscard]]
-		Task<void> WaitForLeftClickedThenReleased(const TArea area)
+		Task<void> WaitUntilLeftClickedThenReleased(const TArea area)
 		{
 			while (true)
 			{
 				if (area.leftClicked())
 				{
-					const auto [releasedInArea, _] = co_await Any(WaitForLeftReleased(area), WaitForUp(MouseL));
+					const auto [releasedInArea, _] = co_await Any(WaitUntilLeftReleased(area), WaitUntilUp(MouseL));
 					if (releasedInArea.has_value())
 					{
 						break;
@@ -1807,7 +1807,7 @@ namespace cotasklib
 
 		template <class TArea>
 		[[nodiscard]]
-		Task<void> WaitForRightClicked(const TArea area)
+		Task<void> WaitUntilRightClicked(const TArea area)
 		{
 			while (!area.rightClicked())
 			{
@@ -1817,7 +1817,7 @@ namespace cotasklib
 
 		template <class TArea>
 		[[nodiscard]]
-		Task<void> WaitForRightReleased(const TArea area)
+		Task<void> WaitUntilRightReleased(const TArea area)
 		{
 			while (!area.rightReleased())
 			{
@@ -1827,13 +1827,13 @@ namespace cotasklib
 
 		template <class TArea>
 		[[nodiscard]]
-		Task<void> WaitForRightClickedThenReleased(const TArea area)
+		Task<void> WaitUntilRightClickedThenReleased(const TArea area)
 		{
 			while (true)
 			{
 				if (area.rightClicked())
 				{
-					const auto [releasedInArea, _] = co_await Any(WaitForRightReleased(area), WaitForUp(MouseR));
+					const auto [releasedInArea, _] = co_await Any(WaitUntilRightReleased(area), WaitUntilUp(MouseR));
 					if (releasedInArea.has_value())
 					{
 						break;
@@ -1845,7 +1845,7 @@ namespace cotasklib
 
 		template <class TArea>
 		[[nodiscard]]
-		Task<void> WaitForMouseOver(const TArea area)
+		Task<void> WaitUntilMouseOver(const TArea area)
 		{
 			while (!area.mouseOver())
 			{

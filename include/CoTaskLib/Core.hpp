@@ -108,8 +108,8 @@ namespace cotasklib
 		{
 			Default,
 			Modal,
-			FadeIn,
-			FadeOut,
+			Transition,
+			Debug,
 		};
 
 		namespace detail
@@ -1611,21 +1611,9 @@ namespace cotasklib
 		}
 
 		[[nodiscard]]
-		inline bool HasActiveFadeIn()
+		inline bool HasActiveTransition()
 		{
-			return HasActiveDrawerInLayer(Layer::FadeIn);
-		}
-
-		[[nodiscard]]
-		inline bool HasActiveFadeOut()
-		{
-			return HasActiveDrawerInLayer(Layer::FadeOut);
-		}
-
-		[[nodiscard]]
-		inline bool HasActiveFade()
-		{
-			return HasActiveFadeIn() || HasActiveFadeOut();
+			return HasActiveDrawerInLayer(Layer::Transition);
 		}
 
 		template <typename TResult>

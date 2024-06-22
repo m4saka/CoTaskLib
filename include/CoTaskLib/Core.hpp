@@ -104,175 +104,169 @@ namespace cotasklib
 
 		using SceneFactory = std::function<std::unique_ptr<SceneBase>()>;
 
+		enum class Layer : uint8
+		{
+			Default,
+			Modal,
+			FadeIn,
+			FadeOut,
+		};
+
 		namespace detail
 		{
-			template <typename IDType>
-			class OrderedExecutor
+			constexpr uint8 NumLayers = 4;
+
+			struct DrawerKey
+			{
+				Layer layer;
+				int32 drawIndex;
+				DrawerID id;
+
+				[[nodiscard]]
+				auto operator<=>(const DrawerKey&) const = default;
+			};
+
+			class IDrawerInternal
+			{
+			public:
+				virtual ~IDrawerInternal() = default;
+
+				virtual void drawInternal() const = 0;
+			};
+
+			class DrawExecutor
 			{
 			private:
-				struct CallerKey
+				DrawerID m_nextID = 1;
+				std::map<DrawerKey, IDrawerInternal*> m_drawers;
+				std::unordered_map<DrawerID, DrawerKey> m_drawerKeyByID;
+				std::array<uint64, NumLayers> m_layerDrawerCount;
+
+				[[nodiscard]]
+				auto findByID(DrawerID id)
 				{
-					IDType id;
-					int32 sortingOrder;
-
-					CallerKey(IDType id, int32 sortingOrder)
-						: id(id)
-						, sortingOrder(sortingOrder)
+					const auto it = m_drawerKeyByID.find(id);
+					if (it == m_drawerKeyByID.end())
 					{
+						return m_drawers.end();
 					}
-
-					CallerKey(const CallerKey&) noexcept = default;
-
-					CallerKey& operator=(const CallerKey&) noexcept = default;
-
-					CallerKey(CallerKey&&) noexcept = default;
-
-					CallerKey& operator=(CallerKey&&) noexcept = default;
-
-					bool operator<(const CallerKey& other) const noexcept
-					{
-						if (sortingOrder != other.sortingOrder)
-						{
-							return sortingOrder < other.sortingOrder;
-						}
-						return id < other.id;
-					}
-				};
-
-				struct Caller
-				{
-					std::function<void()> func;
-					std::function<int32()> sortingOrderFunc;
-
-					Caller(std::function<void()> func, std::function<int32()> sortingOrderFunc)
-						: func(std::move(func))
-						, sortingOrderFunc(std::move(sortingOrderFunc))
-					{
-					}
-
-					Caller(const Caller&) = default;
-
-					Caller& operator=(const Caller&) = default;
-				};
-
-				IDType m_nextID = 1;
-				std::map<CallerKey, Caller> m_callers;
-				std::unordered_map<IDType, CallerKey> m_callerKeyByID;
-				std::vector<std::pair<CallerKey, int32>> m_tempNewSortingOrders;
-
-				using CallersIterator = typename decltype(m_callers)::iterator;
-
-				void refreshSortingOrder()
-				{
-					m_tempNewSortingOrders.clear();
-
-					// まず、sortingOrderの変更をリストアップ
-					for (const auto& [key, caller] : m_callers)
-					{
-						const int32 newSortingOrder = caller.sortingOrderFunc();
-						if (newSortingOrder != key.sortingOrder)
-						{
-							m_tempNewSortingOrders.emplace_back(key, newSortingOrder);
-						}
-					}
-
-					// sortingOrderに変更があったものを再挿入
-					for (const auto& [oldKey, newSortingOrder] : m_tempNewSortingOrders)
-					{
-						const IDType id = oldKey.id;
-						const auto it = m_callers.find(oldKey);
-						if (it == m_callers.end())
-						{
-							throw Error{ U"OrderedExecutor::refreshSortingOrder: ID={} not found"_fmt(id) };
-						}
-						Caller newCaller = it->second;
-						m_callers.erase(it);
-						const auto [newIt, inserted] = m_callers.insert(std::make_pair(CallerKey{ id, newSortingOrder }, std::move(newCaller)));
-						if (!inserted)
-						{
-							throw Error{ U"OrderedExecutor::refreshSortingOrder: ID={} cannot be inserted"_fmt(id) };
-						}
-						m_callerKeyByID.insert_or_assign(id, newIt->first);
-					}
+					return m_drawers.find(it->second);
 				}
 
 			public:
-				IDType add(std::function<void()> func, std::function<int32()> sortingOrderFunc)
+				DrawExecutor()
 				{
-					const int32 sortingOrder = sortingOrderFunc();
-					const auto [it, inserted] = m_callers.insert(std::make_pair(CallerKey{ m_nextID, sortingOrder }, Caller{ std::move(func), std::move(sortingOrderFunc) }));
+					m_layerDrawerCount.fill(0);
+				}
+
+				DrawerID add(Layer layer, int32 drawIndex, IDrawerInternal* pDrawable)
+				{
+					const DrawerID id = m_nextID++;
+					DrawerKey key{ layer, drawIndex, id };
+					const auto [it, inserted] = m_drawers.try_emplace(key, pDrawable);
 					if (!inserted)
 					{
-						throw Error{ U"OrderedExecutor::add: ID={} cannot be inserted"_fmt(m_nextID) };
+						throw Error{ U"DrawExecutor::add: ID={} already exists"_fmt(id) };
 					}
-					if (m_callerKeyByID.contains(m_nextID))
+					m_drawerKeyByID.emplace(id, std::move(key));
+					const auto layerUInt8 = static_cast<uint8>(layer);
+					if (layerUInt8 >= NumLayers)
 					{
-						throw Error{ U"OrderedExecutor::add: ID={} inconsistency detected"_fmt(m_nextID) };
+						throw Error{ U"DrawExecutor::add: Invalid layer={} (ID={})"_fmt(layerUInt8, id) };
 					}
-					m_callerKeyByID.insert_or_assign(m_nextID, it->first);
-					return m_nextID++;
+					++m_layerDrawerCount[layerUInt8];
+					return id;
 				}
 
-				CallersIterator findByID(IDType id)
-				{
-					const auto it = m_callerKeyByID.find(id);
-					if (it == m_callerKeyByID.end())
-					{
-						return m_callers.end();
-					}
-					return m_callers.find(it->second);
-				}
-
-				void remove(IDType id)
+				void setDrawerLayer(DrawerID id, Layer layer)
 				{
 					const auto it = findByID(id);
-					if (it == m_callers.end())
+					if (it == m_drawers.end())
 					{
-						if (m_callerKeyByID.contains(id))
-						{
-							throw Error{ U"OrderedExecutor::remove: ID={} inconsistency detected"_fmt(id) };
-						}
+						throw Error{ U"DrawExecutor::remove: ID={} not found"_fmt(id) };
+					}
+					if (it->first.layer == layer)
+					{
 						return;
 					}
-					m_callers.erase(it);
-					m_callerKeyByID.erase(id);
+					const auto layerUInt8 = static_cast<uint8>(layer);
+					if (layerUInt8 >= NumLayers)
+					{
+						throw Error{ U"DrawExecutor::add: Invalid layer={} (ID={})"_fmt(layerUInt8, id) };
+					}
+					const auto prevLayerUInt8 = static_cast<uint8>(it->first.layer);
+					if (prevLayerUInt8 >= NumLayers)
+					{
+						throw Error{ U"DrawExecutor::add: Invalid previous layer={} (ID={})"_fmt(prevLayerUInt8, id) };
+					}
+
+					// 一度削除して再挿入
+					DrawerKey newKey = it->first;
+					newKey.layer = layer;
+					const auto pDrawable = it->second;
+					m_drawers.erase(it);
+					m_drawerKeyByID.erase(id);
+					m_drawers.emplace(newKey, pDrawable);
+					m_drawerKeyByID.emplace(id, std::move(newKey));
+
+					--m_layerDrawerCount[prevLayerUInt8];
+					++m_layerDrawerCount[layerUInt8];
 				}
 
-				void call()
+				void setDrawerDrawIndex(DrawerID id, int32 drawIndex)
 				{
-					refreshSortingOrder();
-
-					for (const auto& [key, caller] : m_callers)
+					const auto it = findByID(id);
+					if (it == m_drawers.end())
 					{
-						caller.func();
+						throw Error{ U"DrawExecutor::remove: ID={} not found"_fmt(id) };
+					}
+					if (it->first.drawIndex == drawIndex)
+					{
+						return;
+					}
+
+					// 一度削除して再挿入
+					DrawerKey newKey = it->first;
+					newKey.drawIndex = drawIndex;
+					const auto pDrawable = it->second;
+					m_drawers.erase(it);
+					m_drawers.emplace(newKey, pDrawable);
+					m_drawerKeyByID[id].drawIndex = drawIndex;
+				}
+
+				void remove(DrawerID id)
+				{
+					const auto it = findByID(id);
+					if (it == m_drawers.end())
+					{
+						throw Error{ U"DrawExecutor::remove: ID={} not found"_fmt(id) };
+					}
+					const auto layerUInt8 = static_cast<uint8>(it->first.layer);
+					if (layerUInt8 >= NumLayers)
+					{
+						throw Error{ U"DrawExecutor::add: Invalid layer={} (ID={})"_fmt(layerUInt8, id) };
+					}
+					if (m_layerDrawerCount[layerUInt8] == 0)
+					{
+						throw Error{ U"DrawExecutor::remove: Layer drawer count underflow (layer={}, ID={})"_fmt(layerUInt8, id) };
+					}
+					--m_layerDrawerCount[layerUInt8];
+					m_drawers.erase(it);
+					m_drawerKeyByID.erase(id);
+				}
+
+				void execute() const
+				{
+					for (const auto& [key, pDrawer] : m_drawers)
+					{
+						pDrawer->drawInternal();
 					}
 				}
 
 				[[nodiscard]]
-				bool hasSortingOrder(int32 sortingOrder) const
+				bool drawerExistsInLayer(Layer layer) const
 				{
-					for (const auto& [key, caller] : m_callers)
-					{
-						if (caller.sortingOrderFunc() == sortingOrder)
-						{
-							return true;
-						}
-					}
-					return false;
-				}
-
-				[[nodiscard]]
-				bool hasSortingOrderInRange(int32 sortingOrderMin, int32 sortingOrderMax) const
-				{
-					for (const auto& [key, caller] : m_callers)
-					{
-						const int32 sortingOrder = caller.sortingOrderFunc();
-						if (sortingOrderMin <= sortingOrder && sortingOrder <= sortingOrderMax)
-						{
-							return true;
-						}
-					}
-					return false;
+					return m_layerDrawerCount[static_cast<uint8>(layer)] > 0;
 				}
 			};
 
@@ -334,7 +328,7 @@ namespace cotasklib
 
 				std::map<AwaiterID, AwaiterEntry> m_awaiterEntries;
 
-				OrderedExecutor<DrawerID> m_drawExecutor;
+				DrawExecutor m_drawExecutor;
 
 				SceneFactory m_currentSceneFactory;
 
@@ -380,7 +374,7 @@ namespace cotasklib
 
 				void draw()
 				{
-					m_drawExecutor.call();
+					m_drawExecutor.execute();
 				}
 
 				static void Init()
@@ -496,13 +490,31 @@ namespace cotasklib
 				}
 
 				[[nodiscard]]
-				static DrawerID AddDrawer(std::function<void()> func, std::function<int32()> drawIndexFunc)
+				static DrawerID AddDrawer(IDrawerInternal* pDrawer, Layer layer, int32 drawIndex)
 				{
 					if (!s_pInstance)
 					{
 						throw Error{ U"Backend is not initialized" };
 					}
-					return s_pInstance->m_drawExecutor.add(std::move(func), std::move(drawIndexFunc));
+					return s_pInstance->m_drawExecutor.add(layer, drawIndex, pDrawer);
+				}
+
+				static void SetDrawerLayer(DrawerID id, Layer layer)
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+					s_pInstance->m_drawExecutor.setDrawerLayer(id, layer);
+				}
+
+				static void SetDrawerDrawIndex(DrawerID id, int32 drawIndex)
+				{
+					if (!s_pInstance)
+					{
+						throw Error{ U"Backend is not initialized" };
+					}
+					s_pInstance->m_drawExecutor.setDrawerDrawIndex(id, drawIndex);
 				}
 
 				static void RemoveDrawer(DrawerID id)
@@ -516,25 +528,13 @@ namespace cotasklib
 				}
 
 				[[nodiscard]]
-				static bool HasActiveDrawer(int32 drawIndex)
+				static bool HasActiveDrawerInLayer(Layer layer)
 				{
 					if (!s_pInstance)
 					{
 						throw Error{ U"Backend is not initialized" };
 					}
-
-					return s_pInstance->m_drawExecutor.hasSortingOrder(drawIndex);
-				}
-
-				[[nodiscard]]
-				static bool HasActiveDrawerInRange(int32 drawIndexMin, int32 drawIndexMax)
-				{
-					if (!s_pInstance)
-					{
-						throw Error{ U"Backend is not initialized" };
-					}
-
-					return s_pInstance->m_drawExecutor.hasSortingOrderInRange(drawIndexMin, drawIndexMax);
+					return s_pInstance->m_drawExecutor.drawerExistsInLayer(layer);
 				}
 
 				[[nodiscard]]
@@ -774,44 +774,40 @@ namespace cotasklib
 			constexpr int32 Back = -1;
 			constexpr int32 Default = 0;
 			constexpr int32 Front = 1;
-
-			constexpr int32 ModalMin = 100000;
-			constexpr int32 ModalBack = 149999;
-			constexpr int32 Modal = 150000;
-			constexpr int32 ModalFront = 150001;
-			constexpr int32 ModalMax = 199999;
-
-			constexpr int32 FadeInMin = 200000;
-			constexpr int32 FadeInBack = 249999;
-			constexpr int32 FadeIn = 250000;
-			constexpr int32 FadeInFront = 250001;
-			constexpr int32 FadeInMax = 299999;
-
-			constexpr int32 FadeOutMin = 300000;
-			constexpr int32 FadeOutBack = 349999;
-			constexpr int32 FadeOut = 350000;
-			constexpr int32 FadeOutFront = 350001;
-			constexpr int32 FadeOutMax = 399999;
 		}
 
 		class ScopedDrawer
 		{
 		private:
-			Optional<detail::DrawerID> m_id;
+			class Drawer : public detail::IDrawerInternal
+			{
+			private:
+				std::function<void()> m_func;
+
+				void drawInternal() const override
+				{
+					m_func();
+				}
+
+			public:
+				explicit Drawer(std::function<void()> func)
+					: m_func(std::move(func))
+				{
+				}
+
+				Drawer(const Drawer&) = delete;
+				Drawer& operator=(const Drawer&) = delete;
+				Drawer(Drawer&&) = default;
+				Drawer& operator=(Drawer&&) = delete;
+			};
+
+			Drawer m_drawer;
+			Optional<detail::DrawerID> m_drawerID;
 
 		public:
-			ScopedDrawer(std::function<void()> func)
-				: m_id(detail::Backend::AddDrawer(std::move(func), [] { return DrawIndex::Default; }))
-			{
-			}
-
-			ScopedDrawer(std::function<void()> func, int32 drawIndex)
-				: m_id(detail::Backend::AddDrawer(std::move(func), [drawIndex] { return drawIndex; }))
-			{
-			}
-
-			ScopedDrawer(std::function<void()> func, std::function<int32()> drawIndexFunc)
-				: m_id(detail::Backend::AddDrawer(std::move(func), std::move(drawIndexFunc)))
+			ScopedDrawer(std::function<void()> func, Layer layer = Layer::Default, int32 drawIndex = DrawIndex::Default)
+				: m_drawer(std::move(func))
+				, m_drawerID(detail::Backend::AddDrawer(&m_drawer, layer, drawIndex))
 			{
 			}
 
@@ -820,24 +816,76 @@ namespace cotasklib
 			ScopedDrawer& operator=(const ScopedDrawer&) = delete;
 
 			ScopedDrawer(ScopedDrawer&& rhs) noexcept
-				: m_id(rhs.m_id)
+				: m_drawer(std::move(rhs.m_drawer))
+				, m_drawerID(rhs.m_drawerID)
 			{
-				rhs.m_id.reset();
+				rhs.m_drawerID.reset();
 			}
 
 			ScopedDrawer& operator=(ScopedDrawer&& rhs) = delete;
 
 			~ScopedDrawer()
 			{
-				if (m_id.has_value())
+				if (m_drawerID.has_value())
 				{
-					detail::Backend::RemoveDrawer(*m_id);
+					detail::Backend::RemoveDrawer(*m_drawerID);
+				}
+			}
+
+			void setLayer(Layer layer)
+			{
+				if (m_drawerID.has_value())
+				{
+					detail::Backend::SetDrawerLayer(*m_drawerID, layer);
+				}
+			}
+
+			void setDrawIndex(int32 drawIndex)
+			{
+				if (m_drawerID.has_value())
+				{
+					detail::Backend::SetDrawerDrawIndex(*m_drawerID, drawIndex);
 				}
 			}
 		};
 
 		namespace detail
 		{
+			class ScopedDrawerInternal
+			{
+			private:
+				DrawerID m_drawerID;
+
+			public:
+				ScopedDrawerInternal(IDrawerInternal* pDrawer, Layer layer, int32 drawIndex)
+					: m_drawerID(Backend::AddDrawer(pDrawer, layer, drawIndex))
+				{
+				}
+
+				ScopedDrawerInternal(const ScopedDrawerInternal&) = delete;
+
+				ScopedDrawerInternal& operator=(const ScopedDrawerInternal&) = delete;
+
+				ScopedDrawerInternal(ScopedDrawerInternal&& rhs) = delete;
+
+				ScopedDrawerInternal& operator=(ScopedDrawerInternal&& rhs) = delete;
+
+				~ScopedDrawerInternal()
+				{
+					Backend::RemoveDrawer(m_drawerID);
+				}
+
+				void setLayer(Layer layer)
+				{
+					Backend::SetDrawerLayer(m_drawerID, layer);
+				}
+
+				void setDrawIndex(int32 drawIndex)
+				{
+					Backend::SetDrawerDrawIndex(m_drawerID, drawIndex);
+				}
+			};
+
 			template <typename TResult>
 			class Promise;
 
@@ -1551,35 +1599,27 @@ namespace cotasklib
 		}
 
 		[[nodiscard]]
-		inline bool HasActiveDrawer(int32 drawIndex)
+		inline bool HasActiveDrawerInLayer(Layer layer)
 		{
-			return detail::Backend::HasActiveDrawer(drawIndex);
-		}
-
-		// drawIndexMin <= drawIndex <= drawIndexMax であるdrawIndexを持つDrawerが存在するか
-		// (drawIndexMaxを含む点に注意)
-		[[nodiscard]]
-		inline bool HasActiveDrawerInRange(int32 drawIndexMin, int32 drawIndexMax)
-		{
-			return detail::Backend::HasActiveDrawerInRange(drawIndexMin, drawIndexMax);
+			return detail::Backend::HasActiveDrawerInLayer(layer);
 		}
 
 		[[nodiscard]]
 		inline bool HasActiveModal()
 		{
-			return detail::Backend::HasActiveDrawerInRange(DrawIndex::ModalMin, DrawIndex::ModalMax);
+			return HasActiveDrawerInLayer(Layer::Modal);
 		}
 
 		[[nodiscard]]
 		inline bool HasActiveFadeIn()
 		{
-			return detail::Backend::HasActiveDrawerInRange(DrawIndex::FadeInMin, DrawIndex::FadeInMax);
+			return HasActiveDrawerInLayer(Layer::FadeIn);
 		}
 
 		[[nodiscard]]
 		inline bool HasActiveFadeOut()
 		{
-			return detail::Backend::HasActiveDrawerInRange(DrawIndex::FadeOutMin, DrawIndex::FadeOutMax);
+			return HasActiveDrawerInLayer(Layer::FadeOut);
 		}
 
 		[[nodiscard]]

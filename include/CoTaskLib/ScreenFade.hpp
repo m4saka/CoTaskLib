@@ -51,20 +51,20 @@ namespace cotasklib
 				ColorF m_color;
 				ColorF m_toColor;
 				double(*m_easeFunc)(double);
-				int32 m_drawIndex;
 				ISteadyClock* m_pSteadyClock;
 
 			public:
-				explicit ScreenFadeSequence(Duration duration, const ColorF& fromColor, const ColorF& toColor, double easeFunc(double), int32 drawIndex, ISteadyClock* pSteadyClock)
-					: m_duration(duration)
+				explicit ScreenFadeSequence(Duration duration, const ColorF& fromColor, const ColorF& toColor, double easeFunc(double), Layer layer, int32 drawIndex, ISteadyClock* pSteadyClock)
+					: SequenceBase<void>(layer, drawIndex)
+					, m_duration(duration)
 					, m_color(fromColor)
 					, m_toColor(toColor)
 					, m_easeFunc(easeFunc)
-					, m_drawIndex(drawIndex)
 					, m_pSteadyClock(pSteadyClock)
 				{
 				}
 
+				[[nodiscard]]
 				Task<void> start() override
 				{
 					return Ease(&m_color, m_duration, m_easeFunc, m_pSteadyClock).fromTo(m_color, m_toColor).play();
@@ -78,15 +78,15 @@ namespace cotasklib
 		}
 
 		[[nodiscard]]
-		inline Task<void> ScreenFadeIn(const Duration& duration, const ColorF& color = Palette::Black, double easeFunc(double) = Easing::Linear, int32 drawIndex = DrawIndex::FadeIn, ISteadyClock* pSteadyClock = nullptr)
+		inline Task<void> ScreenFadeIn(const Duration& duration, const ColorF& color = Palette::Black, double easeFunc(double) = Easing::Linear, Layer layer = Layer::FadeIn, int32 drawIndex = DrawIndex::Default, ISteadyClock* pSteadyClock = nullptr)
 		{
-			return Play<detail::ScreenFadeSequence>(duration, color, color.withA(0.0), easeFunc, drawIndex, pSteadyClock);
+			return Play<detail::ScreenFadeSequence>(duration, color, color.withA(0.0), easeFunc, layer, drawIndex, pSteadyClock);
 		}
 
 		[[nodiscard]]
-		inline Task<void> ScreenFadeOut(const Duration& duration, const ColorF& color = Palette::Black, double easeFunc(double) = Easing::Linear, int32 drawIndex = DrawIndex::FadeOut, ISteadyClock* pSteadyClock = nullptr)
+		inline Task<void> ScreenFadeOut(const Duration& duration, const ColorF& color = Palette::Black, double easeFunc(double) = Easing::Linear, Layer layer = Layer::FadeOut, int32 drawIndex = DrawIndex::Default, ISteadyClock* pSteadyClock = nullptr)
 		{
-			return Play<detail::ScreenFadeSequence>(duration, color.withA(0.0), color, easeFunc, drawIndex, pSteadyClock);
+			return Play<detail::ScreenFadeSequence>(duration, color.withA(0.0), color, easeFunc, layer, drawIndex, pSteadyClock);
 		}
 	}
 }

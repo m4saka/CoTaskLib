@@ -65,9 +65,12 @@ namespace cotasklib
 			return [=] { return std::make_unique<TScene>(args...); };
 		}
 
-		class [[nodiscard]] SceneBase
+		class [[nodiscard]] SceneBase : public detail::IDrawerInternal
 		{
 		private:
+			Layer m_layer;
+			int32 m_drawIndex;
+			detail::ScopedDrawerInternal* m_pCurrentScopedDrawer = nullptr;
 			bool m_isPreStart = true;
 			bool m_isFadingIn = false;
 			bool m_isFadingOut = false;
@@ -92,6 +95,22 @@ namespace cotasklib
 				m_isFadingIn = false;
 			}
 
+			void drawInternal() const
+			{
+				if (m_isPreStart)
+				{
+					preStartDraw();
+				}
+				else if (m_isPostFadeOut)
+				{
+					postFadeOutDraw();
+				}
+				else
+				{
+					draw();
+				}
+			}
+
 		protected:
 			[[nodiscard]]
 			virtual Task<void> preStart()
@@ -104,22 +123,10 @@ namespace cotasklib
 			}
 
 			[[nodiscard]]
-			virtual int32 preStartDrawIndex() const
-			{
-				return DrawIndex::Default;
-			}
-
-			[[nodiscard]]
 			virtual Task<void> start() = 0;
 
 			virtual void draw() const
 			{
-			}
-
-			[[nodiscard]]
-			virtual int32 drawIndex() const
-			{
-				return DrawIndex::Default;
 			}
 
 			[[nodiscard]]
@@ -142,12 +149,6 @@ namespace cotasklib
 
 			virtual void postFadeOutDraw() const
 			{
-			}
-
-			[[nodiscard]]
-			virtual int32 postFadeOutDrawIndex() const
-			{
-				return DrawIndex::Default;
 			}
 
 			[[nodiscard]]
@@ -191,8 +192,30 @@ namespace cotasklib
 				return m_taskFinishSource.done();
 			}
 
+			void setLayer(Layer layer)
+			{
+				m_layer = layer;
+				if (m_pCurrentScopedDrawer)
+				{
+					m_pCurrentScopedDrawer->setLayer(layer);
+				}
+			}
+
+			void setDrawIndex(int32 drawIndex)
+			{
+				m_drawIndex = drawIndex;
+				if (m_pCurrentScopedDrawer)
+				{
+					m_pCurrentScopedDrawer->setDrawIndex(drawIndex);
+				}
+			}
+
 		public:
-			SceneBase() = default;
+			explicit SceneBase(Layer layer = Layer::Default, int32 drawIndex = DrawIndex::Default)
+				: m_layer(layer)
+				, m_drawIndex(drawIndex)
+			{
+			}
 
 			// thisポインタをキャプチャするためコピー・ムーブ禁止
 			SceneBase(const SceneBase&) = delete;
@@ -225,34 +248,40 @@ namespace cotasklib
 			Task<SceneFactory> playInternal()&
 			{
 				{
+					m_isPreStart = true;
 					Task<void> preStartTask = preStart();
 					if (!preStartTask.empty())
 					{
-						const ScopedDrawer drawer{ [this] { preStartDraw(); }, [this] { return preStartDrawIndex(); } };
-						m_isPreStart = true;
+						detail::ScopedDrawerInternal drawer{ this, m_layer, m_drawIndex };
+						m_pCurrentScopedDrawer = &drawer;
 						co_await std::move(preStartTask);
-						m_isPreStart = false;
+						m_pCurrentScopedDrawer = nullptr;
 					}
+					m_isPreStart = false;
 				}
 
 				{
 					Task<void> startAndFadeOutTask = startAndFadeOut();
 					if (!startAndFadeOutTask.empty())
 					{
-						const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
+						detail::ScopedDrawerInternal drawer{ this, m_layer, m_drawIndex };
+						m_pCurrentScopedDrawer = &drawer;
 						co_await std::move(startAndFadeOutTask).with(fadeInInternal(), WithTiming::Before);
+						m_pCurrentScopedDrawer = nullptr;
 					}
 				}
 
 				{
+					m_isPostFadeOut = true;
 					Task<void> postFadeOutTask = postFadeOut();
 					if (!postFadeOutTask.empty())
 					{
-						const ScopedDrawer drawer{ [this] { postFadeOutDraw(); }, [this] { return postFadeOutDrawIndex(); } };
-						m_isPostFadeOut = true;
+						detail::ScopedDrawerInternal drawer{ this, m_layer, m_drawIndex };
+						m_pCurrentScopedDrawer = &drawer;
 						co_await std::move(postFadeOutTask);
-						m_isPostFadeOut = false;
+						m_pCurrentScopedDrawer = nullptr;
 					}
+					m_isPostFadeOut = false;
 				}
 
 				if (m_taskFinishSource.hasResult())

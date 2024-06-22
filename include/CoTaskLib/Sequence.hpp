@@ -34,7 +34,7 @@ namespace cotasklib
 	namespace Co
 	{
 		template <typename TResult = void>
-		class [[nodiscard]] SequenceBase
+		class [[nodiscard]] SequenceBase : public detail::IDrawerInternal
 		{
 			static_assert(!std::is_reference_v<TResult>, "TResult must not be a reference type");
 			static_assert(std::is_move_constructible_v<TResult> || std::is_void_v<TResult>, "TResult must be move constructible");
@@ -46,6 +46,9 @@ namespace cotasklib
 			using finish_callback_type = FinishCallbackType<TResult>;
 
 		private:
+			Layer m_layer;
+			int32 m_drawIndex;
+			detail::ScopedDrawerInternal* m_pCurrentScopedDrawer = nullptr;
 			bool m_onceRun = false;
 			bool m_isPreStart = true;
 			bool m_isFadingIn = false;
@@ -83,6 +86,22 @@ namespace cotasklib
 				m_isFadingIn = false;
 			}
 
+			void drawInternal() const override
+			{
+				if (m_isPreStart)
+				{
+					preStartDraw();
+				}
+				else if (m_isPostFadeOut)
+				{
+					postFadeOutDraw();
+				}
+				else
+				{
+					draw();
+				}
+			}
+
 		protected:
 			[[nodiscard]]
 			virtual Task<void> preStart()
@@ -95,22 +114,10 @@ namespace cotasklib
 			}
 
 			[[nodiscard]]
-			virtual int32 preStartDrawIndex() const
-			{
-				return DrawIndex::Default;
-			}
-
-			[[nodiscard]]
 			virtual Task<TResult> start() = 0;
 
 			virtual void draw() const
 			{
-			}
-
-			[[nodiscard]]
-			virtual int32 drawIndex() const
-			{
-				return DrawIndex::Default;
 			}
 
 			[[nodiscard]]
@@ -136,12 +143,6 @@ namespace cotasklib
 			}
 
 			[[nodiscard]]
-			virtual int32 postFadeOutDrawIndex() const
-			{
-				return DrawIndex::Default;
-			}
-
-			[[nodiscard]]
 			Task<void> waitForFadeIn()
 			{
 				if (m_isPreStart)
@@ -160,8 +161,30 @@ namespace cotasklib
 				}
 			}
 
+			void setLayer(Layer layer)
+			{
+				m_layer = layer;
+				if (m_pCurrentScopedDrawer)
+				{
+					m_pCurrentScopedDrawer->setLayer(layer);
+				}
+			}
+
+			void setDrawIndex(int32 drawIndex)
+			{
+				m_drawIndex = drawIndex;
+				if (m_pCurrentScopedDrawer)
+				{
+					m_pCurrentScopedDrawer->setDrawIndex(drawIndex);
+				}
+			}
+
 		public:
-			SequenceBase() = default;
+			explicit SequenceBase(Layer layer = Layer::Default, int32 drawIndex = DrawIndex::Default)
+				: m_layer(layer)
+				, m_drawIndex(drawIndex)
+			{
+			}
 
 			// thisポインタをキャプチャするためコピー・ムーブ禁止
 			SequenceBase(const SequenceBase&) = delete;
@@ -196,6 +219,18 @@ namespace cotasklib
 			}
 
 			[[nodiscard]]
+			Layer layer() const
+			{
+				return m_layer;
+			}
+
+			[[nodiscard]]
+			int32 drawIndex() const
+			{
+				return m_drawIndex;
+			}
+
+			[[nodiscard]]
 			Task<TResult> play()&
 			{
 				if (m_onceRun)
@@ -206,34 +241,40 @@ namespace cotasklib
 				m_onceRun = true;
 
 				{
+					m_isPreStart = true;
 					Task<void> preStartTask = preStart();
 					if (!preStartTask.empty())
 					{
-						const ScopedDrawer drawer{ [this] { preStartDraw(); }, [this] { return preStartDrawIndex(); } };
-						m_isPreStart = true;
+						detail::ScopedDrawerInternal drawer{ this, m_layer, m_drawIndex };
+						m_pCurrentScopedDrawer = &drawer;
 						co_await std::move(preStartTask);
-						m_isPreStart = false;
+						m_pCurrentScopedDrawer = nullptr;
 					}
+					m_isPreStart = false;
 				}
 
 				{
 					Task<void> startAndFadeOutTask = startAndFadeOut();
 					if (!startAndFadeOutTask.empty())
 					{
-						const ScopedDrawer drawer{ [this] { draw(); }, [this] { return drawIndex(); } };
+						detail::ScopedDrawerInternal drawer{ this, m_layer, m_drawIndex };
+						m_pCurrentScopedDrawer = &drawer;
 						co_await std::move(startAndFadeOutTask).with(fadeInInternal(), WithTiming::Before);
+						m_pCurrentScopedDrawer = nullptr;
 					}
 				}
 
 				{
+					m_isPostFadeOut = true;
 					Task<void> postFadeOutTask = postFadeOut();
 					if (!postFadeOutTask.empty())
 					{
-						const ScopedDrawer drawer{ [this] { postFadeOutDraw(); }, [this] { return postFadeOutDrawIndex(); } };
-						m_isPostFadeOut = true;
+						detail::ScopedDrawerInternal drawer{ this, m_layer, m_drawIndex };
+						m_pCurrentScopedDrawer = &drawer;
 						co_await std::move(postFadeOutTask);
-						m_isPostFadeOut = false;
+						m_pCurrentScopedDrawer = nullptr;
 					}
+					m_isPostFadeOut = false;
 				}
 
 				m_isDone = true;
@@ -321,7 +362,10 @@ namespace cotasklib
 			}
 
 		public:
-			UpdaterSequenceBase() = default;
+			explicit UpdaterSequenceBase(Layer layer = Layer::Default, int32 drawIndex = DrawIndex::Default)
+				: SequenceBase<TResult>(layer, drawIndex)
+			{
+			}
 
 			UpdaterSequenceBase(const UpdaterSequenceBase&) = delete;
 

@@ -217,11 +217,6 @@ namespace cotasklib
 				}
 
 				[[nodiscard]]
-				int32 drawIndex() const override
-				{
-					return m_drawIndex;
-				}
-
 				Task<void> fadeIn() override
 				{
 					co_await All(
@@ -230,6 +225,7 @@ namespace cotasklib
 					setButtonInteractable(true);
 				}
 
+				[[nodiscard]]
 				Task<void> fadeOut() override
 				{
 					setButtonInteractable(false);
@@ -274,25 +270,25 @@ namespace cotasklib
 				}
 
 			public:
-				explicit SimpleDialogSequence(StringView text, const Array<String>& buttonTexts, int32 drawIndex)
-					: m_text(text)
+				explicit SimpleDialogSequence(StringView text, const Array<String>& buttonTexts, Layer layer, int32 drawIndex)
+					: UpdaterSequenceBase<String>(layer, drawIndex)
+					, m_text(text)
 					, m_buttons(CreateButtons(buttonTexts))
-					, m_drawIndex(drawIndex)
 				{
 				}
 			};
 		}
 
 		[[nodiscard]]
-		inline Task<String> SimpleDialog(StringView text, const Array<String>& buttonTexts, int32 drawIndex = DrawIndex::Modal)
+		inline Task<String> SimpleDialog(StringView text, const Array<String>& buttonTexts, Layer layer = Layer::Modal, int32 drawIndex = DrawIndex::Default)
 		{
-			return Play<detail::SimpleDialogSequence>(text, buttonTexts, drawIndex);
+			return Play<detail::SimpleDialogSequence>(text, buttonTexts, layer, drawIndex);
 		}
 
 		[[nodiscard]]
-		inline Task<void> SimpleDialog(StringView text, int32 drawIndex = DrawIndex::Modal)
+		inline Task<void> SimpleDialog(StringView text, Layer layer = Layer::Modal, int32 drawIndex = DrawIndex::Default)
 		{
-			co_await SimpleDialog(text, { U"OK" }, drawIndex);
+			co_await SimpleDialog(text, { U"OK" }, layer, drawIndex);
 		}
 	}
 }

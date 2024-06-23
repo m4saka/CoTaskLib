@@ -170,6 +170,17 @@ TEST_CASE("Finish callback")
 	REQUIRE(cancelCallbackCount == 0);
 }
 
+TEST_CASE("Finish callback with empty task")
+{
+	int32 finishCallbackCount = 0;
+	int32 cancelCallbackCount = 0;
+	auto runner = Co::EmptyTask().runScoped([&] { ++finishCallbackCount; }, [&] { ++cancelCallbackCount; });
+
+	// 空のタスクは即座に完了扱いとなる
+	REQUIRE(finishCallbackCount == 1);
+	REQUIRE(cancelCallbackCount == 0);
+}
+
 TEST_CASE("Cancel callback")
 {
 	int32 finishCallbackCount = 0;

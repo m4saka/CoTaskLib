@@ -29,138 +29,138 @@
 #pragma once
 #include "Core.hpp"
 
+namespace cotasklib::Co
+{
+	namespace detail
+	{
+		template <typename TResult>
+		class S3dAsyncTaskAwaiter : public IAwaiter
+		{
+		private:
+			AsyncTask<TResult> m_asyncTask;
+			bool m_isDone = false;
+
+		public:
+			explicit S3dAsyncTaskAwaiter(AsyncTask<TResult>&& asyncTask)
+				: m_asyncTask(std::move(asyncTask))
+			{
+			}
+
+			S3dAsyncTaskAwaiter(const S3dAsyncTaskAwaiter<TResult>&) = delete;
+
+			S3dAsyncTaskAwaiter<TResult>& operator=(const S3dAsyncTaskAwaiter<TResult>&) = delete;
+
+			S3dAsyncTaskAwaiter(S3dAsyncTaskAwaiter<TResult>&&) noexcept = default;
+
+			S3dAsyncTaskAwaiter<TResult>& operator=(S3dAsyncTaskAwaiter<TResult>&&) = delete;
+
+			void resume() override
+			{
+				if (m_isDone)
+				{
+					return;
+				}
+				m_isDone = m_asyncTask.isReady();
+			}
+
+			bool done() const override
+			{
+				return m_isDone;
+			}
+
+			bool await_ready() const
+			{
+				return m_isDone;
+			}
+
+			template <typename TResultOther>
+			bool await_suspend(std::coroutine_handle<detail::Promise<TResultOther>> handle)
+			{
+				resume();
+				if (m_isDone)
+				{
+					// フレーム待ちなしで終了した場合は登録不要
+					return false;
+				}
+				handle.promise().setSubAwaiter(this);
+				return true;
+			}
+
+			TResult await_resume()
+			{
+				return m_asyncTask.get();
+			}
+		};
+
+		class S3dAsyncHTTPTaskAwaiter : public IAwaiter
+		{
+		private:
+			AsyncHTTPTask m_asyncHTTPTask;
+			bool m_isDone = false;
+
+		public:
+			explicit S3dAsyncHTTPTaskAwaiter(AsyncHTTPTask&& asyncHTTPTask)
+				: m_asyncHTTPTask(std::move(asyncHTTPTask))
+			{
+			}
+
+			explicit S3dAsyncHTTPTaskAwaiter(const AsyncHTTPTask& asyncHTTPTask)
+				: m_asyncHTTPTask(asyncHTTPTask)
+			{
+			}
+
+			// AwaitHTTPTaskはコピー可能だが、他に合わせて保守的にコピー・ムーブ代入禁止にしている
+
+			S3dAsyncHTTPTaskAwaiter(const S3dAsyncHTTPTaskAwaiter&) = delete;
+
+			S3dAsyncHTTPTaskAwaiter& operator=(const S3dAsyncHTTPTaskAwaiter&) = delete;
+
+			S3dAsyncHTTPTaskAwaiter(S3dAsyncHTTPTaskAwaiter&&) = default;
+
+			S3dAsyncHTTPTaskAwaiter& operator=(S3dAsyncHTTPTaskAwaiter&&) = delete;
+
+			void resume() override
+			{
+				if (m_isDone)
+				{
+					return;
+				}
+				m_isDone = m_asyncHTTPTask.isReady();
+			}
+
+			bool done() const override
+			{
+				return m_isDone;
+			}
+
+			bool await_ready() const
+			{
+				return m_isDone;
+			}
+
+			template <typename TResult>
+			bool await_suspend(std::coroutine_handle<detail::Promise<TResult>> handle)
+			{
+				resume();
+				if (m_isDone)
+				{
+					// フレーム待ちなしで終了した場合は登録不要
+					return false;
+				}
+				handle.promise().setSubAwaiter(this);
+				return true;
+			}
+
+			HTTPResponse await_resume()
+			{
+				return m_asyncHTTPTask.getResponse();
+			}
+		};
+	}
+}
+
 namespace cotasklib
 {
-	namespace Co
-	{
-		namespace detail
-		{
-			template <typename TResult>
-			class S3dAsyncTaskAwaiter : public IAwaiter
-			{
-			private:
-				AsyncTask<TResult> m_asyncTask;
-				bool m_isDone = false;
-
-			public:
-				explicit S3dAsyncTaskAwaiter(AsyncTask<TResult>&& asyncTask)
-					: m_asyncTask(std::move(asyncTask))
-				{
-				}
-
-				S3dAsyncTaskAwaiter(const S3dAsyncTaskAwaiter<TResult>&) = delete;
-
-				S3dAsyncTaskAwaiter<TResult>& operator=(const S3dAsyncTaskAwaiter<TResult>&) = delete;
-
-				S3dAsyncTaskAwaiter(S3dAsyncTaskAwaiter<TResult>&&) noexcept = default;
-
-				S3dAsyncTaskAwaiter<TResult>& operator=(S3dAsyncTaskAwaiter<TResult>&&) = delete;
-
-				void resume() override
-				{
-					if (m_isDone)
-					{
-						return;
-					}
-					m_isDone = m_asyncTask.isReady();
-				}
-
-				bool done() const override
-				{
-					return m_isDone;
-				}
-
-				bool await_ready() const
-				{
-					return m_isDone;
-				}
-
-				template <typename TResultOther>
-				bool await_suspend(std::coroutine_handle<detail::Promise<TResultOther>> handle)
-				{
-					resume();
-					if (m_isDone)
-					{
-						// フレーム待ちなしで終了した場合は登録不要
-						return false;
-					}
-					handle.promise().setSubAwaiter(this);
-					return true;
-				}
-
-				TResult await_resume()
-				{
-					return m_asyncTask.get();
-				}
-			};
-
-			class S3dAsyncHTTPTaskAwaiter : public IAwaiter
-			{
-			private:
-				AsyncHTTPTask m_asyncHTTPTask;
-				bool m_isDone = false;
-
-			public:
-				explicit S3dAsyncHTTPTaskAwaiter(AsyncHTTPTask&& asyncHTTPTask)
-					: m_asyncHTTPTask(std::move(asyncHTTPTask))
-				{
-				}
-
-				explicit S3dAsyncHTTPTaskAwaiter(const AsyncHTTPTask& asyncHTTPTask)
-					: m_asyncHTTPTask(asyncHTTPTask)
-				{
-				}
-
-				// AwaitHTTPTaskはコピー可能だが、他に合わせて保守的にコピー・ムーブ代入禁止にしている
-
-				S3dAsyncHTTPTaskAwaiter(const S3dAsyncHTTPTaskAwaiter&) = delete;
-
-				S3dAsyncHTTPTaskAwaiter& operator=(const S3dAsyncHTTPTaskAwaiter&) = delete;
-
-				S3dAsyncHTTPTaskAwaiter(S3dAsyncHTTPTaskAwaiter&&) = default;
-
-				S3dAsyncHTTPTaskAwaiter& operator=(S3dAsyncHTTPTaskAwaiter&&) = delete;
-
-				void resume() override
-				{
-					if (m_isDone)
-					{
-						return;
-					}
-					m_isDone = m_asyncHTTPTask.isReady();
-				}
-
-				bool done() const override
-				{
-					return m_isDone;
-				}
-
-				bool await_ready() const
-				{
-					return m_isDone;
-				}
-
-				template <typename TResult>
-				bool await_suspend(std::coroutine_handle<detail::Promise<TResult>> handle)
-				{
-					resume();
-					if (m_isDone)
-					{
-						// フレーム待ちなしで終了した場合は登録不要
-						return false;
-					}
-					handle.promise().setSubAwaiter(this);
-					return true;
-				}
-
-				HTTPResponse await_resume()
-				{
-					return m_asyncHTTPTask.getResponse();
-				}
-			};
-		}
-	}
-
 	template <typename TResult>
 	[[nodiscard]]
 	auto operator co_await(AsyncTask<TResult>&& asyncTask)
@@ -179,30 +179,30 @@ namespace cotasklib
 	{
 		return Co::detail::S3dAsyncHTTPTaskAwaiter{ asyncHTTPTask };
 	}
+}
 
-	namespace Co
+namespace cotasklib::Co
+{
+	template <typename TResult>
+	[[nodiscard]]
+	Task<TResult> WaitForResult(AsyncTask<TResult>&& asyncTask)
 	{
-		template <typename TResult>
-		[[nodiscard]]
-		Task<TResult> WaitForResult(AsyncTask<TResult>&& asyncTask)
-		{
-			using ::cotasklib::operator co_await;
-			co_return co_await std::move(asyncTask);
-		}
+		using ::cotasklib::operator co_await;
+		co_return co_await std::move(asyncTask);
+	}
 
-		[[nodiscard]]
-		inline Task<HTTPResponse> WaitForResult(AsyncHTTPTask&& asyncHTTPTask)
-		{
-			using ::cotasklib::operator co_await;
-			co_return co_await std::move(asyncHTTPTask);
-		}
+	[[nodiscard]]
+	inline Task<HTTPResponse> WaitForResult(AsyncHTTPTask&& asyncHTTPTask)
+	{
+		using ::cotasklib::operator co_await;
+		co_return co_await std::move(asyncHTTPTask);
+	}
 
-		[[nodiscard]]
-		inline Task<HTTPResponse> WaitForResult(const AsyncHTTPTask& asyncHTTPTask)
-		{
-			using ::cotasklib::operator co_await;
-			co_return co_await asyncHTTPTask;
-		}
+	[[nodiscard]]
+	inline Task<HTTPResponse> WaitForResult(const AsyncHTTPTask& asyncHTTPTask)
+	{
+		using ::cotasklib::operator co_await;
+		co_return co_await asyncHTTPTask;
 	}
 }
 

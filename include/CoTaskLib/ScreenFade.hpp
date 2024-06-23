@@ -31,63 +31,60 @@
 #include "Sequence.hpp"
 #include "Ease.hpp"
 
-namespace cotasklib
+namespace cotasklib::Co
 {
-	namespace Co
+	namespace detail
 	{
-		namespace detail
+		inline void ScreenFill(const ColorF& color)
 		{
-			inline void ScreenFill(const ColorF& color)
-			{
-				const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
+			const Transformer2D transform{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
 
-				Scene::Rect().draw(color);
+			Scene::Rect().draw(color);
+		}
+
+		class [[nodiscard]] ScreenFadeSequence : public SequenceBase<void>
+		{
+		private:
+			Duration m_duration;
+			ColorF m_color;
+			ColorF m_toColor;
+			double(*m_easeFunc)(double);
+			ISteadyClock* m_pSteadyClock;
+
+		public:
+			explicit ScreenFadeSequence(Duration duration, const ColorF& fromColor, const ColorF& toColor, double easeFunc(double), Layer layer, int32 drawIndex, ISteadyClock* pSteadyClock)
+				: SequenceBase<void>(layer, drawIndex)
+				, m_duration(duration)
+				, m_color(fromColor)
+				, m_toColor(toColor)
+				, m_easeFunc(easeFunc)
+				, m_pSteadyClock(pSteadyClock)
+			{
 			}
 
-			class [[nodiscard]] ScreenFadeSequence : public SequenceBase<void>
+			[[nodiscard]]
+			Task<void> start() override
 			{
-			private:
-				Duration m_duration;
-				ColorF m_color;
-				ColorF m_toColor;
-				double(*m_easeFunc)(double);
-				ISteadyClock* m_pSteadyClock;
+				return Ease(&m_color, m_duration, m_easeFunc, m_pSteadyClock).fromTo(m_color, m_toColor).play();
+			}
 
-			public:
-				explicit ScreenFadeSequence(Duration duration, const ColorF& fromColor, const ColorF& toColor, double easeFunc(double), Layer layer, int32 drawIndex, ISteadyClock* pSteadyClock)
-					: SequenceBase<void>(layer, drawIndex)
-					, m_duration(duration)
-					, m_color(fromColor)
-					, m_toColor(toColor)
-					, m_easeFunc(easeFunc)
-					, m_pSteadyClock(pSteadyClock)
-				{
-				}
+			void draw() const override
+			{
+				ScreenFill(m_color);
+			}
+		};
+	}
 
-				[[nodiscard]]
-				Task<void> start() override
-				{
-					return Ease(&m_color, m_duration, m_easeFunc, m_pSteadyClock).fromTo(m_color, m_toColor).play();
-				}
+	[[nodiscard]]
+	inline Task<void> ScreenFadeIn(const Duration& duration, const ColorF& color = Palette::Black, double easeFunc(double) = Easing::Linear, Layer layer = Layer::Transition, int32 drawIndex = DrawIndex::Default, ISteadyClock* pSteadyClock = nullptr)
+	{
+		return Play<detail::ScreenFadeSequence>(duration, color, color.withA(0.0), easeFunc, layer, drawIndex, pSteadyClock);
+	}
 
-				void draw() const override
-				{
-					ScreenFill(m_color);
-				}
-			};
-		}
-
-		[[nodiscard]]
-		inline Task<void> ScreenFadeIn(const Duration& duration, const ColorF& color = Palette::Black, double easeFunc(double) = Easing::Linear, Layer layer = Layer::Transition, int32 drawIndex = DrawIndex::Default, ISteadyClock* pSteadyClock = nullptr)
-		{
-			return Play<detail::ScreenFadeSequence>(duration, color, color.withA(0.0), easeFunc, layer, drawIndex, pSteadyClock);
-		}
-
-		[[nodiscard]]
-		inline Task<void> ScreenFadeOut(const Duration& duration, const ColorF& color = Palette::Black, double easeFunc(double) = Easing::Linear, Layer layer = Layer::Transition, int32 drawIndex = DrawIndex::Front, ISteadyClock* pSteadyClock = nullptr)
-		{
-			return Play<detail::ScreenFadeSequence>(duration, color.withA(0.0), color, easeFunc, layer, drawIndex, pSteadyClock);
-		}
+	[[nodiscard]]
+	inline Task<void> ScreenFadeOut(const Duration& duration, const ColorF& color = Palette::Black, double easeFunc(double) = Easing::Linear, Layer layer = Layer::Transition, int32 drawIndex = DrawIndex::Front, ISteadyClock* pSteadyClock = nullptr)
+	{
+		return Play<detail::ScreenFadeSequence>(duration, color.withA(0.0), color, easeFunc, layer, drawIndex, pSteadyClock);
 	}
 }
 

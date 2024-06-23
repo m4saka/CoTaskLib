@@ -136,6 +136,9 @@
     <Filter Include="Resource Files\engine\font\min">
       <UniqueIdentifier>{1b103960-f11a-4515-b4f1-f59333ce00d9}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\CoTaskLib">
+      <UniqueIdentifier>{a595a2f8-5c83-4b16-a16f-1bf661161798}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -808,6 +811,36 @@
   <ItemGroup>
     <ClInclude Include="stdafx.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\CoTaskLib.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\CoTaskLib\Core.hpp">
+      <Filter>Header Files\CoTaskLib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\CoTaskLib\Ease.hpp">
+      <Filter>Header Files\CoTaskLib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\CoTaskLib\S3dAsyncTask.hpp">
+      <Filter>Header Files\CoTaskLib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\CoTaskLib\Scene.hpp">
+      <Filter>Header Files\CoTaskLib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\CoTaskLib\ScreenFade.hpp">
+      <Filter>Header Files\CoTaskLib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\CoTaskLib\Sequence.hpp">
+      <Filter>Header Files\CoTaskLib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\CoTaskLib\SimpleDialog.hpp">
+      <Filter>Header Files\CoTaskLib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\CoTaskLib\Tween.hpp">
+      <Filter>Header Files\CoTaskLib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\CoTaskLib\Typewriter.hpp">
+      <Filter>Header Files\CoTaskLib</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -685,6 +685,11 @@ Co::Task<> start() override
 }
 ```
 
+### 描画順序の制御方法
+シーンにおいても、シーケンスと同じ方法でレイヤー・drawIndexを指定して描画順序を制御できます。
+
+詳細は「`Co::SequenceBase<TResult>`クラス」の節の「描画順序の制御方法」をご確認ください。
+
 ### Siv3D標準のシーン機能との比較
 
 下記の点が異なります。
@@ -847,9 +852,9 @@ private:
     - この関数の代わりに、`Co::Ease()`の第1引数に指定することもできます。
 - `from(T)`/`to(T)` -> `Co::EaseTaskBuilder<T>&`
     - 開始値・目標値を指定します。
-    - 引数には、T型の値を指定するか、T型のコンストラクタ引数を指定します。
-    - この関数の代わりに、from・toの値をそれぞれ`Co::Ease()`の第2・第3引数に指定することもできます。なお、その場合`Co::Ease<T>()`の`<T>`は記述を省略できます。
     - Tが浮動小数点型(double、floatなど)の場合は、この関数を呼ばなくてもデフォルトでfromに0.0、toに1.0が指定されます。
+    - Tが`Vec2`の場合、各要素のスカラー値を渡して指定する`from(double, double)`/`to(double, double)`を使用することができます。
+    - Tが`Vec3`の場合、各要素のスカラー値を渡して指定する`from(double, double, double)`/`to(double, double, double)`を使用することができます。
 - `fromTo(T, T)` -> `Co::EaseTaskBuilder<T>&`
     - 開始値・目標値をまとめて指定します。
 - `setEase(double(*)(double))` -> `Co::EaseTaskBuilder<T>&`
@@ -879,7 +884,7 @@ private:
         co_await Co::All(
             m_tweener.tweenPosition(0.5s).from(-100, 0).to(0, 0).play(),
             m_tweener.fadeInAlpha(0.5s).play(),
-            m_tweener.tweenScale(0.5s).from(0.75, 0.75).to(1.0, 1.0).play());
+            m_tweener.tweenScale(0.5s).from(0.75).to(1.0).play());
     }
 
     Co::Task<> start() override
@@ -894,7 +899,7 @@ private:
         co_await Co::All(
             m_tweener.tweenPosition(0.5s).from(0, 0).to(100, 0).play(),
             m_tweener.fadeOutAlpha(0.5s).play(),
-            m_tweener.tweenScale(0.5s).from(1.0, 1.0).to(0.75, 0.75).play());
+            m_tweener.tweenScale(0.5s).from(1.0).to(0.75).play());
     }
 
     void draw() const override

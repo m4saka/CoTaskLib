@@ -523,12 +523,43 @@ TEST_CASE("ScopedTaskRunner::requestCancel")
 	REQUIRE(runner.done() == false);
 
 	// キャンセル
-	runner.requestCancel();
+	const bool canceled = runner.requestCancel();
+	REQUIRE(canceled == true);
 
 	// 即時でキャンセルされる
 	REQUIRE(runner.done() == true);
 	REQUIRE(finishCallbackCount == 0);
 	REQUIRE(cancelCallbackCount == 1);
+
+	// 2回目以降のキャンセルは通らない
+	const bool canceled2 = runner.requestCancel();
+	REQUIRE(canceled2 == false);
+	REQUIRE(finishCallbackCount == 0);
+	REQUIRE(cancelCallbackCount == 1);
+}
+
+TEST_CASE("ScopedTaskRunner::requestCancel after finished")
+{
+	int32 finishCallbackCount = 0;
+	int32 cancelCallbackCount = 0;
+
+	auto runner = Co::DelayFrame(3).runScoped([&] { ++finishCallbackCount; }, [&] { ++cancelCallbackCount; });
+	for (int32 i = 0; i < 3; ++i)
+	{
+		REQUIRE(runner.done() == false);
+		System::Update();
+	}
+
+	// 完了済みである
+	REQUIRE(runner.done() == true);
+	REQUIRE(finishCallbackCount == 1);
+	REQUIRE(cancelCallbackCount == 0);
+
+	// 完了済みの場合はキャンセル要求は通らない
+	const bool canceled = runner.requestCancel();
+	REQUIRE(canceled == false);
+	REQUIRE(finishCallbackCount == 1);
+	REQUIRE(cancelCallbackCount == 0);
 }
 
 TEST_CASE("ScopedTaskRunner::waitUntilDone")
@@ -663,7 +694,8 @@ TEST_CASE("MultiRunner::requestCancelAll")
 	REQUIRE(mr.anyDone() == true);
 
 	// キャンセル
-	mr.requestCancelAll();
+	const bool canceled = mr.requestCancelAll();
+	REQUIRE(canceled == true);
 
 	// キャンセルされたので2個目のタスクは完了しない
 	REQUIRE(runner1FinishCount == 1);
@@ -674,6 +706,16 @@ TEST_CASE("MultiRunner::requestCancelAll")
 	REQUIRE(runner3CancelCount == 1);
 	REQUIRE(mr.allDone() == true);
 	REQUIRE(mr.anyDone() == true);
+
+	// 2回目以降のキャンセルは通らない
+	const bool canceled2 = mr.requestCancelAll();
+	REQUIRE(canceled2 == false);
+	REQUIRE(runner1FinishCount == 1);
+	REQUIRE(runner1CancelCount == 0);
+	REQUIRE(runner2FinishCount == 0);
+	REQUIRE(runner2CancelCount == 1);
+	REQUIRE(runner3FinishCount == 0);
+	REQUIRE(runner3CancelCount == 1);
 }
 
 TEST_CASE("MultiRunner::waitUntilAllDone")
@@ -2246,9 +2288,9 @@ private:
 	{
 		m_pProgress1->isStartStarted = true;
 		co_await Co::NextFrame();
-		REQUIRE(isRequested() == false);
+		REQUIRE(nextActionRequested() == false);
 		REQUIRE(requestNextScene<TestScene>(m_pProgress2) == true);
-		REQUIRE(isRequested() == true);
+		REQUIRE(nextActionRequested() == true);
 		m_pProgress1->isStartFinished = true;
 	}
 

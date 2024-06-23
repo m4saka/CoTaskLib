@@ -1017,6 +1017,8 @@ private:
     - マウスの右ボタンが指定領域でクリックされてから離されるまで待機します。
 - `Co::WaitUntilMouseOver(TArea)` -> `Co::Task<>`
     - マウスカーソルが指定領域内に侵入するまで待機します。
+- `Co::EmptyTask()` -> `Co::Task<>`
+    - 何もせず即座に終了するタスクを生成します。
 - `Co::FromResult(TResult)` -> `Co::Task<TResult>`
     - 指定した値を即座に返すタスクを生成します。
 - `Co::UpdaterTask(std::function<void()>)` -> `Co::Task<>`

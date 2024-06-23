@@ -665,7 +665,16 @@ namespace cotasklib::Co
 			rhs.m_id.reset();
 		}
 
-		ScopedTaskRunner& operator=(ScopedTaskRunner&&) = delete;
+		ScopedTaskRunner& operator=(ScopedTaskRunner&& rhs)
+		{
+			if (m_id.has_value())
+			{
+				detail::Backend::Remove(*m_id);
+			}
+			m_id = rhs.m_id;
+			rhs.m_id.reset();
+			return *this;
+		}
 
 		~ScopedTaskRunner()
 		{
@@ -849,6 +858,11 @@ namespace cotasklib::Co
 		const ScopedTaskRunner& at(size_t index) const
 		{
 			return m_runners.at(index);
+		}
+
+		void removeDone()
+		{
+			m_runners.remove_if([](const ScopedTaskRunner& runner) { return runner.done(); });
 		}
 
 		bool requestCancelAll()

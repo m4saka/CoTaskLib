@@ -443,26 +443,32 @@ namespace cotasklib::Co
 				return id;
 			}
 
-			static void Remove(AwaiterID id)
+			static bool Remove(AwaiterID id)
 			{
 				if (!s_pInstance)
 				{
 					// Note: ユーザーがインスタンスをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
-					return;
+					return false;
 				}
 				if (id == s_pInstance->m_currentAwaiterID)
 				{
 					// 実行中タスクのAwaiterをここで削除するとアクセス違反やイテレータ破壊が起きるため、代わりに削除フラグを立てて実行完了時に削除
 					// (例えば、タスク実行のライフタイムをOptional<ScopedTaskRunner>型のメンバ変数として持ち、タスク実行中にそこへnoneを代入して実行を止める場合が該当)
-					s_pInstance->m_currentAwaiterRemovalNeeded = true;
-					return;
+					if (!s_pInstance->m_currentAwaiterRemovalNeeded)
+					{
+						s_pInstance->m_currentAwaiterRemovalNeeded = true;
+						return true;
+					}
+					return false;
 				}
 				const auto it = s_pInstance->m_awaiterEntries.find(id);
 				if (it != s_pInstance->m_awaiterEntries.end())
 				{
 					it->second.callEndCallback();
 					s_pInstance->m_awaiterEntries.erase(it);
+					return true;
 				}
+				return false;
 			}
 
 			[[nodiscard]]
@@ -680,13 +686,15 @@ namespace cotasklib::Co
 			m_id.reset();
 		}
 
-		void requestCancel()
+		bool requestCancel()
 		{
 			if (m_id.has_value())
 			{
-				detail::Backend::Remove(*m_id);
+				const bool removed = detail::Backend::Remove(*m_id);
 				m_id.reset();
+				return removed;
 			}
+			return false;
 		}
 
 		void addTo(MultiRunner& mr)&&;
@@ -731,12 +739,17 @@ namespace cotasklib::Co
 			m_runners.clear();
 		}
 
-		void requestCancelAll()
+		bool requestCancelAll()
 		{
+			bool anyCanceled = false;
 			for (ScopedTaskRunner& runner : m_runners)
 			{
-				runner.requestCancel();
+				if (runner.requestCancel())
+				{
+					anyCanceled = true;
+				}
 			}
+			return anyCanceled;
 		}
 
 		[[nodiscard]]

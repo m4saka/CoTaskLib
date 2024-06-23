@@ -739,6 +739,11 @@ namespace cotasklib::Co
 			m_runners.clear();
 		}
 
+		void shrinkToFit()
+		{
+			m_runners.shrink_to_fit();
+		}
+
 		bool requestCancelAll()
 		{
 			bool anyCanceled = false;

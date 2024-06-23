@@ -333,7 +333,7 @@ namespace cotasklib::Co
 		}
 
 		[[nodiscard]]
-		bool isFinishRequested() const
+		bool finishRequested() const
 		{
 			return m_taskFinishSource.done();
 		}
@@ -392,7 +392,7 @@ namespace cotasklib::Co
 		}
 
 		[[nodiscard]]
-		bool isFinishRequested() const
+		bool finishRequested() const
 		{
 			return m_taskFinishSource.done();
 		}

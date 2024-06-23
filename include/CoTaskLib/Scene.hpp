@@ -185,7 +185,7 @@ namespace cotasklib::Co
 		}
 
 		[[nodiscard]]
-		bool isRequested() const
+		bool nextActionRequested() const
 		{
 			return m_taskFinishSource.done();
 		}
@@ -294,7 +294,7 @@ namespace cotasklib::Co
 		[[nodiscard]]
 		virtual Task<void> start() override final
 		{
-			if (isRequested())
+			if (nextActionRequested())
 			{
 				// コンストラクタやpreStart内で次シーンが指定済みの場合は即座に終了
 				co_return;
@@ -304,7 +304,7 @@ namespace cotasklib::Co
 			while (true)
 			{
 				update();
-				if (isRequested())
+				if (nextActionRequested())
 				{
 					co_return;
 				}

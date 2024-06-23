@@ -102,20 +102,67 @@ namespace cotasklib::Co
 
 	using SceneFactory = std::function<std::unique_ptr<SceneBase>()>;
 
+	// レイヤー
+	// (将来的な拡張のために隙間を空けている)
 	enum class Layer : uint8
 	{
-		Default,
-		Modal,
-		PostModal,
-		Transition,
-		PostTransition,
-		Debug,
+		User_PreDefault_1 = 32,
+		User_PreDefault_2,
+		User_PreDefault_3,
+		User_PreDefault_4,
+		User_PreDefault_5,
+		User_PreDefault_6,
+		User_PreDefault_7,
+		User_PreDefault_8,
+		User_PreDefault_9,
+		User_PreDefault_10,
+
+		Default = 64,
+
+		User_PostDefault_1 = 65,
+		User_PostDefault_2,
+		User_PostDefault_3,
+		User_PostDefault_4,
+		User_PostDefault_5,
+		User_PostDefault_6,
+		User_PostDefault_7,
+		User_PostDefault_8,
+		User_PostDefault_9,
+		User_PostDefault_10,
+
+		Modal = 128,
+
+		User_PostModal_1 = 129,
+		User_PostModal_2,
+		User_PostModal_3,
+		User_PostModal_4,
+		User_PostModal_5,
+		User_PostModal_6,
+		User_PostModal_7,
+		User_PostModal_8,
+		User_PostModal_9,
+		User_PostModal_10,
+
+		Transition_FadeIn = 192,
+		Transition_General = 193,
+		Transition_FadeOut = 194,
+
+		User_PostTransition_1 = 195,
+		User_PostTransition_2,
+		User_PostTransition_3,
+		User_PostTransition_4,
+		User_PostTransition_5,
+		User_PostTransition_6,
+		User_PostTransition_7,
+		User_PostTransition_8,
+		User_PostTransition_9,
+		User_PostTransition_10,
+
+		Debug = 255,
 	};
 
 	namespace detail
 	{
-		constexpr uint8 NumLayers = 6;
-
 		struct DrawerKey
 		{
 			Layer layer;
@@ -140,7 +187,7 @@ namespace cotasklib::Co
 			DrawerID m_nextID = 1;
 			std::map<DrawerKey, IDrawerInternal*> m_drawers;
 			std::unordered_map<DrawerID, DrawerKey> m_drawerKeyByID;
-			std::array<uint64, NumLayers> m_layerDrawerCount;
+			std::unordered_map<Layer, uint64> m_layerDrawerCount;
 
 			[[nodiscard]]
 			auto findByID(DrawerID id)
@@ -153,11 +200,35 @@ namespace cotasklib::Co
 				return m_drawers.find(it->second);
 			}
 
-		public:
-			DrawExecutor()
+			void incrementLayerDrawerCount(Layer layer)
 			{
-				m_layerDrawerCount.fill(0);
+				const auto it = m_layerDrawerCount.find(layer);
+				if (it == m_layerDrawerCount.end())
+				{
+					m_layerDrawerCount.emplace(layer, 1);
+				}
+				else
+				{
+					++it->second;
+				}
 			}
+
+			void decrementLayerDrawerCount(Layer layer)
+			{
+				const auto it = m_layerDrawerCount.find(layer);
+				if (it == m_layerDrawerCount.end())
+				{
+					throw Error{ U"DrawExecutor::decrementLayerDrawerCount: Layer drawer count underflow (layer={})"_fmt(static_cast<uint8>(layer)) };
+				}
+				if (it->second == 0)
+				{
+					throw Error{ U"DrawExecutor::decrementLayerDrawerCount: Layer drawer count underflow (layer={})"_fmt(static_cast<uint8>(layer)) };
+				}
+				--it->second;
+			}
+
+		public:
+			DrawExecutor() = default;
 
 			DrawerID add(Layer layer, int32 drawIndex, IDrawerInternal* pDrawable)
 			{
@@ -169,12 +240,7 @@ namespace cotasklib::Co
 					throw Error{ U"DrawExecutor::add: ID={} already exists"_fmt(id) };
 				}
 				m_drawerKeyByID.emplace(id, std::move(key));
-				const auto layerUInt8 = static_cast<uint8>(layer);
-				if (layerUInt8 >= NumLayers)
-				{
-					throw Error{ U"DrawExecutor::add: Invalid layer={} (ID={})"_fmt(layerUInt8, id) };
-				}
-				++m_layerDrawerCount[layerUInt8];
+				incrementLayerDrawerCount(layer);
 				return id;
 			}
 
@@ -189,16 +255,7 @@ namespace cotasklib::Co
 				{
 					return;
 				}
-				const auto layerUInt8 = static_cast<uint8>(layer);
-				if (layerUInt8 >= NumLayers)
-				{
-					throw Error{ U"DrawExecutor::add: Invalid layer={} (ID={})"_fmt(layerUInt8, id) };
-				}
-				const auto prevLayerUInt8 = static_cast<uint8>(it->first.layer);
-				if (prevLayerUInt8 >= NumLayers)
-				{
-					throw Error{ U"DrawExecutor::add: Invalid previous layer={} (ID={})"_fmt(prevLayerUInt8, id) };
-				}
+				const auto prevLayer = it->first.layer;
 
 				// 一度削除して再挿入
 				DrawerKey newKey = it->first;
@@ -209,8 +266,8 @@ namespace cotasklib::Co
 				m_drawers.emplace(newKey, pDrawable);
 				m_drawerKeyByID.emplace(id, std::move(newKey));
 
-				--m_layerDrawerCount[prevLayerUInt8];
-				++m_layerDrawerCount[layerUInt8];
+				decrementLayerDrawerCount(prevLayer);
+				incrementLayerDrawerCount(layer);
 			}
 
 			void setDrawerDrawIndex(DrawerID id, int32 drawIndex)
@@ -241,16 +298,7 @@ namespace cotasklib::Co
 				{
 					throw Error{ U"DrawExecutor::remove: ID={} not found"_fmt(id) };
 				}
-				const auto layerUInt8 = static_cast<uint8>(it->first.layer);
-				if (layerUInt8 >= NumLayers)
-				{
-					throw Error{ U"DrawExecutor::add: Invalid layer={} (ID={})"_fmt(layerUInt8, id) };
-				}
-				if (m_layerDrawerCount[layerUInt8] == 0)
-				{
-					throw Error{ U"DrawExecutor::remove: Layer drawer count underflow (layer={}, ID={})"_fmt(layerUInt8, id) };
-				}
-				--m_layerDrawerCount[layerUInt8];
+				decrementLayerDrawerCount(it->first.layer);
 				m_drawers.erase(it);
 				m_drawerKeyByID.erase(id);
 			}
@@ -266,7 +314,12 @@ namespace cotasklib::Co
 			[[nodiscard]]
 			bool drawerExistsInLayer(Layer layer) const
 			{
-				return m_layerDrawerCount[static_cast<uint8>(layer)] > 0;
+				const auto it = m_layerDrawerCount.find(layer);
+				if (it == m_layerDrawerCount.end())
+				{
+					return false;
+				}
+				return it->second > 0;
 			}
 		};
 
@@ -1752,7 +1805,25 @@ namespace cotasklib::Co
 	[[nodiscard]]
 	inline bool HasActiveTransition()
 	{
-		return HasActiveDrawerInLayer(Layer::Transition);
+		return HasActiveDrawerInLayer(Layer::Transition_FadeIn) || HasActiveDrawerInLayer(Layer::Transition_General) || HasActiveDrawerInLayer(Layer::Transition_FadeOut);
+	}
+
+	[[nodiscard]]
+	inline bool HasActiveFadeInTransition()
+	{
+		return HasActiveDrawerInLayer(Layer::Transition_FadeIn);
+	}
+
+	[[nodiscard]]
+	inline bool HasActiveGeneralTransition()
+	{
+		return HasActiveDrawerInLayer(Layer::Transition_General);
+	}
+
+	[[nodiscard]]
+	inline bool HasActiveFadeOutTransition()
+	{
+		return HasActiveDrawerInLayer(Layer::Transition_FadeOut);
 	}
 
 	template <typename TResult>

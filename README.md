@@ -350,19 +350,22 @@ private: // 基本的にprivateにしておくことを推奨
 ```
 
 ### 描画順序の制御方法
-シーケンス同士の描画順序(`draw`関数が実行される順序)は、デフォルトではシーケンスの開始順です。そのため、後に開始されたシーケンスの方が手前に描画されます。
+シーケンス同士の描画順序(`draw`関数が実行される順序)は、デフォルトではシーケンスの開始順です。そのため、後に開始されたシーケンスの方が前面に描画されます。
 
 これで問題になるケースはさほど多くないですが、レイヤーまたはdrawIndexを設定することで明示的に描画順序を制御することが可能です。
 
 #### レイヤー(layer)
-描画内容の大まかな分類ごとにいくつかのレイヤーが用意されています。`Co::Layer`型の列挙子で指定します。
+レイヤーを使用することで、大まかな描画順を制御できます。`Co::Layer`型の列挙子で指定します。
 
-下記の順番で描画されます。
+CoTaskLibでは標準で下記のレイヤーが定義されており、上から順に描画されます。
 - `Co::Layer::Default`: デフォルトのレイヤーです。
-- `Co::Layer::Modal`: ダイアログなどのモーダルを表示するためのレイヤーです。デフォルトより手前に描画されます。
-- `Co::Layer::Transition`: 画面全体のフェードイン・フェードアウトなどのトランジションを表示するためのレイヤーです。モーダルより手前に描画されます。
+- `Co::Layer::Modal`: ダイアログなどのモーダルを表示するためのレイヤーです。
+- `Co::Layer::Transition_FadeIn`: 画面全体のフェードインのトランジションを表示するためのレイヤーです。
+- `Co::Layer::Transition_General`: 画面全体の一般的なトランジションを表示するためのレイヤーです。
+- `Co::Layer::Transition_FadeOut`: 画面全体のフェードアウトのトランジションを表示するためのレイヤーです。
 - `Co::Layer::Debug`: デバッグ情報を表示するためのレイヤーです。最前面に描画されます。
-※他にも`Co::Layer::PostModal`、`Co::Layer::PostTransition`がありますが、それらについては後述します。
+
+※他にもユーザー定義用のレイヤーがありますが、そちらは後述します。
 
 下記のように、`SequenceBase`クラスのコンストラクタの第1引数にレイヤーを指定することができます。
 
@@ -396,24 +399,39 @@ private:
 };
 ```
 
-なお、ModalレイヤーおよびTransitionレイヤーには、表示中のものがあるかどうかを下記の関数で取得することができます。  
-これを利用することで、モーダル表示中は特定の操作を無効にするといった実装が可能です。
+なお、ModalレイヤーおよびTransition系レイヤーには、表示中のものがあるかどうかを下記の関数で取得することができます。  
+これを利用することで、モーダル表示中やトランジション中は特定の操作を無効にするといった実装が可能です。
 
 - `Co::HasActiveModal()`: Modalレイヤーに表示中のものがあるかどうかを返します。
-- `Co::HasActiveTransition()`: Transitionレイヤーに表示中のものがあるかどうかを返します。
+- `Co::HasActiveTransition()`: Transition系のレイヤーに表示中のものがあるかどうかを返します。
+- `Co::HasActiveFadeInTransition()`: Transition_FadeInレイヤーに表示中のものがあるかどうかを返します。
+- `Co::HasActiveGeneralTransition()`: Transition_Generalレイヤーに表示中のものがあるかどうかを返します。
+- `Co::HasActiveFadeOutTransition()`: Transition_FadeOutレイヤーに表示中のものがあるかどうかを返します。
 
-モーダルやトランジション自体ではないものの手前に表示したいものがある場合は、下記のレイヤーを使用することができます。
+他にも、`Co::Layer`には自由な用途で利用できる、ユーザー定義用のレイヤーの列挙子が用意されています。  
+これらの値を必要に応じて`Co::Layer`型の定数として定義することで、名前を付けて使用できます。
 
-- `Co::Layer::PostModal`: Modalレイヤーの手前に描画される、用途を絞らないレイヤーです。
-- `Co::Layer::PostTransition`: Transitionレイヤーの手前に描画される、用途を絞らないレイヤーです。
+- `Co::Layer::User_PreDefault_1`～`User_PreDefault_10`: Defaultレイヤーの背面に描画される、ユーザー定義用のレイヤーです。
+- `Co::Layer::User_PostDefault_1`～`User_PostDefault_10`: Defaultレイヤーの前面に描画される、ユーザー定義用のレイヤーです。
+- `Co::Layer::User_PostModal_1`～`User_PostModal_10`: Modalレイヤーの前面に描画される、ユーザー定義用のレイヤーです。
+- `Co::Layer::User_PostTransition_1`～`User_PostTransition_10`: Transition系レイヤーの前面に描画される、ユーザー定義用のレイヤーです。
+
+```cpp
+// ユーザー定義用のレイヤーを使用する際の定義例
+namespace MyLayer
+{
+    constexpr Co::Layer ForegroundUI = Co::Layer::User_PostDefault_1;
+    constexpr Co::Layer LoadingScreen = Co::Layer::User_PostTransition_1;
+}
+```
 
 #### drawIndex
 drawIndexは、同一レイヤー内での描画順序を指定するための値です。
 
 `int32`型の自由な値で指定することができますが、意図をより明確にしたい場合は下記の定数を使用することもできます。
-- `Co::DrawIndex::Back`(=-1): 後ろに描画されます。
+- `Co::DrawIndex::Back`(=-1): 背面に描画されます。
 - `Co::DrawIndex::Default`(=0): デフォルトのdrawIndexです。
-- `Co::DrawIndex::Front`(=1): 手前に描画されます。
+- `Co::DrawIndex::Front`(=1): 前面に描画されます。
 
 下記のように、`SequenceBase`クラスのコンストラクタの第2引数にdrawIndexを指定することができます。
 
@@ -422,7 +440,7 @@ class ModalExample : public Co::SequenceBase<>
 {
 public:
     ModalExample()
-        : Co::SequenceBase(Co::Layer::Default, Co::DrawIndex::Front) // Defaultレイヤー内で手前(drawIndex=1)に表示
+        : Co::SequenceBase(Co::Layer::Default, Co::DrawIndex::Front) // Defaultレイヤー内で前面(drawIndex=1)に表示
     {
     }
 
@@ -1036,8 +1054,17 @@ private:
     - ModalレイヤーにDrawerが存在するかどうかを返します。
     - `Co::HasActiveDrawerInLayer(Co::Layer::Modal)`と同義です。
 - `Co::HasActiveTransition()` -> `bool`
-    - TransitionレイヤーにDrawerが存在するかどうかを返します。
-    - `Co::HasActiveDrawerInLayer(Co::Layer::Transition)`と同義です。
+    - Transition系レイヤーにDrawerが存在するかどうかを返します。
+    - `Co::HasActiveFadeInTransition() || Co::HasActiveGeneralTransition() || Co::HasActiveFadeOutTransition()`と同義です。
+- `Co::HasActiveFadeInTransition()` -> `bool`
+    - Transition_FadeInレイヤーにDrawerが存在するかどうかを返します。
+    - `Co::HasActiveDrawerInLayer(Co::Layer::Transition_FadeIn)`と同義です。
+- `Co::HasActiveGeneralTransition()` -> `bool`
+    - Transition_GeneralレイヤーにDrawerが存在するかどうかを返します。
+    - `Co::HasActiveDrawerInLayer(Co::Layer::Transition_General)`と同義です。
+- `Co::HasActiveFadeOutTransition()` -> `bool`
+    - Transition_FadeOutレイヤーにDrawerが存在するかどうかを返します。
+    - `Co::HasActiveDrawerInLayer(Co::Layer::Transition_FadeOut)`と同義です。
 
 ## `co_await`で待機可能なSiv3Dクラス一覧
 

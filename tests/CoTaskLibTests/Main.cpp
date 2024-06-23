@@ -617,6 +617,50 @@ TEST_CASE("ScopedTaskRunner::waitUntilDone canceled")
 	REQUIRE(runner2.done() == true);
 }
 
+TEST_CASE("ScopedTaskRunner move assignment")
+{
+	int32 runner1FinishCount = 0;
+	int32 runner1CancelCount = 0;
+	int32 runner2FinishCount = 0;
+	int32 runner2CancelCount = 0;
+
+	Co::ScopedTaskRunner runner = Co::DelayFrame(2).runScoped([&] { ++runner1FinishCount; }, [&] { ++runner1CancelCount; });
+
+	REQUIRE(runner.done() == false);
+	REQUIRE(runner1FinishCount == 0);
+	REQUIRE(runner1CancelCount == 0);
+	REQUIRE(runner2FinishCount == 0);
+	REQUIRE(runner2CancelCount == 0);
+
+	// 別のタスク実行をムーブ代入
+	runner = Co::DelayFrame(1).runScoped([&] { ++runner2FinishCount; }, [&] { ++runner2CancelCount; });
+
+	// 1個目のタスクはキャンセルされる
+	REQUIRE(runner.done() == false);
+	REQUIRE(runner1FinishCount == 0);
+	REQUIRE(runner1CancelCount == 1);
+	REQUIRE(runner2FinishCount == 0);
+	REQUIRE(runner2CancelCount == 0);
+
+	System::Update();
+
+	// 2個目のタスクが完了
+	REQUIRE(runner.done() == true);
+	REQUIRE(runner1FinishCount == 0);
+	REQUIRE(runner1CancelCount == 1);
+	REQUIRE(runner2FinishCount == 1);
+	REQUIRE(runner2CancelCount == 0);
+
+	System::Update();
+
+	// すでに完了しているので何も起こらない
+	REQUIRE(runner.done() == true);
+	REQUIRE(runner1FinishCount == 0);
+	REQUIRE(runner1CancelCount == 1);
+	REQUIRE(runner2FinishCount == 1);
+	REQUIRE(runner2CancelCount == 0);
+}
+
 TEST_CASE("MultiRunner finish")
 {
 	Co::MultiRunner mr;
@@ -655,6 +699,37 @@ TEST_CASE("MultiRunner finish")
 	REQUIRE(runner2CancelCount == 0);
 	REQUIRE(mr.allDone() == true);
 	REQUIRE(mr.anyDone() == true);
+}
+
+TEST_CASE("MultiRunner removeDone")
+{
+	Co::MultiRunner mr;
+	Co::DelayFrame(1).runAddTo(mr);
+	Co::DelayFrame(2).runAddTo(mr);
+
+	REQUIRE(mr.size() == 2);
+
+	// 完了していないのでremoveDoneを呼んでも削除されない
+	mr.removeDone();
+	REQUIRE(mr.size() == 2);
+
+	System::Update();
+
+	// 1個目のタスクが完了
+	REQUIRE(mr.size() == 2);
+	mr.removeDone();
+	REQUIRE(mr.size() == 1);
+
+	System::Update();
+
+	// 2個目のタスクが完了
+	REQUIRE(mr.size() == 1);
+	mr.removeDone();
+	REQUIRE(mr.size() == 0);
+
+	// すでに空なので何も起こらない
+	mr.removeDone();
+	REQUIRE(mr.size() == 0);
 }
 
 TEST_CASE("MultiRunner::requestCancelAll")

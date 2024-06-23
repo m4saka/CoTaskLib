@@ -321,7 +321,30 @@ namespace cotasklib::Co
 	private:
 		TaskFinishSource<TResult> m_taskFinishSource;
 
+		[[nodiscard]]
+		virtual Task<TResult> start() override final
+		{
+			// コンストラクタやpreStart内でrequestFinishが呼ばれた場合は即座に終了
+			if (m_taskFinishSource.hasResult())
+			{
+				co_return m_taskFinishSource.result();
+			}
+
+			while (true)
+			{
+				update();
+				if (m_taskFinishSource.hasResult())
+				{
+					break;
+				}
+				co_await NextFrame();
+			}
+			co_return m_taskFinishSource.result();
+		}
+
 	protected:
+		virtual void update() = 0;
+
 		void requestFinish(const TResult& result)
 		{
 			m_taskFinishSource.requestFinish(result);
@@ -353,29 +376,6 @@ namespace cotasklib::Co
 		UpdaterSequenceBase& operator=(UpdaterSequenceBase&&) = default;
 
 		virtual ~UpdaterSequenceBase() = default;
-
-		[[nodiscard]]
-		virtual Task<TResult> start() override final
-		{
-			// コンストラクタやpreStart内でrequestFinishが呼ばれた場合は即座に終了
-			if (m_taskFinishSource.hasResult())
-			{
-				co_return m_taskFinishSource.result();
-			}
-
-			while (true)
-			{
-				update();
-				if (m_taskFinishSource.hasResult())
-				{
-					break;
-				}
-				co_await NextFrame();
-			}
-			co_return m_taskFinishSource.result();
-		}
-
-		virtual void update() = 0;
 	};
 
 	// 毎フレーム呼ばれるupdate関数を記述するタイプのシーケンス基底クラス(void特殊化)
@@ -384,21 +384,6 @@ namespace cotasklib::Co
 	{
 	private:
 		TaskFinishSource<void> m_taskFinishSource;
-
-	protected:
-		void requestFinish()
-		{
-			m_taskFinishSource.requestFinish();
-		}
-
-		[[nodiscard]]
-		bool finishRequested() const
-		{
-			return m_taskFinishSource.done();
-		}
-
-	public:
-		UpdaterSequenceBase() = default;
 
 		[[nodiscard]]
 		virtual Task<void> start() override final
@@ -420,7 +405,22 @@ namespace cotasklib::Co
 			}
 		}
 
+	protected:
 		virtual void update() = 0;
+
+		void requestFinish()
+		{
+			m_taskFinishSource.requestFinish();
+		}
+
+		[[nodiscard]]
+		bool finishRequested() const
+		{
+			return m_taskFinishSource.done();
+		}
+
+	public:
+		UpdaterSequenceBase() = default;
 	};
 
 #ifdef __cpp_deleted_function_with_reason

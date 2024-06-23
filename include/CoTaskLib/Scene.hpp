@@ -278,19 +278,7 @@ namespace cotasklib::Co
 	// 毎フレーム呼ばれるupdate関数を記述するタイプのシーン基底クラス
 	class [[nodiscard]] UpdaterSceneBase : public SceneBase
 	{
-	public:
-		UpdaterSceneBase() = default;
-
-		UpdaterSceneBase(const UpdaterSceneBase&) = delete;
-
-		UpdaterSceneBase& operator=(const UpdaterSceneBase&) = delete;
-
-		UpdaterSceneBase(UpdaterSceneBase&&) = default;
-
-		UpdaterSceneBase& operator=(UpdaterSceneBase&&) = default;
-
-		virtual ~UpdaterSceneBase() = default;
-
+	private:
 		[[nodiscard]]
 		virtual Task<void> start() override final
 		{
@@ -312,7 +300,21 @@ namespace cotasklib::Co
 			}
 		}
 
+	protected:
 		virtual void update() = 0;
+
+	public:
+		UpdaterSceneBase() = default;
+
+		UpdaterSceneBase(const UpdaterSceneBase&) = delete;
+
+		UpdaterSceneBase& operator=(const UpdaterSceneBase&) = delete;
+
+		UpdaterSceneBase(UpdaterSceneBase&&) = default;
+
+		UpdaterSceneBase& operator=(UpdaterSceneBase&&) = default;
+
+		virtual ~UpdaterSceneBase() = default;
 	};
 
 	namespace detail

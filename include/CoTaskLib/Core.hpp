@@ -709,7 +709,7 @@ namespace cotasklib::Co
 	class MultiRunner
 	{
 	private:
-		std::vector<ScopedTaskRunner> m_runners;
+		Array<ScopedTaskRunner> m_runners;
 
 	public:
 		MultiRunner() = default;
@@ -1136,8 +1136,8 @@ namespace cotasklib::Co
 
 	private:
 		detail::CoroutineHandleWrapper<TResult> m_handle;
-		std::vector<std::unique_ptr<ITask>> m_concurrentTasksBefore;
-		std::vector<std::unique_ptr<ITask>> m_concurrentTasksAfter;
+		Array<std::unique_ptr<ITask>> m_concurrentTasksBefore;
+		Array<std::unique_ptr<ITask>> m_concurrentTasksAfter;
 
 	public:
 		using promise_type = detail::Promise<TResult>;

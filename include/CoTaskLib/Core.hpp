@@ -739,9 +739,116 @@ namespace cotasklib::Co
 			m_runners.clear();
 		}
 
+		size_t size() const noexcept
+		{
+			return m_runners.size();
+		}
+
+		[[nodiscard]]
+		bool empty() const noexcept
+		{
+			return m_runners.empty();
+		}
+
 		void shrinkToFit()
 		{
 			m_runners.shrink_to_fit();
+		}
+
+		[[nodiscard]]
+		auto begin() noexcept
+		{
+			return m_runners.begin();
+		}
+
+		[[nodiscard]]
+		auto begin() const noexcept
+		{
+			return m_runners.begin();
+		}
+
+		[[nodiscard]]
+		auto end() noexcept
+		{
+			return m_runners.end();
+		}
+
+		[[nodiscard]]
+		auto end() const noexcept
+		{
+			return m_runners.end();
+		}
+
+		[[nodiscard]]
+		auto cbegin() const noexcept
+		{
+			return m_runners.cbegin();
+		}
+
+		[[nodiscard]]
+		auto cend() const noexcept
+		{
+			return m_runners.cend();
+		}
+
+		[[nodiscard]]
+		auto rbegin() noexcept
+		{
+			return m_runners.rbegin();
+		}
+
+		[[nodiscard]]
+		auto rbegin() const noexcept
+		{
+			return m_runners.rbegin();
+		}
+
+		[[nodiscard]]
+		auto rend() noexcept
+		{
+			return m_runners.rend();
+		}
+
+		[[nodiscard]]
+		auto rend() const noexcept
+		{
+			return m_runners.rend();
+		}
+
+		[[nodiscard]]
+		auto crbegin() const noexcept
+		{
+			return m_runners.crbegin();
+		}
+
+		[[nodiscard]]
+		auto crend() const noexcept
+		{
+			return m_runners.crend();
+		}
+
+		[[nodiscard]]
+		ScopedTaskRunner& operator[](size_t index)
+		{
+			return m_runners[index];
+		}
+
+		[[nodiscard]]
+		const ScopedTaskRunner& operator[](size_t index) const
+		{
+			return m_runners[index];
+		}
+
+		[[nodiscard]]
+		ScopedTaskRunner& at(size_t index)
+		{
+			return m_runners.at(index);
+		}
+
+		[[nodiscard]]
+		const ScopedTaskRunner& at(size_t index) const
+		{
+			return m_runners.at(index);
 		}
 
 		bool requestCancelAll()

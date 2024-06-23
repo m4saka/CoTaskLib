@@ -92,6 +92,11 @@ namespace cotasklib
 				m_pivot = pivot;
 			}
 
+			void setPivot(double x, double y)
+			{
+				m_pivot = Vec2{ x, y };
+			}
+
 			EaseTaskBuilder<Vec2> tweenPosition(Duration duration)
 			{
 				return Ease(&m_position, duration, m_easeFuncPosition, m_pSteadyClock).fromTo(m_position, m_position);
@@ -105,6 +110,11 @@ namespace cotasklib
 			void setPosition(const Vec2& position)
 			{
 				m_position = position;
+			}
+
+			void setPosition(double x, double y)
+			{
+				m_position = Vec2{ x, y };
 			}
 
 			void setPositionEase(double easeFunc(double))
@@ -130,6 +140,11 @@ namespace cotasklib
 			void setScale(double scale)
 			{
 				m_scale = Vec2::All(scale);
+			}
+
+			void setScale(double x, double y)
+			{
+				m_scale = Vec2{ x, y };
 			}
 
 			void setScaleEase(double easeFunc(double))

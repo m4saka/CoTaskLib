@@ -78,6 +78,18 @@ namespace cotasklib
 					co_await NextFrame();
 				}
 			}
+
+			template<typename T>
+			struct IsVector2D : std::false_type {};
+
+			template<typename T>
+			struct IsVector2D<Vector2D<T>> : std::true_type {};
+
+			template<typename T>
+			struct IsVector3D : std::false_type {};
+
+			template<typename T>
+			struct IsVector3D<Vector3D<T>> : std::true_type {};
 		}
 		
 		template <typename T>
@@ -119,10 +131,24 @@ namespace cotasklib
 				return *this;
 			}
 
-			template <typename... Args>
-			EaseTaskBuilder& from(Args&&... args)
+			template <typename U>
+			EaseTaskBuilder& from(U from) requires (detail::IsVector2D<T>::value || detail::IsVector3D<T>::value) && std::is_convertible_v<U, typename T::value_type>
 			{
-				m_from = T{ std::forward<Args>(args)... };
+				m_from = T::All(from);
+				return *this;
+			}
+
+			template <typename U>
+			EaseTaskBuilder& from(U x, U y) requires detail::IsVector2D<T>::value && std::is_convertible_v<U, typename T::value_type>
+			{
+				m_from = T{ x, y };
+				return *this;
+			}
+
+			template <typename U>
+			EaseTaskBuilder& from(U x, U y, U z) requires detail::IsVector3D<T>::value && std::is_convertible_v<U, typename T::value_type>
+			{
+				m_from = T{ x, y, z };
 				return *this;
 			}
 
@@ -132,10 +158,24 @@ namespace cotasklib
 				return *this;
 			}
 
-			template <typename... Args>
-			EaseTaskBuilder& to(Args&&... args)
+			template <typename U>
+			EaseTaskBuilder& to(U to) requires (detail::IsVector2D<T>::value || detail::IsVector3D<T>::value) && std::is_convertible_v<U, typename T::value_type>
 			{
-				m_to = T{ std::forward<Args>(args)... };
+				m_to = T::All(to);
+				return *this;
+			}
+
+			template <typename U>
+			EaseTaskBuilder& to(U x, U y) requires detail::IsVector2D<T>::value && std::is_convertible_v<U, typename T::value_type>
+			{
+				m_to = T{ x, y };
+				return *this;
+			}
+
+			template <typename U>
+			EaseTaskBuilder& to(U x, U y, U z) requires detail::IsVector3D<T>::value && std::is_convertible_v<U, typename T::value_type>
+			{
+				m_to = T{ x, y, z };
 				return *this;
 			}
 

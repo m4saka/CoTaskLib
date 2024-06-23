@@ -2947,8 +2947,10 @@ TEST_CASE("s3d::AsyncTask immediate")
 	const auto runner = AsyncTaskCaller([] { return 42; }).runScoped([&value](int32 result) { value = result; });
 
 	// 通常の即時returnとは違って別スレッドなので、完了までに最低限の待機は必要
-	System::Update();
-	REQUIRE(runner.done() == true);
+	while (!runner.done())
+	{
+		System::Update();
+	}
 	REQUIRE(value == 42);
 }
 
@@ -3033,8 +3035,10 @@ TEST_CASE("s3d::AsyncTask with move-only result")
 		.runScoped([&](std::unique_ptr<int32>&& r) { result = std::move(r); });
 
 	// 通常の即時returnとは違って別スレッドなので、完了までに最低限の待機は必要
-	System::Update();
-	REQUIRE(runner.done() == true);
+	while (!runner.done())
+	{
+		System::Update();
+	}
 	REQUIRE(result != nullptr);
 	REQUIRE(*result == 420);
 }
@@ -3045,8 +3049,10 @@ TEST_CASE("WaitForResult(s3d::AsyncTask)")
 	const auto runner = Co::WaitForResult(s3d::Async([] { return 42; })).runScoped([&](int32 r) { result = r; });
 
 	// 通常の即時returnとは違って別スレッドなので、完了までに最低限の待機は必要
-	System::Update();
-	REQUIRE(runner.done() == true);
+	while (!runner.done())
+	{
+		System::Update();
+	}
 	REQUIRE(result == 42);
 }
 

@@ -183,9 +183,19 @@ namespace cotasklib
 
 namespace cotasklib::Co
 {
+	namespace detail
+	{
+		[[nodiscard]]
+		inline Task<HTTPResponse> WaitForResultImpl(AsyncHTTPTask asyncHTTPTask)
+		{
+			using ::cotasklib::operator co_await;
+			co_return co_await std::move(asyncHTTPTask);
+		}
+	}
+
 	template <typename TResult>
 	[[nodiscard]]
-	Task<TResult> WaitForResult(AsyncTask<TResult>&& asyncTask)
+	Task<TResult> WaitForResult(AsyncTask<TResult> asyncTask)
 	{
 		using ::cotasklib::operator co_await;
 		co_return co_await std::move(asyncTask);
@@ -194,15 +204,13 @@ namespace cotasklib::Co
 	[[nodiscard]]
 	inline Task<HTTPResponse> WaitForResult(AsyncHTTPTask&& asyncHTTPTask)
 	{
-		using ::cotasklib::operator co_await;
-		co_return co_await std::move(asyncHTTPTask);
+		return detail::WaitForResultImpl(std::move(asyncHTTPTask));
 	}
 
 	[[nodiscard]]
 	inline Task<HTTPResponse> WaitForResult(const AsyncHTTPTask& asyncHTTPTask)
 	{
-		using ::cotasklib::operator co_await;
-		co_return co_await asyncHTTPTask;
+		return detail::WaitForResultImpl(asyncHTTPTask);
 	}
 }
 

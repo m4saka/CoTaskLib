@@ -286,7 +286,7 @@ namespace cotasklib::Co
 	[[nodiscard]]
 	inline Task<void> SimpleDialog(StringView text, Layer layer = Layer::Modal, int32 drawIndex = DrawIndex::Default)
 	{
-		co_await SimpleDialog(text, { U"OK" }, layer, drawIndex);
+		return SimpleDialog(text, { U"OK" }, layer, drawIndex).discardResult();
 	}
 }
 

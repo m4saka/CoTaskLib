@@ -35,25 +35,25 @@ namespace cotasklib::Co
 {
 	namespace detail
 	{
-		static constexpr Vec2 SimpleDialogSize{ 600, 240 };
-		static constexpr Vec2 FadeInScaleFrom{ 0.8, 0.8 };
-		static constexpr Vec2 FadeInScaleTo{ 1.0, 1.0 };
-		static constexpr Vec2 ButtonSize{ 120, 40 };
-		static constexpr double ButtonMargin = 20;
-		static constexpr double ButtonOffsetY = 50;
-		static constexpr double FooterOffsetY = 60;
-		static constexpr ColorF BackgroundColor{ 1.0 };
-		static constexpr ColorF BackgroundColorFooter{ 0.8 };
-		static constexpr ColorF FrameColor{ 0.67 };
-		static constexpr ColorF ButtonMouseOverColor{ 0.9, 0.95, 1.0 };
-		static constexpr ColorF ButtonPressedColor{ 0.8, 0.85, 0.9 };
-		static constexpr double ButtonRoundSize = 4.8;
-		static constexpr double ButtonFrameThickness = 1;
-		static constexpr double ButtonFrameThicknessPressed = 2;
-		static constexpr ColorF ButtonTextColor = Palette::Black;
-		static constexpr double SimpleDialogRoundSize = 8;
-		static constexpr ColorF TextColor = Palette::Black;
-		static constexpr Duration FadeDuration = 0.25s;
+		constexpr Vec2 SimpleDialogSize{ 600, 240 };
+		constexpr Vec2 FadeInScaleFrom{ 0.8, 0.8 };
+		constexpr Vec2 FadeInScaleTo{ 1.0, 1.0 };
+		constexpr Vec2 ButtonSize{ 120, 40 };
+		constexpr double ButtonMargin = 20;
+		constexpr double ButtonOffsetY = 50;
+		constexpr double FooterOffsetY = 60;
+		constexpr ColorF BackgroundColor{ 1.0 };
+		constexpr ColorF BackgroundColorFooter{ 0.8 };
+		constexpr ColorF FrameColor{ 0.67 };
+		constexpr ColorF ButtonMouseOverColor{ 0.9, 0.95, 1.0 };
+		constexpr ColorF ButtonPressedColor{ 0.8, 0.85, 0.9 };
+		constexpr double ButtonRoundSize = 4.8;
+		constexpr double ButtonFrameThickness = 1;
+		constexpr double ButtonFrameThicknessPressed = 2;
+		constexpr ColorF ButtonTextColor = Palette::Black;
+		constexpr double SimpleDialogRoundSize = 8;
+		constexpr ColorF TextColor = Palette::Black;
+		constexpr Duration FadeDuration = 0.25s;
 
 		struct SimpleButton
 		{

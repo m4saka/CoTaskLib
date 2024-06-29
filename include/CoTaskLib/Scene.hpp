@@ -311,9 +311,9 @@ namespace cotasklib::Co
 
 		UpdaterSceneBase& operator=(const UpdaterSceneBase&) = delete;
 
-		UpdaterSceneBase(UpdaterSceneBase&&) = default;
+		UpdaterSceneBase(UpdaterSceneBase&&) = delete;
 
-		UpdaterSceneBase& operator=(UpdaterSceneBase&&) = default;
+		UpdaterSceneBase& operator=(UpdaterSceneBase&&) = delete;
 
 		virtual ~UpdaterSceneBase() = default;
 	};

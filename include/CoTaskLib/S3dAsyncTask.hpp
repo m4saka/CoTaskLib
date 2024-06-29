@@ -181,46 +181,6 @@ namespace cotasklib
 	}
 }
 
-namespace cotasklib::Co
-{
-	namespace detail
-	{
-		template <typename TResult>
-		[[nodiscard]]
-		Task<TResult> WaitForResultImpl(std::unique_ptr<AsyncTask<TResult>> asyncTask)
-		{
-			using ::cotasklib::operator co_await;
-			co_return co_await std::move(*asyncTask);
-		}
-
-		[[nodiscard]]
-		inline Task<HTTPResponse> WaitForResultImpl(std::unique_ptr<AsyncHTTPTask> asyncHTTPTask)
-		{
-			using ::cotasklib::operator co_await;
-			co_return co_await std::move(*asyncHTTPTask);
-		}
-	}
-
-	template <typename TResult>
-	[[nodiscard]]
-	Task<TResult> WaitForResult(AsyncTask<TResult>&& asyncTask)
-	{
-		return detail::WaitForResultImpl(std::make_unique<AsyncTask<TResult>>(std::move(asyncTask)));
-	}
-
-	[[nodiscard]]
-	inline Task<HTTPResponse> WaitForResult(AsyncHTTPTask&& asyncHTTPTask)
-	{
-		return detail::WaitForResultImpl(std::make_unique<AsyncHTTPTask>(std::move(asyncHTTPTask)));
-	}
-
-	[[nodiscard]]
-	inline Task<HTTPResponse> WaitForResult(const AsyncHTTPTask& asyncHTTPTask)
-	{
-		return detail::WaitForResultImpl(std::make_unique<AsyncHTTPTask>(asyncHTTPTask));
-	}
-}
-
 #ifndef NO_COTASKLIB_USING
 using namespace cotasklib;
 using cotasklib::operator co_await;

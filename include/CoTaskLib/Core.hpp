@@ -1217,7 +1217,7 @@ namespace cotasklib::Co
 
 		Task<TResult>& operator=(Task<TResult>&& rhs) = delete;
 
-		virtual void resume()
+		virtual void resume() override
 		{
 			if (m_handle.done())
 			{

@@ -800,6 +800,7 @@ namespace cotasklib::Co
 			m_runners.clear();
 		}
 
+		[[nodiscard]]
 		size_t size() const noexcept
 		{
 			return m_runners.size();

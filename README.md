@@ -50,10 +50,12 @@ Co::Task<> MainTask()
 {
     co_await Co::SimpleDialog(U"こんにちは！\n私はCoTaskLibのサンプルプログラムです。");
 
+    const Array<String> yesNoButtons{ U"はい", U"いいえ" };
+
     // 「はい」を選ぶまで質問ダイアログを出し続ける
     while (true)
     {
-        const String choice = co_await Co::SimpleDialog(U"C++はお好きですか？", { U"はい", U"いいえ" });
+        const String choice = co_await Co::SimpleDialog(U"C++はお好きですか？", yesNoButtons);
         if (choice == U"はい")
         {
             // 「はい」を選択した場合、ループを抜ける

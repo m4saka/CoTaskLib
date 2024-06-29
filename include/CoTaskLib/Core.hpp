@@ -596,7 +596,6 @@ namespace cotasklib::Co
 				return s_pInstance->m_drawExecutor.drawerExistsInLayer(layer);
 			}
 
-			[[nodiscard]]
 			static void SetCurrentSceneFactory(SceneFactory factory)
 			{
 				if (!s_pInstance)
@@ -1168,13 +1167,6 @@ namespace cotasklib::Co
 				m_handle.resume();
 			}
 		};
-
-		template <typename TResult>
-		[[nodiscard]]
-		Task<void> DiscardResult(std::unique_ptr<Task<TResult>> task)
-		{
-			co_await std::move(*task);
-		}
 	}
 
 	enum class WithTiming : uint8
@@ -1301,23 +1293,35 @@ namespace cotasklib::Co
 		}
 
 		[[nodiscard]]
-		Task<void> discardResult()&&
-		{
-			return detail::DiscardResult(std::make_unique<Task<TResult>>(std::move(*this)));
-		}
+		Task<void> discardResult()&&;
 
 		[[nodiscard]]
 		ScopedTaskRunner runScoped(FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)&&
 		{
 			return ScopedTaskRunner{ std::move(*this), std::move(finishCallback), std::move(cancelCallback) };
 		}
-			
-		[[nodiscard]]
+
 		void runAddTo(MultiRunner& mr, FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)&&
 		{
 			mr.add(ScopedTaskRunner{ std::move(*this), std::move(finishCallback), std::move(cancelCallback) });
 		}
 	};
+
+	namespace detail
+	{
+		template <typename TResult>
+		[[nodiscard]]
+		Task<void> DiscardResult(std::unique_ptr<Task<TResult>> task)
+		{
+			co_await std::move(*task);
+		}
+	}
+
+	template <typename TResult>
+	Task<void> Task<TResult>::discardResult()&&
+	{
+		return detail::DiscardResult(std::make_unique<Task<TResult>>(std::move(*this)));
+	}
 
 	[[nodiscard]]
 	inline Task<void> EmptyTask()

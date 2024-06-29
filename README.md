@@ -730,7 +730,7 @@ Siv3D標準のシーン機能を使用して作成したシーンをなるべく
 なお、`Co::UpdaterSceneBase`は`Co::SceneBase`の派生クラスです。`Co::UpdaterSceneBase`を継承した場合でもシーンの実行方法に違いはありません。
 
 ```cpp
-class ExampleUpdaterScene : public Co::SceneBase
+class ExampleUpdaterScene : public Co::UpdaterSceneBase
 {
 private:
     void update() override
@@ -744,9 +744,9 @@ private:
             return;
         }
 
-        if (KeyEsc.down())
+        if (KeyQ.down())
         {
-            // Escキーを押したらシーン遷移を終了
+            // Qキーを押したらシーン遷移を終了
             requestSceneFinish();
             return;
         }
@@ -867,7 +867,7 @@ private:
 
 - `duration(Duration)` -> `Co::EaseTaskBuilder<T>&`
     - 時間の長さを指定します。
-    - この関数の代わりに、`Co::Ease()`の第1引数に指定することもできます。
+    - この関数の代わりに、`Co::Ease()`の第2引数に指定することもできます。
 - `from(T)`/`to(T)` -> `Co::EaseTaskBuilder<T>&`
     - 開始値・目標値を指定します。
     - Tが浮動小数点型(double、floatなど)の場合は、この関数を呼ばなくてもデフォルトでfromに0.0、toに1.0が指定されます。
@@ -881,7 +881,7 @@ private:
     - デフォルトでは下記のイージング関数が指定されています。
         - `Co::Ease()`: `EaseOutQuad`(目標値にやや早めに近づく曲線的な動き)
         - `Co::LinearEase()`: `Easing::Linear`(直線的な動き)
-    - この関数の代わりに、`Co::Ease()`の第4引数に指定することもできます。
+    - この関数の代わりに、`Co::Ease()`の第3引数に指定することもできます。
 - `play()` -> `Co::Task<>`
     - イージングを再生するタスクを取得します。
 
@@ -1042,7 +1042,7 @@ private:
 - `Co::Any(TTasks&&...)` -> `Co::Task<std::tuple<Optional<...>>>`
     - いずれかの `Co::Task` が完了した時点で進行し、各`Co::Task`の結果が`Optional<T>`型の`std::tuple`で返されます。
     - `Co::Task`の結果が`void`型の場合、`Co::VoidResult`型(空の構造体)に置換して返されます。
-- `Co::Play<TSequence>(...)` -> `Co::Task<TResult>`
+- `Co::Play<TSequence>(Args...)` -> `Co::Task<TResult>`
     - `TSequence`クラスのインスタンスを構築し、それを実行するタスクを返します。
     - `TSequence`クラスは`Co::SequenceBase<TResult>`の派生クラスである必要があります。
     - 引数には、`TSequence`のコンストラクタの引数を指定します。

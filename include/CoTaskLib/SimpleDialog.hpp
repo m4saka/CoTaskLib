@@ -172,7 +172,6 @@ namespace cotasklib::Co
 			String m_text;
 			Array<SimpleButton> m_buttons;
 			Tweener m_tweener;
-			int32 m_drawIndex;
 
 			void update() override
 			{

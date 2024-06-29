@@ -452,7 +452,7 @@ namespace cotasklib::Co
 				std::function<void(const IAwaiter*)> finishCallbackTypeErased =
 					[finishCallback = std::move(finishCallback), cancelCallback/*コピーキャプチャ*/, id](const IAwaiter* awaiter)
 					{
-						auto fnGetResult = [awaiter, cancelCallback, id]() -> TResult
+						auto fnGetResult = [awaiter, cancelCallback]() -> TResult
 							{
 								try
 								{

@@ -27,6 +27,7 @@
 //----------------------------------------------------------------------------------------
 
 #pragma once
+#include <span>
 #include "Core.hpp"
 
 namespace cotasklib::Co

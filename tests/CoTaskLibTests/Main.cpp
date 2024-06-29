@@ -1,6 +1,6 @@
 ﻿#include <compare>
 #define CATCH_CONFIG_MAIN
-#include <Catch2/catch.hpp>
+#include <catch2/catch.hpp>
 #include <CoTaskLib.hpp>
 
 Co::Task<void> FromResultTest(int32* pValue)

@@ -934,13 +934,13 @@ namespace cotasklib::Co
 		[[nodiscard]]
 		bool allDone() const
 		{
-			return std::ranges::all_of(m_runners, [](const ScopedTaskRunner& runner) { return runner.done(); });
+			return std::all_of(m_runners.begin(), m_runners.end(), [](const ScopedTaskRunner& runner) { return runner.done(); });
 		}
 
 		[[nodiscard]]
 		bool anyDone() const
 		{
-			return std::ranges::any_of(m_runners, [](const ScopedTaskRunner& runner) { return runner.done(); });
+			return std::any_of(m_runners.begin(), m_runners.end(), [](const ScopedTaskRunner& runner) { return runner.done(); });
 		}
 
 		[[nodiscard]]

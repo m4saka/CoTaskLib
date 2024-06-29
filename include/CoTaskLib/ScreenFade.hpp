@@ -78,13 +78,13 @@ namespace cotasklib::Co
 	[[nodiscard]]
 	inline Task<void> ScreenFadeIn(const Duration& duration, const ColorF& color = Palette::Black, double easeFunc(double) = Easing::Linear, Layer layer = Layer::Transition_FadeIn, int32 drawIndex = DrawIndex::Default, ISteadyClock* pSteadyClock = nullptr)
 	{
-		return Play<detail::ScreenFadeSequence>(duration, color, color.withA(0.0), easeFunc, layer, drawIndex, pSteadyClock);
+		return Play<detail::ScreenFadeSequence>(duration, color, ColorF{ color, 0.0 }, easeFunc, layer, drawIndex, pSteadyClock);
 	}
 
 	[[nodiscard]]
 	inline Task<void> ScreenFadeOut(const Duration& duration, const ColorF& color = Palette::Black, double easeFunc(double) = Easing::Linear, Layer layer = Layer::Transition_FadeOut, int32 drawIndex = DrawIndex::Default, ISteadyClock* pSteadyClock = nullptr)
 	{
-		return Play<detail::ScreenFadeSequence>(duration, color.withA(0.0), color, easeFunc, layer, drawIndex, pSteadyClock);
+		return Play<detail::ScreenFadeSequence>(duration, ColorF{ color, 0.0 }, color, easeFunc, layer, drawIndex, pSteadyClock);
 	}
 }
 

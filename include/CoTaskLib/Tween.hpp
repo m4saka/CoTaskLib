@@ -274,7 +274,7 @@ namespace cotasklib::Co
 
 			if (m_alpha != 1.0 || m_color != ColorF{ Palette::White })
 			{
-				scopedTween.color.emplace(m_color.withA(m_color.a * m_alpha));
+				scopedTween.color.emplace(ColorF{ m_color, m_color.a * m_alpha });
 			}
 
 			if (m_colorAdd != ColorF{ Palette::Black })

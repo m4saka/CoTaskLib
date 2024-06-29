@@ -272,6 +272,12 @@ namespace cotasklib::Co
 				, m_text(text)
 				, m_buttons(CreateButtons(buttonTexts))
 			{
+				// フォントのテクスチャ生成にかかる時間によりフェードインアニメーションが飛ばないよう、プリロードしておく
+				SimpleGUI::GetFont().preload(m_text);
+				for (const auto& buttonText : buttonTexts)
+				{
+					SimpleGUI::GetFont().preload(buttonText);
+				}
 			}
 		};
 	}

@@ -2864,7 +2864,7 @@ TEST_CASE("Co::Ease and Co::Delay ends at the same time")
 	TestClock clock;
 
 	double value = -1.0;
-	auto easeTask = Co::Ease(&value, 1s).setClock(&clock).play();
+	auto easeTask = Co::Ease(&value, 1s).fromTo(0.0, 1.0).setClock(&clock).play();
 
 	Optional<Co::VoidResult> easeResult;
 	Optional<Co::VoidResult> delayResult;
@@ -3017,7 +3017,7 @@ TEST_CASE("Co::LinearEase and Co::Delay ends at the same time")
 	TestClock clock;
 
 	double value = -1.0;
-	auto easeTask = Co::LinearEase(&value, 1s).setClock(&clock).play();
+	auto easeTask = Co::LinearEase(&value, 1s).fromTo(0.0, 1.0).setClock(&clock).play();
 
 	Optional<Co::VoidResult> easeResult;
 	Optional<Co::VoidResult> delayResult;

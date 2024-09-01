@@ -229,60 +229,28 @@ namespace cotasklib::Co
 	[[nodiscard]]
 	EaseTaskBuilder<T> Ease(T* pValue, Duration duration = 0s, double easeFunc(double) = EaseOutQuad, ISteadyClock* pSteadyClock = nullptr)
 	{
-		if constexpr (std::is_floating_point_v<T>)
-		{
-			// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
-			return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, 0.0, 1.0, easeFunc, pSteadyClock);
-		}
-		else
-		{
-			return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, T{}, T{}, easeFunc, pSteadyClock);
-		}
+		return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, *pValue, *pValue, easeFunc, pSteadyClock);
 	}
 
 	template <detail::Lerpable T>
 	[[nodiscard]]
 	EaseTaskBuilder<T> Ease(std::function<T> callback, Duration duration = 0s, double easeFunc(double) = EaseOutQuad, ISteadyClock* pSteadyClock = nullptr)
 	{
-		if constexpr (std::is_floating_point_v<T>)
-		{
-			// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
-			return EaseTaskBuilder<T>(std::move(callback), duration, 0.0, 1.0, easeFunc, pSteadyClock);
-		}
-		else
-		{
-			return EaseTaskBuilder<T>(std::move(callback), duration, T{}, T{}, easeFunc, pSteadyClock);
-		}
+		return EaseTaskBuilder<T>(std::move(callback), duration, T{}, T{}, easeFunc, pSteadyClock);
 	}
 
 	template <detail::Lerpable T>
 	[[nodiscard]]
 	EaseTaskBuilder<T> LinearEase(T* pValue, Duration duration = 0s, ISteadyClock* pSteadyClock = nullptr)
 	{
-		if constexpr (std::is_floating_point_v<T>)
-		{
-			// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
-			return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, 0.0, 1.0, Easing::Linear, pSteadyClock);
-		}
-		else
-		{
-			return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, T{}, T{}, Easing::Linear, pSteadyClock);
-		}
+		return EaseTaskBuilder<T>([pValue](T value) { *pValue = value; }, duration, *pValue, *pValue, Easing::Linear, pSteadyClock);
 	}
 
 	template <detail::Lerpable T>
 	[[nodiscard]]
 	EaseTaskBuilder<T> LinearEase(std::function<T> callback, Duration duration = 0s, ISteadyClock* pSteadyClock = nullptr)
 	{
-		if constexpr (std::is_floating_point_v<T>)
-		{
-			// 浮動小数点数の場合は0.0から1.0までの補間をデフォルトにする
-			return EaseTaskBuilder<T>(std::move(callback), duration, 0.0, 1.0, Easing::Linear, pSteadyClock);
-		}
-		else
-		{
-			return EaseTaskBuilder<T>(std::move(callback), duration, T{}, T{}, Easing::Linear, pSteadyClock);
-		}
+		return EaseTaskBuilder<T>(std::move(callback), duration, T{}, T{}, Easing::Linear, pSteadyClock);
 	}
 }
 

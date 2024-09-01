@@ -595,25 +595,6 @@ namespace cotasklib::Co
 				}
 				return s_pInstance->m_drawExecutor.drawerExistsInLayer(layer);
 			}
-
-			static void SetCurrentSceneFactory(SceneFactory factory)
-			{
-				if (!s_pInstance)
-				{
-					throw Error{ U"Backend is not initialized" };
-				}
-				s_pInstance->m_currentSceneFactory = std::move(factory);
-			}
-
-			[[nodiscard]]
-			static SceneFactory CurrentSceneFactory()
-			{
-				if (!s_pInstance)
-				{
-					throw Error{ U"Backend is not initialized" };
-				}
-				return s_pInstance->m_currentSceneFactory;
-			}
 		};
 
 		template <typename TResult>

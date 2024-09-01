@@ -332,17 +332,14 @@ namespace cotasklib::Co
 				// 次シーンがなければ抜ける
 				if (nextSceneFactory == nullptr)
 				{
-					Backend::SetCurrentSceneFactory(nullptr);
 					break;
 				}
 
 				// 次シーンを生成
-				currentScene.reset();
-				Backend::SetCurrentSceneFactory(nextSceneFactory); // 次シーンのコンストラクタ内で参照される場合があるためシーン生成前にセットしておく必要がある
+				currentScene.reset(); // 前シーンのデストラクタを次シーンのコンストラクタより先に呼ぶため、先にresetが必要
 				currentScene = nextSceneFactory();
 				if (!currentScene)
 				{
-					Backend::SetCurrentSceneFactory(nullptr);
 					break;
 				}
 			}

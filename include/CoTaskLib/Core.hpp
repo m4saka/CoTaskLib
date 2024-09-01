@@ -1275,7 +1275,25 @@ namespace cotasklib::Co
 		}
 
 		[[nodiscard]]
-		Task<void> discardResult()&&;
+		Task<void> discardResult()&&
+		{
+			return [](Task<TResult> task) -> Task<void>
+				{
+					if (task.done())
+					{
+						co_return;
+					}
+					while (true)
+					{
+						task.resume();
+						if (task.done())
+						{
+							break;
+						}
+						co_await NextFrame();
+					}
+				}(std::move(*this));
+		}
 
 		[[nodiscard]]
 		ScopedTaskRunner runScoped(FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)&&
@@ -1288,22 +1306,6 @@ namespace cotasklib::Co
 			mr.add(ScopedTaskRunner{ std::move(*this), std::move(finishCallback), std::move(cancelCallback) });
 		}
 	};
-
-	namespace detail
-	{
-		template <typename TResult>
-		[[nodiscard]]
-		Task<void> DiscardResult(std::unique_ptr<Task<TResult>> task)
-		{
-			co_await std::move(*task);
-		}
-	}
-
-	template <typename TResult>
-	Task<void> Task<TResult>::discardResult()&&
-	{
-		return detail::DiscardResult(std::make_unique<Task<TResult>>(std::move(*this)));
-	}
 
 	[[nodiscard]]
 	inline Task<void> EmptyTask()

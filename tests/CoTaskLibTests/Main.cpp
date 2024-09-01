@@ -95,7 +95,7 @@ Co::Task<void> DelayTimeTest(int32* pValue, ISteadyClock* pSteadyClock)
 	*pValue = 3;
 }
 
-TEST_CASE("DelayTime")
+TEST_CASE("Delay time")
 {
 	TestClock clock;
 	int32 value = 0;
@@ -135,6 +135,85 @@ TEST_CASE("DelayTime")
 
 	// 5秒
 	clock.microsec = 5'000'000;
+	System::Update();
+	REQUIRE(value == 3); // すでに完了しているので何も起こらない
+	REQUIRE(runner.done() == true);
+}
+
+TEST_CASE("Delay time not including pause time")
+{
+	TestClock clock;
+	int32 value = 0;
+	bool isPaused = false;
+
+	const auto runner = DelayTimeTest(&value, &clock).pausedIf([&isPaused] { return isPaused; }).runScoped();
+	REQUIRE(value == 1); // runScopedで最初のsuspendまで実行される
+
+	// 0秒
+	clock.microsec = 0;
+	System::Update();
+	REQUIRE(value == 1); // 変化なし
+	REQUIRE(runner.done() == false);
+
+	// 0.999秒
+	clock.microsec = 999'000;
+	System::Update();
+	REQUIRE(value == 1); // まだ1秒経過していないので変化なし
+	REQUIRE(runner.done() == false);
+
+	// 1.001秒
+	// Delay(3s)内時間: 0.000秒
+	clock.microsec = 1'001'000;
+	System::Update();
+	REQUIRE(value == 2); // 1秒経過したので2になる
+	REQUIRE(runner.done() == false);
+
+	// 3.990秒
+	// Delay(3s)内時間: 2.989秒
+	clock.microsec = 3'990'000;
+	System::Update();
+	REQUIRE(value == 2); // まだ3秒経過していないので変化なし
+	REQUIRE(runner.done() == false);
+
+	// 4.001秒(ポーズ開始)
+	// Delay(3s)内時間: 2.989秒
+	clock.microsec = 4'001'000;
+	isPaused = true;
+	System::Update();
+	REQUIRE(value == 2); // ポーズ中なので変化なし
+	REQUIRE(runner.done() == false);
+
+	// 5秒(ポーズ中)
+	// Delay(3s)内時間: 2.989秒
+	clock.microsec = 5'000'000;
+	System::Update();
+	REQUIRE(value == 2); // ポーズ中なので変化なし
+	REQUIRE(runner.done() == false);
+
+	// 5.990秒(ポーズ解除)
+	// Delay(3s)内時間: 2.989秒
+	clock.microsec = 5'990'000;
+	isPaused = false;
+	System::Update();
+	REQUIRE(value == 2); // ポーズ解除直後のフレームでは時間は進まないので変化なし
+	REQUIRE(runner.done() == false);
+
+	// 6.000秒
+	// Delay(3s)内時間: 2.999秒
+	clock.microsec = 6'000'000;
+	System::Update();
+	REQUIRE(value == 2); // まだ3秒経過していないので変化なし
+	REQUIRE(runner.done() == false);
+
+	// 6.002秒
+	// Delay(3s)内時間: 3.001秒
+	clock.microsec = 6'002'000;
+	System::Update();
+	REQUIRE(value == 3); // 3秒経過したので3になる
+	REQUIRE(runner.done() == true); // ここで完了
+
+	// 7秒
+	clock.microsec = 7'000'000;
 	System::Update();
 	REQUIRE(value == 3); // すでに完了しているので何も起こらない
 	REQUIRE(runner.done() == true);
@@ -238,6 +317,30 @@ TEST_CASE("co_return")
 	REQUIRE(value == 42); // runScopedにより実行が開始される
 }
 
+TEST_CASE("co_return with pausedIf")
+{
+	int32 value = 0;
+	bool isPaused = true; // 初めからポーズにする
+
+	auto task = CoReturnTestCaller(&value).pausedIf([&isPaused] { return isPaused; });
+
+	const auto runner = std::move(task).runScoped();
+	REQUIRE(value == 0); // ポーズ中なのでrunScopedにより実行されない
+
+	// ポーズ中なので変化しない 1フレーム目
+	System::Update();
+	REQUIRE(value == 0); // 変化なし
+
+	// ポーズ中なので変化しない 2フレーム目
+	System::Update();
+	REQUIRE(value == 0); // 変化なし
+
+	// ポーズ解除 3フレーム目
+	isPaused = false;
+	System::Update();
+	REQUIRE(value == 42); // ポーズ解除されたので実行される
+}
+
 Co::Task<int32> CoReturnWithDelayTest()
 {
 	co_await Co::NextFrame();
@@ -267,6 +370,69 @@ TEST_CASE("co_return with delay")
 	REQUIRE(value == 42); // すでに完了しているので何も起こらない
 }
 
+TEST_CASE("co_return with delay and pausedIf #1")
+{
+	int32 value = 0;
+	bool isPaused = false;
+
+	auto task = CoReturnWithDelayTestCaller(&value).pausedIf([&isPaused] { return isPaused; });
+
+	const auto runner = std::move(task).runScoped();
+	REQUIRE(value == 1); // runScopedにより実行が開始される
+
+	// ポーズ中なので変化しない 1フレーム目
+	isPaused = true;
+	System::Update();
+	REQUIRE(value == 1); // 変化なし
+
+	// ポーズ中なので変化しない 2フレーム目
+	isPaused = true;
+	System::Update();
+	REQUIRE(value == 1); // 変化なし
+
+	// ポーズ解除 3フレーム目
+	// NextFrame()の後が実行され、co_awaitで受け取った値が返る
+	isPaused = false;
+	System::Update();
+	REQUIRE(value == 42);
+
+	// すでに完了しているので何も起こらない
+	System::Update();
+	REQUIRE(value == 42);
+}
+
+TEST_CASE("co_return with delay and pausedIf #2")
+{
+	int32 value = 0;
+	bool isPaused = true; // 初めからポーズにする
+
+	auto task = CoReturnWithDelayTestCaller(&value).pausedIf([&isPaused] { return isPaused; });
+
+	const auto runner = std::move(task).runScoped();
+	REQUIRE(value == 0); // ポーズ中なのでrunScopedにより実行されない
+
+	// ポーズ中なので変化しない 1フレーム目
+	System::Update();
+	REQUIRE(value == 0); // 変化なし
+
+	// ポーズ中なので変化しない 2フレーム目
+	System::Update();
+	REQUIRE(value == 0); // 変化なし
+
+	// ポーズ解除 3フレーム目
+	isPaused = false;
+	System::Update();
+	REQUIRE(value == 1); // ポーズ解除されたので実行が開始される
+
+	// NextFrame()の後が実行され、co_awaitで受け取った値が返る
+	System::Update();
+	REQUIRE(value == 42);
+
+	// すでに完了しているので何も起こらない
+	System::Update();
+	REQUIRE(value == 42);
+}
+
 Co::Task<std::unique_ptr<int32>> CoReturnWithMoveOnlyTypeTest()
 {
 	co_return std::make_unique<int32>(42);
@@ -287,6 +453,36 @@ TEST_CASE("co_return with move-only type")
 
 	const auto runner = std::move(task).runScoped();
 	REQUIRE(value == 42); // runScopedにより実行が開始される
+}
+
+Co::Task<void> CoReturnWithMoveOnlyTypeTestCallerWithPausedIf(int32* pValue, std::function<bool()> fnIsPaused)
+{
+	auto ptr = co_await CoReturnWithMoveOnlyTypeTest().pausedIf(std::move(fnIsPaused));
+	*pValue = *ptr;
+}
+
+TEST_CASE("co_return with move-only type and pausedIf")
+{
+	int32 value = 0;
+	bool isPaused = true; // 初めからポーズにする
+
+	auto task = CoReturnWithMoveOnlyTypeTestCallerWithPausedIf(&value, [&isPaused] { return isPaused; });
+
+	const auto runner = std::move(task).runScoped();
+	REQUIRE(value == 0); // ポーズ中なのでrunScopedにより実行されない
+
+	// ポーズ中なので変化しない 1フレーム目
+	System::Update();
+	REQUIRE(value == 0); // 変化なし
+
+	// ポーズ中なので変化しない 2フレーム目
+	System::Update();
+	REQUIRE(value == 0); // 変化なし
+
+	// ポーズ解除 3フレーム目
+	isPaused = false;
+	System::Update();
+	REQUIRE(value == 42); // ポーズ解除されたので実行される
 }
 
 Co::Task<std::unique_ptr<int32>> CoReturnWithMoveOnlyTypeAndDelayTest()
@@ -316,6 +512,40 @@ TEST_CASE("co_return with move-only type and delay")
 
 	System::Update();
 	REQUIRE(value == 42); // すでに完了しているので何も起こらない
+}
+
+Co::Task<void> CoReturnWithMoveOnlyTypeAndDelayTestCallerWithPausedIf(int32* pValue, std::function<bool()> fnIsPaused)
+{
+	auto ptr = co_await CoReturnWithMoveOnlyTypeAndDelayTest().pausedIf(std::move(fnIsPaused));
+	*pValue = *ptr;
+}
+
+TEST_CASE("co_return with move-only type and delay and pausedIf")
+{
+	int32 value = 0;
+	bool isPaused = true; // 初めからポーズにする
+
+	auto task = CoReturnWithMoveOnlyTypeAndDelayTestCallerWithPausedIf(&value, [&isPaused] { return isPaused; });
+
+	const auto runner = std::move(task).runScoped();
+	REQUIRE(value == 0); // ポーズ中なのでrunScopedにより実行されない
+
+	// ポーズ中なので変化しない 1フレーム目
+	System::Update();
+	REQUIRE(value == 0); // 変化なし
+
+	// ポーズ中なので変化しない 2フレーム目
+	System::Update();
+	REQUIRE(value == 0); // 変化なし
+
+	// ポーズ解除 3フレーム目
+	isPaused = false;
+	System::Update();
+	REQUIRE(value == 0); // ポーズ解除されたので実行が開始され、NextFrame()が実行されるため変化なし
+
+	// NextFrame()の後が実行され、co_awaitで受け取った値が返る
+	System::Update();
+	REQUIRE(value == 42);
 }
 
 Co::Task<void> ThrowExceptionTest()

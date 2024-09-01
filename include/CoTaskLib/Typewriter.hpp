@@ -38,7 +38,7 @@ namespace cotasklib::Co
 		inline Task<void> TypewriterTask(std::function<void(const String&)> callback, const Duration totalDuration, const String text, ISteadyClock* pSteadyClock)
 		{
 			Optional<std::size_t> prevLength = none; // textが空文字列の場合の初回コールバック呼び出しを考慮するためOptionalを使用
-			const Timer timer{ totalDuration, StartImmediately::Yes, pSteadyClock };
+			detail::DeltaAggregateTimer timer{ totalDuration, pSteadyClock };
 			while (true)
 			{
 				const double progress = timer.progress0_1();
@@ -53,6 +53,7 @@ namespace cotasklib::Co
 					co_return;
 				}
 				co_await NextFrame();
+				timer.update();
 			}
 		}
 	}

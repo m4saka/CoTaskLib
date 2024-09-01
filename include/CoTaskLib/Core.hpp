@@ -1859,22 +1859,21 @@ namespace cotasklib::Co
 	{
 		// ポーズ中や同一フレーム内での多重更新を考慮したタイマー
 		template <typename TInnerDuration>
-		class DeltaAggregateTimer
+		class DeltaAggregateTimerImpl
 		{
 		private:
-			TInnerDuration m_elapsed;
+			TInnerDuration m_duration;
+			TInnerDuration m_elapsed = TInnerDuration{ 0 };
 			TInnerDuration m_prevTime;
 			int32 m_prevFrameCount;
-			Duration m_duration;
 
 		public:
 			using InnerDurationRep = typename TInnerDuration::rep;
 
-			DeltaAggregateTimer(Duration duration, InnerDurationRep initialTime)
-				: m_elapsed(0)
+			DeltaAggregateTimerImpl(Duration duration, InnerDurationRep initialTime)
+				: m_duration(DurationCast<TInnerDuration>(duration))
 				, m_prevTime(initialTime)
 				, m_prevFrameCount(Scene::FrameCount())
-				, m_duration(duration)
 			{
 			}
 
@@ -1899,13 +1898,63 @@ namespace cotasklib::Co
 				m_prevFrameCount = frameCount;
 				m_prevTime = time;
 			}
+
+			[[nodiscard]]
+			double progress0_1() const
+			{
+				if (m_duration.count() == 0)
+				{
+					return 1.0;
+				}
+				return Min(static_cast<double>(m_elapsed.count()) / static_cast<double>(m_duration.count()), 1.0);
+			}
+		};
+
+		class DeltaAggregateTimer
+		{
+		private:
+			std::variant<DeltaAggregateTimerImpl<SecondsF>, DeltaAggregateTimerImpl<std::chrono::duration<uint64, std::micro>>> m_impl;
+			ISteadyClock* m_pSteadyClock;
+
+		public:
+			DeltaAggregateTimer(Duration duration, ISteadyClock* pSteadyClock)
+				: m_impl(pSteadyClock
+					? decltype(m_impl){ DeltaAggregateTimerImpl<std::chrono::duration<uint64, std::micro>>{ duration, pSteadyClock->getMicrosec() } }
+					: decltype(m_impl){ DeltaAggregateTimerImpl<SecondsF>{ duration, Scene::Time() } })
+				, m_pSteadyClock(pSteadyClock)
+			{
+			}
+
+			[[nodiscard]]
+			bool reachedZero() const
+			{
+				return std::visit([](const auto& impl) { return impl.reachedZero(); }, m_impl);
+			}
+
+			void update()
+			{
+				if (m_pSteadyClock)
+				{
+					std::get<DeltaAggregateTimerImpl<std::chrono::duration<uint64, std::micro>>>(m_impl).update(m_pSteadyClock->getMicrosec());
+				}
+				else
+				{
+					std::get<DeltaAggregateTimerImpl<SecondsF>>(m_impl).update(Scene::Time());
+				}
+			}
+
+			[[nodiscard]]
+			double progress0_1() const
+			{
+				return std::visit([](const auto& impl) { return impl.progress0_1(); }, m_impl);
+			}
 		};
 	}
 
 	[[nodiscard]]
 	inline Task<void> Delay(const Duration duration)
 	{
-		detail::DeltaAggregateTimer<SecondsF> timer{ duration, Scene::Time() };
+		detail::DeltaAggregateTimerImpl<SecondsF> timer{ duration, Scene::Time() };
 		while (!timer.reachedZero())
 		{
 			co_await NextFrame();
@@ -1916,23 +1965,11 @@ namespace cotasklib::Co
 	[[nodiscard]]
 	inline Task<void> Delay(const Duration duration, ISteadyClock* pSteadyClock)
 	{
-		if (pSteadyClock)
+		detail::DeltaAggregateTimer timer{ duration, pSteadyClock };
+		while (!timer.reachedZero())
 		{
-			detail::DeltaAggregateTimer<std::chrono::duration<uint64, std::micro>> timer{ duration, pSteadyClock->getMicrosec() };
-			while (!timer.reachedZero())
-			{
-				co_await NextFrame();
-				timer.update(pSteadyClock->getMicrosec());
-			}
-		}
-		else
-		{
-			detail::DeltaAggregateTimer<SecondsF> timer{ duration, Scene::Time() };
-			while (!timer.reachedZero())
-			{
-				co_await NextFrame();
-				timer.update(Scene::Time());
-			}
+			co_await NextFrame();
+			timer.update();
 		}
 	}
 

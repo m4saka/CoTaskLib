@@ -63,17 +63,17 @@ namespace cotasklib::Co
 		[[nodiscard]]
 		inline Task<void> EaseTask(std::function<void(double)> callback, const Duration duration, double easeFunc(double), ISteadyClock* pSteadyClock)
 		{
-			const Timer timer{ duration, StartImmediately::Yes, pSteadyClock };
-			double progress;
+			detail::DeltaAggregateTimer timer{ duration, pSteadyClock };
 			while (true)
 			{
-				progress = timer.progress0_1();
+				const double progress = timer.progress0_1();
 				callback(easeFunc(progress));
 				if (progress >= 1.0)
 				{
 					co_return;
 				}
 				co_await NextFrame();
+				timer.update();
 			}
 		}
 

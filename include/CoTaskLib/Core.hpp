@@ -1305,6 +1305,31 @@ namespace cotasklib::Co
 		{
 			mr.add(ScopedTaskRunner{ std::move(*this), std::move(finishCallback), std::move(cancelCallback) });
 		}
+
+		[[nodiscard]]
+		Task<TResult> pausedIf(std::function<bool()> fnIsPaused)&&
+		{
+			return [](Task<TResult> task, std::function<bool()> fnIsPaused) -> Task<TResult>
+				{
+					if (task.done())
+					{
+						co_return task.value();
+					}
+					while (true)
+					{
+						if (!fnIsPaused())
+						{
+							task.resume();
+							if (task.done())
+							{
+								break;
+							}
+						}
+						co_await NextFrame();
+					}
+					co_return task.value();
+				}(std::move(*this), std::move(fnIsPaused));
+		}
 	};
 
 	[[nodiscard]]
@@ -1830,13 +1855,82 @@ namespace cotasklib::Co
 		}
 	}
 
-	[[nodiscard]]
-	inline Task<void> Delay(const Duration duration, ISteadyClock* pSteadyClock = nullptr)
+	namespace detail
 	{
-		const Timer timer{ duration, StartImmediately::Yes, pSteadyClock };
+		// ポーズ中や同一フレーム内での多重更新を考慮したタイマー
+		template <typename TInnerDuration>
+		class DeltaAggregateTimer
+		{
+		private:
+			TInnerDuration m_elapsed;
+			TInnerDuration m_prevTime;
+			int32 m_prevFrameCount;
+			Duration m_duration;
+
+		public:
+			DeltaAggregateTimer(Duration duration, TInnerDuration::rep initialTime)
+				: m_elapsed(0)
+				, m_prevTime(initialTime)
+				, m_prevFrameCount(Scene::FrameCount())
+				, m_duration(duration)
+			{
+			}
+
+			[[nodiscard]]
+			bool reachedZero() const
+			{
+				return m_elapsed >= m_duration;
+			}
+
+			void update(TInnerDuration::rep timeRep)
+			{
+				const int32 frameCount = Scene::FrameCount();
+				const TInnerDuration time = TInnerDuration{ timeRep };
+
+				// ポーズ中や同一フレーム内での多重更新は時間を進行させない
+				// (ポーズ前後の1フレーム分の時間を加算していないのは仕様で、ISteadyClockの場合に絶対時間しか取得できず加算しようがないため)
+				if (frameCount - m_prevFrameCount == 1)
+				{
+					m_elapsed += time - m_prevTime;
+				}
+
+				m_prevFrameCount = frameCount;
+				m_prevTime = time;
+			}
+		};
+	}
+
+	[[nodiscard]]
+	inline Task<void> Delay(const Duration duration)
+	{
+		detail::DeltaAggregateTimer<SecondsF> timer{ duration, Scene::Time() };
 		while (!timer.reachedZero())
 		{
 			co_await NextFrame();
+			timer.update(Scene::Time());
+		}
+	}
+
+	[[nodiscard]]
+	inline Task<void> Delay(const Duration duration, ISteadyClock* pSteadyClock)
+	{
+		if (pSteadyClock)
+		{
+			detail::DeltaAggregateTimer<std::chrono::duration<uint64, std::micro>> timer{ duration, pSteadyClock->getMicrosec() };
+			while (!timer.reachedZero())
+			{
+				co_await NextFrame();
+				timer.update(pSteadyClock->getMicrosec());
+			}
+		}
+		else
+		{
+			detail::DeltaAggregateTimer<SecondsF> timer{ duration, Scene::Time() };
+			while (!timer.reachedZero())
+			{
+				co_await NextFrame();
+				timer.update(Scene::Time());
+			}
 		}
 	}
 

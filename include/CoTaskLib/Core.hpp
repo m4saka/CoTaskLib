@@ -2275,6 +2275,52 @@ namespace cotasklib::Co
 		}
 	}
 
+	Task<void> All(Array<Task<void>> tasks)
+	{
+        if (std::all_of(tasks.begin(), tasks.end(), [](const Task<void>& task) { return task.done(); }))
+        {
+            co_return;
+        }
+
+        while (true)
+        {
+            for (auto& task : tasks)
+            {
+                task.resume();
+            }
+
+            if (std::all_of(tasks.begin(), tasks.end(), [](const Task<void>& task) { return task.done(); }))
+            {
+                co_return;
+            }
+
+            co_await NextFrame();
+        }
+    }
+
+    Task<void> All(std::vector<Task<void>> tasks)
+    {
+        if (std::all_of(tasks.begin(), tasks.end(), [](const Task<void>& task) { return task.done(); }))
+        {
+            co_return;
+        }
+
+        while (true)
+        {
+            for (auto& task : tasks)
+            {
+                task.resume();
+            }
+
+            if (std::all_of(tasks.begin(), tasks.end(), [](const Task<void>& task) { return task.done(); }))
+            {
+                co_return;
+            }
+
+            co_await NextFrame();
+        }
+    }
+
 	template <detail::TaskConcept... TTasks>
 	auto Any(TTasks... args) -> Task<std::tuple<Optional<detail::VoidResultTypeReplace<typename TTasks::result_type>>...>>
 	{
@@ -2294,6 +2340,76 @@ namespace cotasklib::Co
 			{
 				co_return std::make_tuple(detail::ConvertOptionalVoidResult(args)...);
 			}
+			co_await NextFrame();
+		}
+	}
+
+	Task<Array<Optional<VoidResult>>> Any(Array<Task<void>> tasks)
+	{
+		if (std::any_of(tasks.begin(), tasks.end(), [](const Task<void>& task) { return task.done(); }))
+		{
+			Array<Optional<VoidResult>> results;
+			results.reserve(tasks.size());
+			for (const auto& task : tasks)
+			{
+				results.push_back(task.done() ? MakeOptional(VoidResult{}) : none);
+			}
+			co_return results;
+		}
+
+		while (true)
+		{
+			for (auto& task : tasks)
+			{
+				task.resume();
+			}
+
+			if (std::any_of(tasks.begin(), tasks.end(), [](const Task<void>& task) { return task.done(); }))
+			{
+				Array<Optional<VoidResult>> results;
+				results.reserve(tasks.size());
+				for (const auto& task : tasks)
+				{
+					results.push_back(task.done() ? MakeOptional(VoidResult{}) : none);
+				}
+				co_return results;
+			}
+
+			co_await NextFrame();
+		}
+	}
+
+	Task<std::vector<Optional<VoidResult>>> Any(std::vector<Task<void>> tasks)
+	{
+		if (std::any_of(tasks.begin(), tasks.end(), [](const Task<void>& task) { return task.done(); }))
+		{
+			std::vector<Optional<VoidResult>> results;
+			results.reserve(tasks.size());
+			for (const auto& task : tasks)
+			{
+				results.push_back(task.done() ? MakeOptional(VoidResult{}) : none);
+			}
+			co_return results;
+		}
+
+		while (true)
+		{
+			for (auto& task : tasks)
+			{
+				task.resume();
+			}
+
+			if (std::any_of(tasks.begin(), tasks.end(), [](const Task<void>& task) { return task.done(); }))
+			{
+				std::vector<Optional<VoidResult>> results;
+				results.reserve(tasks.size());
+				for (const auto& task : tasks)
+				{
+					results.push_back(task.done() ? MakeOptional(VoidResult{}) : none);
+				}
+				co_return results;
+			}
+
 			co_await NextFrame();
 		}
 	}

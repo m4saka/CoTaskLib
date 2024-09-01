@@ -1330,6 +1330,12 @@ namespace cotasklib::Co
 					co_return task.value();
 				}(std::move(*this), std::move(fnIsPaused));
 		}
+
+		[[nodiscard]]
+		Task<TResult> delayed(const Duration& duration)&&;
+
+		[[nodiscard]]
+		Task<TResult> delayed(const Duration& duration, ISteadyClock* pSteadyClock)&&;
 	};
 
 	[[nodiscard]]
@@ -1971,6 +1977,28 @@ namespace cotasklib::Co
 			co_await NextFrame();
 			timer.update();
 		}
+	}
+
+	template <typename TResult>
+	[[nodiscard]]
+	Task<TResult> Task<TResult>::delayed(const Duration& duration)&&
+	{
+		return [](Task<TResult> task, Duration duration) -> Task<TResult>
+			{
+				co_await Delay(duration);
+				co_return co_await std::move(task);
+			}(std::move(*this), duration);
+	}
+
+	template <typename TResult>
+	[[nodiscard]]
+	Task<TResult> Task<TResult>::delayed(const Duration& duration, ISteadyClock* pSteadyClock)&&
+	{
+		return [](Task<TResult> task, Duration duration, ISteadyClock* pSteadyClock) -> Task<TResult>
+			{
+				co_await Delay(duration, pSteadyClock);
+				co_return co_await std::move(task);
+			}(std::move(*this), duration, pSteadyClock);
 	}
 
 	[[nodiscard]]

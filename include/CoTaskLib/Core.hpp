@@ -1868,7 +1868,9 @@ namespace cotasklib::Co
 			Duration m_duration;
 
 		public:
-			DeltaAggregateTimer(Duration duration, TInnerDuration::rep initialTime)
+			using InnerDurationRep = typename TInnerDuration::rep;
+
+			DeltaAggregateTimer(Duration duration, InnerDurationRep initialTime)
 				: m_elapsed(0)
 				, m_prevTime(initialTime)
 				, m_prevFrameCount(Scene::FrameCount())
@@ -1882,7 +1884,7 @@ namespace cotasklib::Co
 				return m_elapsed >= m_duration;
 			}
 
-			void update(TInnerDuration::rep timeRep)
+			void update(InnerDurationRep timeRep)
 			{
 				const int32 frameCount = Scene::FrameCount();
 				const TInnerDuration time = TInnerDuration{ timeRep };

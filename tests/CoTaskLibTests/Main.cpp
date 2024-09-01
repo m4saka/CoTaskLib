@@ -104,31 +104,37 @@ TEST_CASE("Delay time")
 	REQUIRE(value == 1); // runScopedで最初のsuspendまで実行される
 
 	// 0秒
+	// Delay(1s)内時間: 0秒
 	clock.microsec = 0;
 	System::Update();
 	REQUIRE(value == 1); // 変化なし
 	REQUIRE(runner.done() == false);
 
 	// 0.999秒
+	// Delay(1s)内時間: 0.999秒
 	clock.microsec = 999'000;
 	System::Update();
 	REQUIRE(value == 1); // まだ1秒経過していないので変化なし
 	REQUIRE(runner.done() == false);
 
 	// 1.001秒
+	// Delay(1s)内時間: 1.001秒
+	// Delay(3s)内時間: 0秒
 	clock.microsec = 1'001'000;
 	System::Update();
 	REQUIRE(value == 2); // 1秒経過したので2になる
 	REQUIRE(runner.done() == false);
 
-	// 3.999秒
-	clock.microsec = 3'999'000;
+	// 4.000秒
+	// Delay(3s)内時間: 2.999秒
+	clock.microsec = 4'000'000;
 	System::Update();
 	REQUIRE(value == 2); // まだ3秒経過していないので変化なし
 	REQUIRE(runner.done() == false);
 
-	// 4.001秒
-	clock.microsec = 4'001'000;
+	// 4.002秒
+	// Delay(3s)内時間: 3.001秒
+	clock.microsec = 4'002'000;
 	System::Update();
 	REQUIRE(value == 3); // 3秒経過したので3になる
 	REQUIRE(runner.done() == true); // ここで完了
@@ -214,6 +220,69 @@ TEST_CASE("Delay time not including pause time")
 
 	// 7秒
 	clock.microsec = 7'000'000;
+	System::Update();
+	REQUIRE(value == 3); // すでに完了しているので何も起こらない
+	REQUIRE(runner.done() == true);
+}
+
+TEST_CASE("Task::delayed")
+{
+	TestClock clock;
+	int32 value = 0;
+
+	const auto runner = DelayTimeTest(&value, &clock).delayed(1s, &clock).runScoped();
+	REQUIRE(value == 0); // 1秒遅れて実行されるため、何も起こらない
+
+	// 0秒
+	clock.microsec = 0;
+	System::Update();
+	REQUIRE(value == 0); // まだ1秒経過していないので変化なし
+	REQUIRE(runner.done() == false);
+
+	// 0.999秒
+	clock.microsec = 999'000;
+	System::Update();
+	REQUIRE(value == 0); // まだ1秒経過していないので変化なし
+	REQUIRE(runner.done() == false);
+
+	// 1.001秒
+	// Delay(1s)内時間: 0秒
+	clock.microsec = 1'001'000;
+	System::Update();
+	REQUIRE(value == 1); // 1秒経過したので実行開始される
+	REQUIRE(runner.done() == false);
+
+	// 2.000秒
+	// Delay(1s)内時間: 0.999秒
+	clock.microsec = 2'000'000;
+	System::Update();
+	REQUIRE(value == 1); // まだ1秒経過していないので変化なし
+	REQUIRE(runner.done() == false);
+
+	// 2.002秒
+	// Delay(1s)内時間: 1.001秒
+	// Delay(3s)内時間: 0秒
+	clock.microsec = 2'002'000;
+	System::Update();
+	REQUIRE(value == 2); // 1秒経過したので2になる
+	REQUIRE(runner.done() == false);
+
+	// 5.001秒
+	// Delay(3s)内時間: 2.999秒
+	clock.microsec = 5'001'000;
+	System::Update();
+	REQUIRE(value == 2); // まだ3秒経過していないので変化なし
+	REQUIRE(runner.done() == false);
+
+	// 5.003秒
+	// Delay(3s)内時間: 3.001秒
+	clock.microsec = 5'003'000;
+	System::Update();
+	REQUIRE(value == 3); // 3秒経過したので3になる
+	REQUIRE(runner.done() == true); // ここで完了
+
+	// 6秒
+	clock.microsec = 6'000'000;
 	System::Update();
 	REQUIRE(value == 3); // すでに完了しているので何も起こらない
 	REQUIRE(runner.done() == true);

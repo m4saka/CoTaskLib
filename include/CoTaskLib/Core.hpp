@@ -1307,7 +1307,7 @@ namespace cotasklib::Co
 		}
 
 		[[nodiscard]]
-		Task<TResult> pausedIf(std::function<bool()> fnIsPaused)&&
+		Task<TResult> pausedWhile(std::function<bool()> fnIsPaused)&&
 		{
 			return [](Task<TResult> task, std::function<bool()> fnIsPaused) -> Task<TResult>
 				{

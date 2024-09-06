@@ -152,7 +152,7 @@ TEST_CASE("Delay time not including pause time")
 	int32 value = 0;
 	bool isPaused = false;
 
-	const auto runner = DelayTimeTest(&value, &clock).pausedIf([&isPaused] { return isPaused; }).runScoped();
+	const auto runner = DelayTimeTest(&value, &clock).pausedWhile([&isPaused] { return isPaused; }).runScoped();
 	REQUIRE(value == 1); // runScopedで最初のsuspendまで実行される
 
 	// 0秒
@@ -386,12 +386,12 @@ TEST_CASE("co_return")
 	REQUIRE(value == 42); // runScopedにより実行が開始される
 }
 
-TEST_CASE("co_return with pausedIf")
+TEST_CASE("co_return with pausedWhile")
 {
 	int32 value = 0;
 	bool isPaused = true; // 初めからポーズにする
 
-	auto task = CoReturnTestCaller(&value).pausedIf([&isPaused] { return isPaused; });
+	auto task = CoReturnTestCaller(&value).pausedWhile([&isPaused] { return isPaused; });
 
 	const auto runner = std::move(task).runScoped();
 	REQUIRE(value == 0); // ポーズ中なのでrunScopedにより実行されない
@@ -439,12 +439,12 @@ TEST_CASE("co_return with delay")
 	REQUIRE(value == 42); // すでに完了しているので何も起こらない
 }
 
-TEST_CASE("co_return with delay and pausedIf #1")
+TEST_CASE("co_return with delay and pausedWhile #1")
 {
 	int32 value = 0;
 	bool isPaused = false;
 
-	auto task = CoReturnWithDelayTestCaller(&value).pausedIf([&isPaused] { return isPaused; });
+	auto task = CoReturnWithDelayTestCaller(&value).pausedWhile([&isPaused] { return isPaused; });
 
 	const auto runner = std::move(task).runScoped();
 	REQUIRE(value == 1); // runScopedにより実行が開始される
@@ -470,12 +470,12 @@ TEST_CASE("co_return with delay and pausedIf #1")
 	REQUIRE(value == 42);
 }
 
-TEST_CASE("co_return with delay and pausedIf #2")
+TEST_CASE("co_return with delay and pausedWhile #2")
 {
 	int32 value = 0;
 	bool isPaused = true; // 初めからポーズにする
 
-	auto task = CoReturnWithDelayTestCaller(&value).pausedIf([&isPaused] { return isPaused; });
+	auto task = CoReturnWithDelayTestCaller(&value).pausedWhile([&isPaused] { return isPaused; });
 
 	const auto runner = std::move(task).runScoped();
 	REQUIRE(value == 0); // ポーズ中なのでrunScopedにより実行されない
@@ -524,18 +524,18 @@ TEST_CASE("co_return with move-only type")
 	REQUIRE(value == 42); // runScopedにより実行が開始される
 }
 
-Co::Task<void> CoReturnWithMoveOnlyTypeTestCallerWithPausedIf(int32* pValue, std::function<bool()> fnIsPaused)
+Co::Task<void> CoReturnWithMoveOnlyTypeTestCallerWithPausedWhile(int32* pValue, std::function<bool()> fnIsPaused)
 {
-	auto ptr = co_await CoReturnWithMoveOnlyTypeTest().pausedIf(std::move(fnIsPaused));
+	auto ptr = co_await CoReturnWithMoveOnlyTypeTest().pausedWhile(std::move(fnIsPaused));
 	*pValue = *ptr;
 }
 
-TEST_CASE("co_return with move-only type and pausedIf")
+TEST_CASE("co_return with move-only type and pausedWhile")
 {
 	int32 value = 0;
 	bool isPaused = true; // 初めからポーズにする
 
-	auto task = CoReturnWithMoveOnlyTypeTestCallerWithPausedIf(&value, [&isPaused] { return isPaused; });
+	auto task = CoReturnWithMoveOnlyTypeTestCallerWithPausedWhile(&value, [&isPaused] { return isPaused; });
 
 	const auto runner = std::move(task).runScoped();
 	REQUIRE(value == 0); // ポーズ中なのでrunScopedにより実行されない
@@ -583,18 +583,18 @@ TEST_CASE("co_return with move-only type and delay")
 	REQUIRE(value == 42); // すでに完了しているので何も起こらない
 }
 
-Co::Task<void> CoReturnWithMoveOnlyTypeAndDelayTestCallerWithPausedIf(int32* pValue, std::function<bool()> fnIsPaused)
+Co::Task<void> CoReturnWithMoveOnlyTypeAndDelayTestCallerWithPausedWhile(int32* pValue, std::function<bool()> fnIsPaused)
 {
-	auto ptr = co_await CoReturnWithMoveOnlyTypeAndDelayTest().pausedIf(std::move(fnIsPaused));
+	auto ptr = co_await CoReturnWithMoveOnlyTypeAndDelayTest().pausedWhile(std::move(fnIsPaused));
 	*pValue = *ptr;
 }
 
-TEST_CASE("co_return with move-only type and delay and pausedIf")
+TEST_CASE("co_return with move-only type and delay and pausedWhile")
 {
 	int32 value = 0;
 	bool isPaused = true; // 初めからポーズにする
 
-	auto task = CoReturnWithMoveOnlyTypeAndDelayTestCallerWithPausedIf(&value, [&isPaused] { return isPaused; });
+	auto task = CoReturnWithMoveOnlyTypeAndDelayTestCallerWithPausedWhile(&value, [&isPaused] { return isPaused; });
 
 	const auto runner = std::move(task).runScoped();
 	REQUIRE(value == 0); // ポーズ中なのでrunScopedにより実行されない

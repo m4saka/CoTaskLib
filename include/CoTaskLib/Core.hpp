@@ -1065,90 +1065,6 @@ namespace cotasklib::Co
 
 		template <typename TResult>
 		class Promise;
-
-		template <typename TResult>
-		class CoroutineHandleWrapper
-		{
-		private:
-			using handle_type = std::coroutine_handle<Promise<TResult>>;
-
-			handle_type m_handle;
-
-		public:
-			explicit CoroutineHandleWrapper(handle_type handle)
-				: m_handle(std::move(handle))
-			{
-			}
-
-			~CoroutineHandleWrapper()
-			{
-				if (m_handle)
-				{
-					m_handle.destroy();
-				}
-			}
-
-			CoroutineHandleWrapper(const CoroutineHandleWrapper<TResult>&) = delete;
-
-			CoroutineHandleWrapper& operator=(const CoroutineHandleWrapper<TResult>&) = delete;
-
-			CoroutineHandleWrapper(CoroutineHandleWrapper<TResult>&& rhs) noexcept
-				: m_handle(rhs.m_handle)
-			{
-				rhs.m_handle = nullptr;
-			}
-
-			CoroutineHandleWrapper& operator=(CoroutineHandleWrapper<TResult>&& rhs) = delete;
-
-			[[nodiscard]]
-			TResult value() const
-			{
-				if constexpr (std::is_void_v<TResult>)
-				{
-					if (m_handle)
-					{
-						m_handle.promise().value(); // 例外伝搬のためにvoidでも呼び出す
-					}
-					return;
-				}
-				else
-				{
-					if (!m_handle)
-					{
-						// 戻り値ありの場合は空のハンドルを許容しない
-						throw Error{ U"CoroutineHandleWrapper: value() called on empty handle" };
-					}
-					return m_handle.promise().value();
-				}
-			}
-
-			[[nodiscard]]
-			bool empty() const
-			{
-				return !m_handle;
-			}
-
-			[[nodiscard]]
-			bool done() const
-			{
-				return !m_handle || m_handle.done();
-			}
-
-			void resume() const
-			{
-				if (done())
-				{
-					return;
-				}
-
-				if (m_handle.promise().resumeSubAwaiter())
-				{
-					return;
-				}
-
-				m_handle.resume();
-			}
-		};
 	}
 
 	enum class WithTiming : uint8
@@ -1175,17 +1091,18 @@ namespace cotasklib::Co
 		static_assert(std::is_move_constructible_v<TResult> || std::is_void_v<TResult>, "TResult must be move constructible");
 		static_assert(!std::is_const_v<TResult>, "TResult must not have 'const' qualifier");
 
-	private:
-		detail::CoroutineHandleWrapper<TResult> m_handle;
-		Array<std::unique_ptr<ITask>> m_concurrentTasksBefore;
-		Array<std::unique_ptr<ITask>> m_concurrentTasksAfter;
-
 	public:
 		using promise_type = detail::Promise<TResult>;
 		using handle_type = std::coroutine_handle<promise_type>;
 		using result_type = TResult;
 		using finish_callback_type = FinishCallbackType<TResult>;
 
+	private:
+		handle_type m_handle;
+		Array<std::unique_ptr<ITask>> m_concurrentTasksBefore;
+		Array<std::unique_ptr<ITask>> m_concurrentTasksAfter;
+
+    public:
 		explicit Task(handle_type h)
 			: m_handle(std::move(h))
 		{
@@ -1195,13 +1112,27 @@ namespace cotasklib::Co
 
 		Task<TResult>& operator=(const Task<TResult>&) = delete;
 
-		Task(Task<TResult>&& rhs) noexcept = default;
+		Task(Task<TResult>&& rhs) noexcept
+            : m_handle(rhs.m_handle)
+            , m_concurrentTasksBefore(std::move(rhs.m_concurrentTasksBefore))
+            , m_concurrentTasksAfter(std::move(rhs.m_concurrentTasksAfter))
+        {
+            rhs.m_handle = nullptr;
+        }
 
 		Task<TResult>& operator=(Task<TResult>&& rhs) = delete;
 
+        ~Task()
+        {
+            if (m_handle)
+            {
+                m_handle.destroy();
+            }
+        }
+
 		virtual void resume() override
 		{
-			if (m_handle.done())
+			if (!m_handle || m_handle.done())
 			{
 				return;
 			}
@@ -1211,7 +1142,10 @@ namespace cotasklib::Co
 				task->resume();
 			}
 
-			m_handle.resume();
+			if (!m_handle.promise().resumeSubAwaiter())
+			{
+				m_handle.resume();
+			}
 
 			for (auto& task : m_concurrentTasksAfter)
 			{
@@ -1222,25 +1156,45 @@ namespace cotasklib::Co
 		[[nodiscard]]
 		bool done() const override
 		{
-			return m_handle.done();
+			return !m_handle || m_handle.done();
 		}
 
 		[[nodiscard]]
 		bool empty() const
 		{
-			return m_handle.empty();
+			return !m_handle;
 		}
 
 		[[nodiscard]]
 		TResult value() const
 		{
-			return m_handle.value();
+			if constexpr (std::is_void_v<TResult>)
+			{
+				if (m_handle)
+				{
+					m_handle.promise().value(); // 例外伝搬のためにvoidでも呼び出す
+				}
+				return;
+			}
+			else
+			{
+				if (!m_handle)
+				{
+					// 戻り値ありの場合は空のハンドルを許容しない
+					throw Error{ U"Task::value() called on empty handle" };
+				}
+				return m_handle.promise().value();
+			}
 		}
 
 		template <typename TResultOther>
 		[[nodiscard]]
 		Task<TResult> with(Task<TResultOther>&& task)&&
 		{
+			if (!m_handle)
+			{
+                throw Error{ U"Task::with() called on empty handle" };
+			}
 			if (m_handle.done())
 			{
 				return std::move(*this);
@@ -1253,6 +1207,10 @@ namespace cotasklib::Co
 		[[nodiscard]]
 		Task<TResult> with(Task<TResultOther>&& task, WithTiming timing)&&
 		{
+			if (!m_handle)
+			{
+				throw Error{ U"Task::with() called on empty handle" };
+			}
 			if (m_handle.done())
 			{
 				return std::move(*this);

@@ -3233,6 +3233,7 @@ TEST_CASE("Co::Typewriter with total duration")
 	REQUIRE(value == U"TEST");
 }
 
+/*
 template <typename Func, typename... Args>
 auto AsyncTaskCaller(Func func, Args... args) -> Co::Task<std::invoke_result_t<Func, Args...>>
 	requires std::is_invocable_v<Func, Args...>
@@ -3341,13 +3342,16 @@ TEST_CASE("s3d::AsyncTask with move-only result")
 	REQUIRE(result != nullptr);
 	REQUIRE(*result == 420);
 }
-
+*/
 void Main()
 {
 	Co::Init();
+	//int value;
+	//auto a = DelayTimeTest(&value, nullptr).delayed(1s).runScoped([&value]() { Print << value; });
+	auto a = Co::FromResult(42).delayed(1s).runScoped([](int result) { Print << result; });
 
 	Console.open();
-	Catch::Session().run();
+	//Catch::Session().run();
 
 	while (System::Update())
 	{

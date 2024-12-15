@@ -29,6 +29,7 @@
 #pragma once
 #include "Core.hpp"
 
+/*
 namespace cotasklib::Co
 {
 	namespace detail
@@ -82,7 +83,7 @@ namespace cotasklib::Co
 					// フレーム待ちなしで終了した場合は登録不要
 					return false;
 				}
-				handle.promise().setSubAwaiter(this);
+				//handle.promise().setSubAwaiter(this);
 				return true;
 			}
 
@@ -147,7 +148,7 @@ namespace cotasklib::Co
 					// フレーム待ちなしで終了した場合は登録不要
 					return false;
 				}
-				handle.promise().setSubAwaiter(this);
+				//handle.promise().setSubAwaiter(this);
 				return true;
 			}
 
@@ -185,3 +186,4 @@ namespace cotasklib
 using namespace cotasklib;
 using cotasklib::operator co_await;
 #endif
+*/

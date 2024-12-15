@@ -598,71 +598,11 @@ namespace cotasklib::Co
 		};
 
 		template <typename TResult>
+		class Promise;
+
+		template <typename TResult>
 		[[nodiscard]]
-		Optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(TaskAwaiter<TResult>&& awaiter, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)
-		{
-			const auto fnCallFinishCallback = [&]
-				{
-					if constexpr (std::is_void_v<TResult>)
-					{
-						try
-						{
-							awaiter.value(); // 例外伝搬のためにvoidでも呼び出す
-						}
-						catch (...)
-						{
-							if (cancelCallback)
-							{
-								cancelCallback();
-							}
-							throw;
-						}
-
-						if (finishCallback)
-						{
-							finishCallback();
-						}
-					}
-					else
-					{
-						auto result = [&]() -> TResult
-							{
-								try
-								{
-									return awaiter.value();
-								}
-								catch (...)
-								{
-									if (cancelCallback)
-									{
-										cancelCallback();
-									}
-									throw;
-								}
-							}();
-						if (finishCallback)
-						{
-							finishCallback(std::move(result));
-						}
-					}
-				};
-
-			// フレーム待ちなしで終了した場合は登録不要
-			// (ここで一度resumeするのは、runScoped実行まで開始を遅延させるためにinitial_suspendをsuspend_alwaysにしているため)
-			if (awaiter.done())
-			{
-				fnCallFinishCallback();
-				return none;
-			}
-			awaiter.resume();
-			if (awaiter.done())
-			{
-				fnCallFinishCallback();
-				return none;
-			}
-
-			return Backend::Add(std::make_unique<TaskAwaiter<TResult>>(std::move(awaiter)), std::move(finishCallback), std::move(cancelCallback));
-		}
+		Optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(std::coroutine_handle<Promise<TResult>> handle, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback);
 
 		template <typename TResult>
 		Optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(const TaskAwaiter<TResult>& awaiter) = delete;
@@ -684,7 +624,7 @@ namespace cotasklib::Co
 	public:
 		template <typename TResult>
 		explicit ScopedTaskRunner(Task<TResult>&& task, FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)
-			: m_id(ResumeAwaiterOnceAndRegisterIfNotDone(detail::TaskAwaiter<TResult>{ std::move(task) }, std::move(finishCallback), std::move(cancelCallback)))
+			: m_id(ResumeAwaiterOnceAndRegisterIfNotDone(std::move(handle), std::move(finishCallback), std::move(cancelCallback)))
 		{
 		}
 
@@ -1063,8 +1003,7 @@ namespace cotasklib::Co
 			}
 		};
 
-		template <typename TResult>
-		class Promise;
+		class PromiseBase;
 	}
 
 	enum class WithTiming : uint8
@@ -1126,6 +1065,11 @@ namespace cotasklib::Co
         {
             if (m_handle)
             {
+                auto parentHandle = m_handle.promise().parentHandle();
+                if (parentHandle)
+                {
+                    parentHandle.promise().setChildHandle(nullptr);
+                }
                 m_handle.destroy();
             }
         }
@@ -1142,10 +1086,21 @@ namespace cotasklib::Co
 				task->resume();
 			}
 
-			if (!m_handle.promise().resumeSubAwaiter())
+			// 末端の子コルーチンを再開
+			std::coroutine_handle<detail::PromiseBase> parentHandle = nullptr;
+            std::coroutine_handle<detail::PromiseBase> toResume = std::coroutine_handle<detail::PromiseBase>::from_address(m_handle.address());
+			while (true)
 			{
-				m_handle.resume();
+                auto childHandle = toResume.promise().childHandle();
+                if (!childHandle || childHandle.done())
+                {
+                    toResume.promise().setChildHandle(nullptr);
+                    break;
+                }
+                parentHandle = toResume;
+                toResume = std::coroutine_handle<detail::PromiseBase>::from_address(childHandle.address());
 			}
+            toResume.resume();
 
 			for (auto& task : m_concurrentTasksAfter)
 			{
@@ -1163,6 +1118,12 @@ namespace cotasklib::Co
 		bool empty() const
 		{
 			return !m_handle;
+		}
+
+		[[nodiscard]]
+		std::coroutine_handle<promise_type> handle() const
+		{
+			return m_handle;
 		}
 
 		[[nodiscard]]
@@ -1256,12 +1217,12 @@ namespace cotasklib::Co
 		[[nodiscard]]
 		ScopedTaskRunner runScoped(FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)&&
 		{
-			return ScopedTaskRunner{ std::move(*this), std::move(finishCallback), std::move(cancelCallback) };
+			return ScopedTaskRunner{ m_handle, std::move(finishCallback), std::move(cancelCallback) };
 		}
 
 		void runAddTo(MultiRunner& mr, FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)&&
 		{
-			mr.add(ScopedTaskRunner{ std::move(*this), std::move(finishCallback), std::move(cancelCallback) });
+			mr.add(ScopedTaskRunner{ m_handle, std::move(finishCallback), std::move(cancelCallback) });
 		}
 
 		[[nodiscard]]
@@ -1294,6 +1255,11 @@ namespace cotasklib::Co
 
 		[[nodiscard]]
 		Task<TResult> delayed(const Duration& duration, ISteadyClock* pSteadyClock)&&;
+
+        auto operator co_await()&&
+        {
+            return detail::TaskAwaiter<TResult>{ m_handle };
+        }
 	};
 
 	[[nodiscard]]
@@ -1312,11 +1278,11 @@ namespace cotasklib::Co
 			static_assert(!std::is_const_v<TResult>, "TResult must not have 'const' qualifier");
 
 		private:
-			Task<TResult> m_task;
+            std::coroutine_handle<detail::Promise<TResult>> m_handle;
 
 		public:
-			explicit TaskAwaiter(Task<TResult>&& task)
-				: m_task(std::move(task))
+            explicit TaskAwaiter(std::coroutine_handle<detail::Promise<TResult>> handle)
+                : m_handle(std::move(handle))
 			{
 			}
 
@@ -1330,50 +1296,50 @@ namespace cotasklib::Co
 
 			void resume() override
 			{
-				m_task.resume();
+                if (!m_handle || m_handle.done())
+                {
+                    return;
+                }
+				m_handle.resume();
 			}
 
 			[[nodiscard]]
 			bool done() const override
 			{
-				return m_task.done();
+				return !m_handle || m_handle.done();
 			}
 
 			[[nodiscard]]
 			bool await_ready()
 			{
-				return m_task.done();
+				return !m_handle || m_handle.done();
 			}
 
 			template <typename TResultOther>
-			bool await_suspend(std::coroutine_handle<detail::Promise<TResultOther>> handle)
+			std::coroutine_handle<> await_suspend(std::coroutine_handle<detail::Promise<TResultOther>> handle)
 			{
-				resume();
-				if (m_task.done())
-				{
-					// フレーム待ちなしで終了した場合は登録不要
-					return false;
-				}
-				handle.promise().setSubAwaiter(this);
-				return true;
+                m_handle.promise().setParentHandle(std::coroutine_handle<detail::PromiseBase>::from_address(handle.address()));
+                handle.promise().setChildHandle(std::coroutine_handle<detail::PromiseBase>::from_address(m_handle.address()));
+				return m_handle;
 			}
 
 			TResult await_resume() const
 			{
-				return m_task.value();
+                return m_handle.promise().value();
 			}
 
 			[[nodiscard]]
 			TResult value() const
 			{
-				return m_task.value();
+				return m_handle.promise().value();
 			}
 		};
 
 		class PromiseBase
 		{
-		protected:
-			IAwaiter* m_pSubAwaiter = nullptr;
+		private:
+            std::coroutine_handle<PromiseBase> m_parentHandle = nullptr;
+			std::coroutine_handle<PromiseBase> m_childHandle = nullptr;
 
 		public:
 			PromiseBase() = default;
@@ -1383,9 +1349,11 @@ namespace cotasklib::Co
 			PromiseBase& operator=(const PromiseBase&) = delete;
 
 			PromiseBase(PromiseBase&& rhs) noexcept
-				: m_pSubAwaiter(rhs.m_pSubAwaiter)
+                : m_parentHandle(rhs.m_parentHandle)
+				, m_childHandle(rhs.m_childHandle)
 			{
-				rhs.m_pSubAwaiter = nullptr;
+                rhs.m_parentHandle = nullptr;
+				rhs.m_childHandle = nullptr;
 			}
 
 			PromiseBase& operator=(PromiseBase&& rhs) = delete;
@@ -1401,34 +1369,74 @@ namespace cotasklib::Co
 				return std::suspend_always{};
 			}
 
+			struct FinalAwaiter
+			{
+				bool await_ready() const noexcept
+				{
+					return false;
+				}
+
+				template <typename TResultOther>
+				std::coroutine_handle<> await_suspend(std::coroutine_handle<Promise<TResultOther>> handle) const noexcept
+				{
+					auto parentHandle = handle.promise().parentHandle();
+					if (parentHandle && !parentHandle.done())
+					{
+						return parentHandle;
+					}
+					return std::noop_coroutine();
+				}
+
+				void await_resume() const noexcept
+				{
+				}
+			};
+
 			[[nodiscard]]
 			auto final_suspend() noexcept
 			{
-				return std::suspend_always{};
+                return FinalAwaiter{};
 			}
 
 			[[nodiscard]]
 			bool resumeSubAwaiter()
 			{
-				if (!m_pSubAwaiter)
+                if (!m_childHandle)
 				{
 					return false;
 				}
 
-				m_pSubAwaiter->resume();
+				m_childHandle.resume();
 
-				if (m_pSubAwaiter->done())
+				if (m_childHandle.done())
 				{
-					m_pSubAwaiter = nullptr;
+					m_childHandle = nullptr;
 					return false;
 				}
 
 				return true;
 			}
 
-			void setSubAwaiter(IAwaiter* pSubAwaiter) noexcept
+            [[nodiscard]]
+            std::coroutine_handle<PromiseBase> parentHandle() const noexcept
+            {
+                return m_parentHandle;
+            }
+
+            void setParentHandle(std::coroutine_handle<PromiseBase> handle) noexcept
+            {
+				m_parentHandle = handle;
+            }
+
+            [[nodiscard]]
+            std::coroutine_handle<PromiseBase> childHandle() const noexcept
+            {
+                return m_childHandle;
+            }
+
+			void setChildHandle(std::coroutine_handle<PromiseBase> handle) noexcept
 			{
-				m_pSubAwaiter = pSubAwaiter;
+				m_childHandle = handle;
 			}
 		};
 
@@ -1542,6 +1550,73 @@ namespace cotasklib::Co
 				m_exception = std::current_exception();
 			}
 		};
+
+		template <typename TResult>
+		[[nodiscard]]
+		Optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(std::coroutine_handle<detail::Promise<TResult>> handle, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)
+		{
+			const auto fnCallFinishCallback = [&]
+				{
+					if constexpr (std::is_void_v<TResult>)
+					{
+						try
+						{
+							handle.promise().value(); // 例外伝搬のためにvoidでも呼び出す
+						}
+						catch (...)
+						{
+							if (cancelCallback)
+							{
+								cancelCallback();
+							}
+							throw;
+						}
+
+						if (finishCallback)
+						{
+							finishCallback();
+						}
+					}
+					else
+					{
+						auto result = [&]() -> TResult
+							{
+								try
+								{
+									return handle.promise().value();
+								}
+								catch (...)
+								{
+									if (cancelCallback)
+									{
+										cancelCallback();
+									}
+									throw;
+								}
+							}();
+							if (finishCallback)
+							{
+								finishCallback(std::move(result));
+							}
+					}
+				};
+
+			// フレーム待ちなしで終了した場合は登録不要
+			// (ここで一度resumeするのは、runScoped実行まで開始を遅延させるためにinitial_suspendをsuspend_alwaysにしているため)
+			if (handle.done())
+			{
+				fnCallFinishCallback();
+				return none;
+			}
+			handle.resume();
+			if (handle.done())
+			{
+				fnCallFinishCallback();
+				return none;
+			}
+
+			return Backend::Add(std::make_unique<TaskAwaiter<TResult>>(std::move(handle)), std::move(finishCallback), std::move(cancelCallback));
+		}
 	}
 
 	inline Task<void> ScopedTaskRunner::waitUntilDone() const&
@@ -1752,15 +1827,6 @@ namespace cotasklib::Co
 			co_await NextFrame();
 		}
 	}
-
-	template <typename TResult>
-	auto operator co_await(Task<TResult>&& rhs)
-	{
-		return detail::TaskAwaiter<TResult>{ std::move(rhs) };
-	}
-
-	template <typename TResult>
-	auto operator co_await(const Task<TResult>& rhs) = delete;
 
 	inline void Init()
 	{

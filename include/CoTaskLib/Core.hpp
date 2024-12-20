@@ -1392,7 +1392,6 @@ namespace cotasklib::Co
 
 			virtual ~PromiseBase() = 0;
 
-			[[nodiscard]]
 			auto initial_suspend() noexcept
 			{
 				// suspend_neverにすれば関数呼び出し時点で実行開始されるが、
@@ -1401,7 +1400,6 @@ namespace cotasklib::Co
 				return std::suspend_always{};
 			}
 
-			[[nodiscard]]
 			auto final_suspend() noexcept
 			{
 				return std::suspend_always{};

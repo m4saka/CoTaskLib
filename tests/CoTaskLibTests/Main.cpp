@@ -700,6 +700,41 @@ TEST_CASE("Throw exception with delay and non-void result")
 	REQUIRE(cancelCallbackCount == 1);
 }
 
+Co::Task<int32> CatchExceptionFromNestedTaskTest()
+{
+	int32 result;
+	try
+	{
+		result = co_await ThrowExceptionWithDelayAndNonVoidResultTest();
+	}
+	catch (const std::runtime_error& error)
+	{
+		if (error.what() == "test exception"sv)
+		{
+			result = -1;
+		}
+		else
+		{
+			result = -2;
+		}
+	}
+	co_return result;
+}
+
+TEST_CASE("Catch exception from nested task")
+{
+	Optional<int32> result;
+
+	auto task = CatchExceptionFromNestedTaskTest();
+	REQUIRE(result == none); // タスク生成時点ではまだ実行されない
+
+	const auto runner = std::move(task).runScoped([&](int32 r) { result = r; });
+	REQUIRE(result == none); // まだ例外送出していない
+
+	System::Update();
+	REQUIRE(result == -1); // 例外をcatchし、resultに-1が入る
+}
+
 TEST_CASE("TaskFinishSource<void>")
 {
 	Co::TaskFinishSource<void> taskFinishSource;

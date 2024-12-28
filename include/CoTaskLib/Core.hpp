@@ -32,6 +32,17 @@
 
 namespace cotasklib::Co
 {
+	class [[nodiscard]] ITask
+	{
+	public:
+		virtual ~ITask() = default;
+
+		virtual void resume() = 0;
+
+		[[nodiscard]]
+		virtual bool done() const = 0;
+	};
+
 	namespace detail
 	{
 		class IAwaiter
@@ -47,17 +58,17 @@ namespace cotasklib::Co
 
 		struct AwaiterEntry
 		{
-			std::unique_ptr<IAwaiter> awaiter;
-			std::function<void(const IAwaiter*)> finishCallback;
+			std::unique_ptr<ITask> task;
+			std::function<void(const ITask*)> finishCallback;
 			std::function<void()> cancelCallback;
 
 			void callEndCallback() const
 			{
-				if (awaiter->done())
+				if (task->done())
 				{
 					if (finishCallback)
 					{
-						finishCallback(awaiter.get());
+						finishCallback(task.get());
 					}
 				}
 				else
@@ -396,8 +407,8 @@ namespace cotasklib::Co
 					m_currentAwaiterID = it->first;
 
 					const auto& entry = it->second;
-					entry.awaiter->resume();
-					if (m_currentAwaiterRemovalNeeded || entry.awaiter->done())
+					entry.task->resume();
+					if (m_currentAwaiterRemovalNeeded || entry.task->done())
 					{
 						try
 						{
@@ -437,11 +448,11 @@ namespace cotasklib::Co
 
 			template <typename TResult>
 			[[nodiscard]]
-			static AwaiterID Add(std::unique_ptr<TaskAwaiter<TResult>>&& awaiter, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)
+			static AwaiterID Add(std::unique_ptr<Task<TResult>>&& task, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)
 			{
-				if (!awaiter)
+				if (!task)
 				{
-					throw Error{ U"awaiter must not be nullptr" };
+					throw Error{ U"task must not be nullptr" };
 				}
 
 				if (!s_pInstance)
@@ -449,15 +460,15 @@ namespace cotasklib::Co
 					throw Error{ U"Backend is not initialized" };
 				}
 				const AwaiterID id = s_pInstance->m_nextAwaiterID++;
-				std::function<void(const IAwaiter*)> finishCallbackTypeErased =
-					[finishCallback = std::move(finishCallback), cancelCallback/*コピーキャプチャ*/, id](const IAwaiter* awaiter)
+				std::function<void(const ITask*)> finishCallbackTypeErased =
+					[finishCallback = std::move(finishCallback), cancelCallback/*コピーキャプチャ*/, id](const ITask* task)
 					{
-						auto fnGetResult = [awaiter, cancelCallback]() -> TResult
+						auto fnGetResult = [task, cancelCallback]() -> TResult
 							{
 								try
 								{
-									// awaiterの型がTaskAwaiter<TResult>であることは保証されるため、static_castでキャストして問題ない
-									return static_cast<const TaskAwaiter<TResult>*>(awaiter)->value();
+									// taskの型がTask<TResult>であることは保証されるため、static_castでキャストして問題ない
+									return static_cast<const Task<TResult>*>(task)->value();
 								}
 								catch (...)
 								{
@@ -489,7 +500,7 @@ namespace cotasklib::Co
 				s_pInstance->m_awaiterEntries.emplace(id,
 					AwaiterEntry
 					{
-						.awaiter = std::move(awaiter),
+						.task = std::move(task),
 						.finishCallback = std::move(finishCallbackTypeErased),
 						.cancelCallback = std::move(cancelCallback),
 					});
@@ -534,7 +545,7 @@ namespace cotasklib::Co
 				const auto it = s_pInstance->m_awaiterEntries.find(id);
 				if (it != s_pInstance->m_awaiterEntries.end())
 				{
-					return it->second.awaiter->done();
+					return it->second.task->done();
 				}
 				return id < s_pInstance->m_nextAwaiterID;
 			}
@@ -599,7 +610,7 @@ namespace cotasklib::Co
 
 		template <typename TResult>
 		[[nodiscard]]
-		Optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(TaskAwaiter<TResult>&& awaiter, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)
+		Optional<AwaiterID> ResumeTaskOnceAndRegisterIfNotDone(Task<TResult>&& task, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)
 		{
 			const auto fnCallFinishCallback = [&]
 				{
@@ -607,7 +618,7 @@ namespace cotasklib::Co
 					{
 						try
 						{
-							awaiter.value(); // 例外伝搬のためにvoidでも呼び出す
+							task.value(); // 例外伝搬のためにvoidでも呼び出す
 						}
 						catch (...)
 						{
@@ -629,7 +640,7 @@ namespace cotasklib::Co
 							{
 								try
 								{
-									return awaiter.value();
+									return task.value();
 								}
 								catch (...)
 								{
@@ -649,23 +660,23 @@ namespace cotasklib::Co
 
 			// フレーム待ちなしで終了した場合は登録不要
 			// (ここで一度resumeするのは、runScoped実行まで開始を遅延させるためにinitial_suspendをsuspend_alwaysにしているため)
-			if (awaiter.done())
+			if (task.done())
 			{
 				fnCallFinishCallback();
 				return none;
 			}
-			awaiter.resume();
-			if (awaiter.done())
+			task.resume();
+			if (task.done())
 			{
 				fnCallFinishCallback();
 				return none;
 			}
 
-			return Backend::Add(std::make_unique<TaskAwaiter<TResult>>(std::move(awaiter)), std::move(finishCallback), std::move(cancelCallback));
+			return Backend::Add(std::make_unique<Task<TResult>>(std::move(task)), std::move(finishCallback), std::move(cancelCallback));
 		}
 
 		template <typename TResult>
-		Optional<AwaiterID> ResumeAwaiterOnceAndRegisterIfNotDone(const TaskAwaiter<TResult>& awaiter) = delete;
+		Optional<AwaiterID> ResumeTaskOnceAndRegisterIfNotDone(const Task<TResult>& task) = delete;
 	}
 
 	[[nodiscard]]
@@ -684,7 +695,7 @@ namespace cotasklib::Co
 	public:
 		template <typename TResult>
 		explicit ScopedTaskRunner(Task<TResult>&& task, FinishCallbackType<TResult> finishCallback = nullptr, std::function<void()> cancelCallback = nullptr)
-			: m_id(ResumeAwaiterOnceAndRegisterIfNotDone(detail::TaskAwaiter<TResult>{ std::move(task) }, std::move(finishCallback), std::move(cancelCallback)))
+			: m_id(detail::ResumeTaskOnceAndRegisterIfNotDone(std::move(task), std::move(finishCallback), std::move(cancelCallback)))
 		{
 		}
 
@@ -1073,17 +1084,6 @@ namespace cotasklib::Co
 		After,
 	};
 
-	class [[nodiscard]] ITask
-	{
-	public:
-		virtual ~ITask() = default;
-
-		virtual void resume() = 0;
-
-		[[nodiscard]]
-		virtual bool done() const = 0;
-	};
-
 	template <typename TResult = void>
 	class [[nodiscard]] Task : public ITask
 	{
@@ -1359,12 +1359,6 @@ namespace cotasklib::Co
 			}
 
 			TResult await_resume() const
-			{
-				return m_task.value();
-			}
-
-			[[nodiscard]]
-			TResult value() const
 			{
 				return m_task.value();
 			}

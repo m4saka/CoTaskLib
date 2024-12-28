@@ -56,7 +56,7 @@ namespace cotasklib::Co
 			virtual bool done() const = 0;
 		};
 
-		struct AwaiterEntry
+		struct TaskEntry
 		{
 			std::unique_ptr<ITask> task;
 			std::function<void(const ITask*)> finishCallback;
@@ -81,7 +81,7 @@ namespace cotasklib::Co
 			}
 		};
 
-		using AwaiterID = uint64;
+		using TaskID = uint64;
 
 		using UpdaterID = uint64;
 
@@ -384,13 +384,13 @@ namespace cotasklib::Co
 				}
 			};
 
-			AwaiterID m_nextAwaiterID = 1;
+			TaskID m_nextTaskID = 1;
 
-			Optional<AwaiterID> m_currentAwaiterID = none;
+			Optional<TaskID> m_currentTaskID = none;
 
-			bool m_currentAwaiterRemovalNeeded = false;
+			bool m_currentTaskRemovalNeeded = false;
 
-			std::map<AwaiterID, AwaiterEntry> m_awaiterEntries;
+			std::map<TaskID, TaskEntry> m_taskEntries;
 
 			DrawExecutor m_drawExecutor;
 
@@ -402,13 +402,13 @@ namespace cotasklib::Co
 			void update()
 			{
 				std::exception_ptr exceptionPtr;
-				for (auto it = m_awaiterEntries.begin(); it != m_awaiterEntries.end();)
+				for (auto it = m_taskEntries.begin(); it != m_taskEntries.end();)
 				{
-					m_currentAwaiterID = it->first;
+					m_currentTaskID = it->first;
 
 					const auto& entry = it->second;
 					entry.task->resume();
-					if (m_currentAwaiterRemovalNeeded || entry.task->done())
+					if (m_currentTaskRemovalNeeded || entry.task->done())
 					{
 						try
 						{
@@ -421,15 +421,15 @@ namespace cotasklib::Co
 								exceptionPtr = std::current_exception();
 							}
 						}
-						it = m_awaiterEntries.erase(it);
-						m_currentAwaiterRemovalNeeded = false;
+						it = m_taskEntries.erase(it);
+						m_currentTaskRemovalNeeded = false;
 					}
 					else
 					{
 						++it;
 					}
 				}
-				m_currentAwaiterID.reset();
+				m_currentTaskID.reset();
 				if (exceptionPtr)
 				{
 					std::rethrow_exception(exceptionPtr);
@@ -448,7 +448,7 @@ namespace cotasklib::Co
 
 			template <typename TResult>
 			[[nodiscard]]
-			static AwaiterID Add(std::unique_ptr<Task<TResult>>&& task, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)
+			static TaskID Add(std::unique_ptr<Task<TResult>>&& task, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)
 			{
 				if (!task)
 				{
@@ -459,7 +459,7 @@ namespace cotasklib::Co
 				{
 					throw Error{ U"Backend is not initialized" };
 				}
-				const AwaiterID id = s_pInstance->m_nextAwaiterID++;
+				const TaskID id = s_pInstance->m_nextTaskID++;
 				std::function<void(const ITask*)> finishCallbackTypeErased =
 					[finishCallback = std::move(finishCallback), cancelCallback/*コピーキャプチャ*/, id](const ITask* task)
 					{
@@ -497,8 +497,8 @@ namespace cotasklib::Co
 							}
 						}
 					};
-				s_pInstance->m_awaiterEntries.emplace(id,
-					AwaiterEntry
+				s_pInstance->m_taskEntries.emplace(id,
+					TaskEntry
 					{
 						.task = std::move(task),
 						.finishCallback = std::move(finishCallbackTypeErased),
@@ -507,47 +507,47 @@ namespace cotasklib::Co
 				return id;
 			}
 
-			static bool Remove(AwaiterID id)
+			static bool Remove(TaskID id)
 			{
 				if (!s_pInstance)
 				{
 					// Note: ユーザーがインスタンスをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
 					return false;
 				}
-				if (id == s_pInstance->m_currentAwaiterID)
+				if (id == s_pInstance->m_currentTaskID)
 				{
-					// 実行中タスクのAwaiterをここで削除するとアクセス違反やイテレータ破壊が起きるため、代わりに削除フラグを立てて実行完了時に削除
+					// 実行中タスクのエントリをここで削除するとアクセス違反やイテレータ破壊が起きるため、代わりに削除フラグを立てて実行完了時に削除
 					// (例えば、タスク実行のライフタイムをOptional<ScopedTaskRunner>型のメンバ変数として持ち、タスク実行中にそこへnoneを代入して実行を止める場合が該当)
-					if (!s_pInstance->m_currentAwaiterRemovalNeeded)
+					if (!s_pInstance->m_currentTaskRemovalNeeded)
 					{
-						s_pInstance->m_currentAwaiterRemovalNeeded = true;
+						s_pInstance->m_currentTaskRemovalNeeded = true;
 						return true;
 					}
 					return false;
 				}
-				const auto it = s_pInstance->m_awaiterEntries.find(id);
-				if (it != s_pInstance->m_awaiterEntries.end())
+				const auto it = s_pInstance->m_taskEntries.find(id);
+				if (it != s_pInstance->m_taskEntries.end())
 				{
 					it->second.callEndCallback();
-					s_pInstance->m_awaiterEntries.erase(it);
+					s_pInstance->m_taskEntries.erase(it);
 					return true;
 				}
 				return false;
 			}
 
 			[[nodiscard]]
-			static bool IsDone(AwaiterID id)
+			static bool IsDone(TaskID id)
 			{
 				if (!s_pInstance)
 				{
 					throw Error{ U"Backend is not initialized" };
 				}
-				const auto it = s_pInstance->m_awaiterEntries.find(id);
-				if (it != s_pInstance->m_awaiterEntries.end())
+				const auto it = s_pInstance->m_taskEntries.find(id);
+				if (it != s_pInstance->m_taskEntries.end())
 				{
 					return it->second.task->done();
 				}
-				return id < s_pInstance->m_nextAwaiterID;
+				return id < s_pInstance->m_nextTaskID;
 			}
 
 			static void ManualUpdate()
@@ -610,7 +610,7 @@ namespace cotasklib::Co
 
 		template <typename TResult>
 		[[nodiscard]]
-		Optional<AwaiterID> ResumeTaskOnceAndRegisterIfNotDone(Task<TResult>&& task, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)
+		Optional<TaskID> ResumeTaskOnceAndRegisterIfNotDone(Task<TResult>&& task, FinishCallbackType<TResult> finishCallback, std::function<void()> cancelCallback)
 		{
 			const auto fnCallFinishCallback = [&]
 				{
@@ -676,7 +676,7 @@ namespace cotasklib::Co
 		}
 
 		template <typename TResult>
-		Optional<AwaiterID> ResumeTaskOnceAndRegisterIfNotDone(const Task<TResult>& task) = delete;
+		Optional<TaskID> ResumeTaskOnceAndRegisterIfNotDone(const Task<TResult>& task) = delete;
 	}
 
 	[[nodiscard]]
@@ -690,7 +690,7 @@ namespace cotasklib::Co
 	class ScopedTaskRunner
 	{
 	private:
-		Optional<detail::AwaiterID> m_id;
+		Optional<detail::TaskID> m_id;
 
 	public:
 		template <typename TResult>

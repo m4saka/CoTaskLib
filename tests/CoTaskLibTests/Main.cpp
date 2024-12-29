@@ -1006,6 +1006,170 @@ TEST_CASE("ScopedTaskRunner move assignment")
 	REQUIRE(runner2CancelCount == 0);
 }
 
+Co::Task<> ScopedDrawerTest(int32* pValue)
+{
+	Co::ScopedDrawer drawer{ [&] { ++(*pValue); } };
+	co_await Co::DelayFrame(3);
+}
+
+TEST_CASE("ScopedDrawer")
+{
+	int32 value = 0;
+	const auto runner = ScopedDrawerTest(&value).runScoped();
+
+	REQUIRE(value == 0);
+	System::Update();
+	REQUIRE(value == 1);
+	System::Update();
+	REQUIRE(value == 2);
+	System::Update();
+	REQUIRE(value == 3);
+	System::Update();
+	REQUIRE(runner.done() == true);
+	REQUIRE(value == 3); // すでに完了しているので何も起こらない
+}
+
+Co::Task<> ScopedDrawerTestWithFunc(std::function<void()> func)
+{
+	Co::ScopedDrawer drawer{ std::move(func) };
+	co_await Co::DelayFrame(3);
+}
+
+TEST_CASE("ScopedDrawer same layer/drawIndex order")
+{
+	Array<String> array;
+	const auto runner1 = ScopedDrawerTestWithFunc([&] { array.push_back(U"1"); }).runScoped();
+	const auto runner2 = ScopedDrawerTestWithFunc([&] { array.push_back(U"2"); }).runScoped();
+	const auto runner3 = ScopedDrawerTestWithFunc([&] { array.push_back(U"3"); }).runScoped();
+
+	REQUIRE(array.empty() == true);
+	System::Update();
+	REQUIRE(array == Array<String>{ U"1", U"2", U"3" });
+	System::Update();
+	REQUIRE(array == Array<String>{ U"1", U"2", U"3", U"1", U"2", U"3" });
+	System::Update();
+	REQUIRE(array == Array<String>{ U"1", U"2", U"3", U"1", U"2", U"3", U"1", U"2", U"3" });
+	System::Update();
+	REQUIRE(runner1.done() == true);
+	REQUIRE(runner2.done() == true);
+	REQUIRE(runner3.done() == true);
+	REQUIRE(array == Array<String>{ U"1", U"2", U"3", U"1", U"2", U"3", U"1", U"2", U"3" });
+}
+
+Co::Task<> ScopedDrawerTestWithFuncAndDrawIndex(std::function<void()> func, int32 drawIndex)
+{
+	Co::ScopedDrawer drawer{ std::move(func), Co::Layer::Default, drawIndex };
+	co_await Co::DelayFrame(3);
+}
+
+TEST_CASE("ScopedDrawer drawIndex order")
+{
+	Array<String> array;
+	const auto runner1 = ScopedDrawerTestWithFunc([&] { array.push_back(U"1"); }).runScoped();
+	const auto runner2 = ScopedDrawerTestWithFuncAndDrawIndex([&] { array.push_back(U"2"); }, Co::DrawIndex::Front).runScoped();
+	const auto runner3 = ScopedDrawerTestWithFuncAndDrawIndex([&] { array.push_back(U"3"); }, Co::DrawIndex::Back).runScoped();
+	REQUIRE(array.empty() == true);
+	System::Update();
+	REQUIRE(array == Array<String>{ U"3", U"1", U"2" });
+	System::Update();
+	REQUIRE(array == Array<String>{ U"3", U"1", U"2", U"3", U"1", U"2" });
+	System::Update();
+	REQUIRE(array == Array<String>{ U"3", U"1", U"2", U"3", U"1", U"2", U"3", U"1", U"2" });
+	System::Update();
+	REQUIRE(runner1.done() == true);
+	REQUIRE(runner2.done() == true);
+	REQUIRE(runner3.done() == true);
+	REQUIRE(array == Array<String>{ U"3", U"1", U"2", U"3", U"1", U"2", U"3", U"1", U"2" });
+}
+
+Co::Task<> ScopedDrawerTestWithFuncAndLayerAndDrawIndex(std::function<void()> func, Co::Layer layer, int32 drawIndex)
+{
+	Co::ScopedDrawer drawer{ std::move(func), layer, drawIndex };
+	co_await Co::DelayFrame(3);
+}
+
+TEST_CASE("ScopedDrawer layer order")
+{
+	Array<String> array;
+	const auto runner1 = ScopedDrawerTestWithFunc([&] { array.push_back(U"1"); }).runScoped();
+	const auto runner2 = ScopedDrawerTestWithFuncAndLayerAndDrawIndex([&] { array.push_back(U"2"); }, Co::Layer::Modal, Co::DrawIndex::Front).runScoped();
+	const auto runner3 = ScopedDrawerTestWithFuncAndLayerAndDrawIndex([&] { array.push_back(U"3"); }, Co::Layer::Modal, Co::DrawIndex::Back).runScoped();
+	const auto runner4 = ScopedDrawerTestWithFuncAndLayerAndDrawIndex([&] { array.push_back(U"4"); }, Co::Layer::Default, Co::DrawIndex::Default).runScoped();
+	const auto runner5 = ScopedDrawerTestWithFuncAndLayerAndDrawIndex([&] { array.push_back(U"5"); }, Co::Layer::Default, Co::DrawIndex::Back).runScoped();
+	REQUIRE(array.empty() == true);
+	System::Update();
+	REQUIRE(array == Array<String>{ U"5", U"1", U"4", U"3", U"2" });
+	System::Update();
+	REQUIRE(array == Array<String>{ U"5", U"1", U"4", U"3", U"2", U"5", U"1", U"4", U"3", U"2" });
+	System::Update();
+	REQUIRE(array == Array<String>{ U"5", U"1", U"4", U"3", U"2", U"5", U"1", U"4", U"3", U"2", U"5", U"1", U"4", U"3", U"2" });
+	System::Update();
+	REQUIRE(runner1.done() == true);
+	REQUIRE(runner2.done() == true);
+	REQUIRE(runner3.done() == true);
+	REQUIRE(runner4.done() == true);
+	REQUIRE(runner5.done() == true);
+	REQUIRE(array == Array<String>{ U"5", U"1", U"4", U"3", U"2", U"5", U"1", U"4", U"3", U"2", U"5", U"1", U"4", U"3", U"2" });
+}
+
+Co::Task<> ScopedDrawerTestWithFuncChangingDrawIndex(std::function<void()> func, Co::Layer layer, int32 drawIndex, int32 changeFrame, int32 newDrawIndex)
+{
+	Co::ScopedDrawer drawer{ std::move(func), layer, drawIndex };
+	for (int32 i = 0; i < 3; ++i)
+	{
+		if (i == changeFrame)
+		{
+			drawer.setDrawIndex(newDrawIndex);
+		}
+		co_await Co::NextFrame();
+	}
+}
+
+TEST_CASE("ScopedDrawer changing drawIndex")
+{
+	Array<String> array;
+	const auto runner1 = ScopedDrawerTestWithFunc([&] { array.push_back(U"1"); }).runScoped();
+	const auto runner2 = ScopedDrawerTestWithFuncChangingDrawIndex([&] { array.push_back(U"2"); }, Co::Layer::Modal, Co::DrawIndex::Front, 2, Co::DrawIndex::Back).runScoped();
+	const auto runner3 = ScopedDrawerTestWithFuncChangingDrawIndex([&] { array.push_back(U"3"); }, Co::Layer::Modal, Co::DrawIndex::Front, 1, Co::DrawIndex::Back).runScoped();
+	REQUIRE(array.empty() == true);
+	System::Update();
+	REQUIRE(array == Array<String>{ U"1", U"2", U"3" });
+	System::Update();
+	REQUIRE(array == Array<String>{ U"1", U"2", U"3", U"1", U"3", U"2" });
+	System::Update();
+	// drawIndexが同一の場合の順序はdrawIndex変更タイミングではなく実行開始タイミングで決まるため、最後は1,2,3の順番になる
+	REQUIRE(array == Array<String>{ U"1", U"2", U"3", U"1", U"3", U"2", U"1", U"2", U"3" });
+}
+
+Co::Task<> ScopedDrawerTestWithFuncChangingLayer(std::function<void()> func, Co::Layer layer, int32 drawIndex, int32 changeFrame, Co::Layer newLayer)
+{
+	Co::ScopedDrawer drawer{ std::move(func), layer, drawIndex };
+	for (int32 i = 0; i < 3; ++i)
+	{
+		if (i == changeFrame)
+		{
+			drawer.setLayer(newLayer);
+		}
+		co_await Co::NextFrame();
+	}
+}
+
+TEST_CASE("ScopedDrawer changing layer")
+{
+	Array<String> array;
+	const auto runner1 = ScopedDrawerTestWithFunc([&] { array.push_back(U"1"); }).runScoped();
+	const auto runner2 = ScopedDrawerTestWithFuncChangingLayer([&] { array.push_back(U"2"); }, Co::Layer::Modal, Co::DrawIndex::Default, 2, Co::Layer::Default).runScoped();
+	const auto runner3 = ScopedDrawerTestWithFuncChangingLayer([&] { array.push_back(U"3"); }, Co::Layer::Modal, Co::DrawIndex::Default, 1, Co::Layer::Default).runScoped();
+	REQUIRE(array.empty() == true);
+	System::Update();
+	REQUIRE(array == Array<String>{ U"1", U"2", U"3" });
+	System::Update();
+	REQUIRE(array == Array<String>{ U"1", U"2", U"3", U"1", U"3", U"2" });
+	System::Update();
+	// layerが同一の場合の順序はlayer変更タイミングではなく実行開始タイミングで決まるため、最後は1,2,3の順番になる
+	REQUIRE(array == Array<String>{ U"1", U"2", U"3", U"1", U"3", U"2", U"1", U"2", U"3" });
+}
+
 TEST_CASE("MultiRunner finish")
 {
 	Co::MultiRunner mr;

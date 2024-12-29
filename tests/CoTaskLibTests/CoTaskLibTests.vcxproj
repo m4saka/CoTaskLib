@@ -325,6 +325,7 @@
     <Xml Include="App\example\xml\test.xml" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\..\..\..\source\repos\CoTaskLib\include\CoTaskLib\FlatHiveMap.hpp" />
     <ClInclude Include="..\..\include\CoTaskLib.hpp" />
     <ClInclude Include="..\..\include\CoTaskLib\Core.hpp" />
     <ClInclude Include="..\..\include\CoTaskLib\Ease.hpp" />

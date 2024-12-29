@@ -29,6 +29,7 @@
 #pragma once
 #include <Siv3D.hpp>
 #include <coroutine>
+#include "FlatHiveMap.hpp"
 
 namespace cotasklib::Co
 {
@@ -45,6 +46,9 @@ namespace cotasklib::Co
 
 	namespace detail
 	{
+		constexpr static size_t InitialCapacity = 32;
+		constexpr static size_t CompactionThreshold = 64;
+
 		class IAwaiter
 		{
 		public:
@@ -196,7 +200,7 @@ namespace cotasklib::Co
 		{
 		private:
 			DrawerID m_nextID = 1;
-			std::map<DrawerKey, IDrawerInternal*> m_drawers;
+			FlatHiveMap<DrawerKey, IDrawerInternal*, false> m_drawers;
 			std::unordered_map<DrawerID, DrawerKey> m_drawerKeyByID;
 			std::unordered_map<Layer, uint64> m_layerDrawerCount;
 
@@ -239,17 +243,23 @@ namespace cotasklib::Co
 			}
 
 		public:
-			DrawExecutor() = default;
+			DrawExecutor()
+			{
+				m_drawers.reserve(InitialCapacity);
+				m_drawerKeyByID.reserve(InitialCapacity);
+				m_layerDrawerCount.reserve(InitialCapacity);
+			}
 
 			DrawerID add(Layer layer, int32 drawIndex, IDrawerInternal* pDrawable)
 			{
 				const DrawerID id = m_nextID++;
 				DrawerKey key{ layer, drawIndex, id };
-				const auto [it, inserted] = m_drawers.try_emplace(key, pDrawable);
-				if (!inserted)
+				const bool alreadyExists = m_drawers.find(key) != m_drawers.end();
+				if (alreadyExists)
 				{
 					throw Error{ U"DrawExecutor::add: ID={} already exists"_fmt(id) };
 				}
+				m_drawers.emplace(key, pDrawable);
 				m_drawerKeyByID.emplace(id, std::move(key));
 				incrementLayerDrawerCount(layer);
 				return id;
@@ -262,20 +272,20 @@ namespace cotasklib::Co
 				{
 					throw Error{ U"DrawExecutor::remove: ID={} not found"_fmt(id) };
 				}
-				if (it->first.layer == layer)
+				const auto& key = it.key();
+				if (key.layer == layer)
 				{
 					return;
 				}
-				const auto prevLayer = it->first.layer;
+				const auto prevLayer = key.layer;
 
 				// 一度削除して再挿入
-				DrawerKey newKey = it->first;
+				DrawerKey newKey = key;
 				newKey.layer = layer;
-				const auto pDrawable = it->second;
+				const auto pDrawable = *it;
 				m_drawers.erase(it);
-				m_drawerKeyByID.erase(id);
-				m_drawers.emplace(newKey, pDrawable);
-				m_drawerKeyByID.emplace(id, std::move(newKey));
+				m_drawers.emplace(std::move(newKey), pDrawable);
+				m_drawerKeyByID[id].layer = layer;
 
 				decrementLayerDrawerCount(prevLayer);
 				incrementLayerDrawerCount(layer);
@@ -288,17 +298,18 @@ namespace cotasklib::Co
 				{
 					throw Error{ U"DrawExecutor::remove: ID={} not found"_fmt(id) };
 				}
-				if (it->first.drawIndex == drawIndex)
+				const auto& key = it.key();
+				if (key.drawIndex == drawIndex)
 				{
 					return;
 				}
 
 				// 一度削除して再挿入
-				DrawerKey newKey = it->first;
+				DrawerKey newKey = key;
 				newKey.drawIndex = drawIndex;
-				const auto pDrawable = it->second;
+				const auto pDrawable = *it;
 				m_drawers.erase(it);
-				m_drawers.emplace(newKey, pDrawable);
+				m_drawers.emplace(std::move(newKey), pDrawable);
 				m_drawerKeyByID[id].drawIndex = drawIndex;
 			}
 
@@ -309,14 +320,15 @@ namespace cotasklib::Co
 				{
 					throw Error{ U"DrawExecutor::remove: ID={} not found"_fmt(id) };
 				}
-				decrementLayerDrawerCount(it->first.layer);
+				const auto& key = it.key();
+				decrementLayerDrawerCount(key.layer);
 				m_drawers.erase(it);
 				m_drawerKeyByID.erase(id);
 			}
 
 			void execute() const
 			{
-				for (const auto& [key, pDrawer] : m_drawers)
+				for (const auto& pDrawer : m_drawers)
 				{
 					pDrawer->drawInternal();
 				}
@@ -331,6 +343,14 @@ namespace cotasklib::Co
 					return false;
 				}
 				return it->second > 0;
+			}
+
+			void compactIfNeeded()
+			{
+				if (m_drawers.nulloptCount() > CompactionThreshold)
+				{
+					m_drawers.compact();
+				}
 			}
 		};
 
@@ -390,23 +410,26 @@ namespace cotasklib::Co
 
 			bool m_currentTaskRemovalNeeded = false;
 
-			std::map<TaskID, TaskEntry> m_taskEntries;
+			FlatHiveMap<TaskID, TaskEntry, true> m_taskEntries;
 
 			DrawExecutor m_drawExecutor;
 
 			SceneFactory m_currentSceneFactory;
 
 		public:
-			Backend() = default;
+			Backend()
+			{
+				m_taskEntries.reserve(InitialCapacity);
+			}
 
 			void update()
 			{
 				std::exception_ptr exceptionPtr;
 				for (auto it = m_taskEntries.begin(); it != m_taskEntries.end();)
 				{
-					m_currentTaskID = it->first;
+					m_currentTaskID = it.key();
 
-					const auto& entry = it->second;
+					const auto& entry = *it;
 					entry.task->resume();
 					if (m_currentTaskRemovalNeeded || entry.task->done())
 					{
@@ -434,6 +457,13 @@ namespace cotasklib::Co
 				{
 					std::rethrow_exception(exceptionPtr);
 				}
+
+				if (m_taskEntries.nulloptCount() > CompactionThreshold)
+				{
+					m_taskEntries.compact();
+				}
+
+				m_drawExecutor.compactIfNeeded();
 			}
 
 			void draw()
@@ -528,7 +558,7 @@ namespace cotasklib::Co
 				const auto it = s_pInstance->m_taskEntries.find(id);
 				if (it != s_pInstance->m_taskEntries.end())
 				{
-					it->second.callEndCallback();
+					it->callEndCallback();
 					s_pInstance->m_taskEntries.erase(it);
 					return true;
 				}
@@ -545,7 +575,7 @@ namespace cotasklib::Co
 				const auto it = s_pInstance->m_taskEntries.find(id);
 				if (it != s_pInstance->m_taskEntries.end())
 				{
-					return it->second.task->done();
+					return it->task->done();
 				}
 				return id < s_pInstance->m_nextTaskID;
 			}
@@ -782,7 +812,7 @@ namespace cotasklib::Co
 			m_runners.push_back(std::move(runner));
 		}
 
-		void reserve(std::size_t size)
+		void reserve(size_t size)
 		{
 			m_runners.reserve(size);
 		}
@@ -989,7 +1019,7 @@ namespace cotasklib::Co
 		Optional<detail::DrawerID> m_drawerID;
 
 	public:
-		ScopedDrawer(std::function<void()> func, Layer layer = Layer::Default, int32 drawIndex = DrawIndex::Default)
+		explicit ScopedDrawer(std::function<void()> func, Layer layer = Layer::Default, int32 drawIndex = DrawIndex::Default)
 			: m_drawer(std::move(func))
 			, m_drawerID(detail::Backend::AddDrawer(&m_drawer, layer, drawIndex))
 		{
@@ -1102,7 +1132,7 @@ namespace cotasklib::Co
 		Array<std::unique_ptr<ITask>> m_concurrentTasksBefore;
 		Array<std::unique_ptr<ITask>> m_concurrentTasksAfter;
 
-    public:
+	public:
 		explicit Task(handle_type h)
 			: m_handle(std::move(h))
 		{
@@ -1113,22 +1143,22 @@ namespace cotasklib::Co
 		Task<TResult>& operator=(const Task<TResult>&) = delete;
 
 		Task(Task<TResult>&& rhs) noexcept
-            : m_handle(rhs.m_handle)
-            , m_concurrentTasksBefore(std::move(rhs.m_concurrentTasksBefore))
-            , m_concurrentTasksAfter(std::move(rhs.m_concurrentTasksAfter))
-        {
-            rhs.m_handle = nullptr;
-        }
+			: m_handle(rhs.m_handle)
+			, m_concurrentTasksBefore(std::move(rhs.m_concurrentTasksBefore))
+			, m_concurrentTasksAfter(std::move(rhs.m_concurrentTasksAfter))
+		{
+			rhs.m_handle = nullptr;
+		}
 
 		Task<TResult>& operator=(Task<TResult>&& rhs) = delete;
 
-        ~Task()
-        {
-            if (m_handle)
-            {
-                m_handle.destroy();
-            }
-        }
+		~Task()
+		{
+			if (m_handle)
+			{
+				m_handle.destroy();
+			}
+		}
 
 		virtual void resume() override
 		{

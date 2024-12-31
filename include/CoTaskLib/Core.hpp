@@ -1191,11 +1191,7 @@ namespace cotasklib::Co
 		[[nodiscard]]
 		Task<TResult> with(Task<TResultOther>&& task)&&
 		{
-			if (!m_handle)
-			{
-                throw Error{ U"Task::with() called on empty handle" };
-			}
-			if (m_handle.done())
+			if (!m_handle || m_handle.done())
 			{
 				return std::move(*this);
 			}
@@ -1207,11 +1203,7 @@ namespace cotasklib::Co
 		[[nodiscard]]
 		Task<TResult> with(Task<TResultOther>&& task, WithTiming timing)&&
 		{
-			if (!m_handle)
-			{
-				throw Error{ U"Task::with() called on empty handle" };
-			}
-			if (m_handle.done())
+			if (!m_handle || m_handle.done())
 			{
 				return std::move(*this);
 			}

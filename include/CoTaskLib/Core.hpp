@@ -1029,12 +1029,7 @@ namespace cotasklib::Co
 
 		ScopedDrawer& operator=(const ScopedDrawer&) = delete;
 
-		ScopedDrawer(ScopedDrawer&& rhs) noexcept
-			: m_drawer(std::move(rhs.m_drawer))
-			, m_drawerID(rhs.m_drawerID)
-		{
-			rhs.m_drawerID.reset();
-		}
+		ScopedDrawer(ScopedDrawer&& rhs) noexcept = delete;
 
 		ScopedDrawer& operator=(ScopedDrawer&& rhs) = delete;
 

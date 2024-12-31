@@ -1006,6 +1006,44 @@ TEST_CASE("ScopedTaskRunner move assignment")
 	REQUIRE(runner2CancelCount == 0);
 }
 
+Co::Task<> ManyRunnersTest(int32 i, Array<int32>* pValues)
+{
+	co_await Co::NextFrame();
+	pValues->push_back(i);
+}
+
+TEST_CASE("ScopedTaskRunner many runners")
+{
+	Array<int32> values;
+	Array<Co::ScopedTaskRunner> runners;
+	for (int32 i = 0; i < 10000; ++i)
+	{
+		runners.push_back(ManyRunnersTest(i, &values).runScoped());
+	}
+	REQUIRE(values.empty() == true);
+	System::Update();
+	REQUIRE(values.size() == 10000);
+	REQUIRE(values[0] == 0);
+	REQUIRE(values[9999] == 9999);
+	runners.clear();
+	values.clear();
+
+	for (int32 i = 0; i < 10000; ++i)
+	{
+		runners.push_back(ManyRunnersTest(10000 + i, &values).runScoped());
+	}
+	System::Update();
+	REQUIRE(values.size() == 10000);
+	REQUIRE(values[0] == 10000);
+	REQUIRE(values[9999] == 19999);
+
+	// すでに完了しているので何も起こらない
+	System::Update();
+	REQUIRE(values.size() == 10000);
+	REQUIRE(values[0] == 10000);
+	REQUIRE(values[9999] == 19999);
+}
+
 Co::Task<> ScopedDrawerTest(int32* pValue)
 {
 	Co::ScopedDrawer drawer{ [&] { ++(*pValue); } };
@@ -1168,6 +1206,39 @@ TEST_CASE("ScopedDrawer changing layer")
 	System::Update();
 	// layerが同一の場合の順序はlayer変更タイミングではなく実行開始タイミングで決まるため、最後は1,2,3の順番になる
 	REQUIRE(array == Array<String>{ U"1", U"2", U"3", U"1", U"3", U"2", U"1", U"2", U"3" });
+}
+
+TEST_CASE("ScopedDrawer many drawers")
+{
+	Array<int32> values;
+	Array<std::unique_ptr<Co::ScopedDrawer>> drawers;
+	for (int32 i = 0; i < 10000; ++i)
+	{
+		drawers.push_back(std::make_unique<Co::ScopedDrawer>([i, &values] { values.push_back(i); }));
+	}
+	REQUIRE(values.empty() == true);
+	System::Update();
+	REQUIRE(values.size() == 10000);
+	REQUIRE(values[0] == 0);
+	REQUIRE(values[9999] == 9999);
+	drawers.clear();
+	values.clear();
+
+	for (int32 i = 0; i < 10000; ++i)
+	{
+		drawers.push_back(std::make_unique<Co::ScopedDrawer>([i, &values] { values.push_back(10000 + i); }));
+	}
+	System::Update();
+	REQUIRE(values.size() == 10000);
+	REQUIRE(values[0] == 10000);
+	REQUIRE(values[9999] == 19999);
+	drawers.clear();
+
+	// drawerは既に存在しないので何も起こらない
+	System::Update();
+	REQUIRE(values.size() == 10000);
+	REQUIRE(values[0] == 10000);
+	REQUIRE(values[9999] == 19999);
 }
 
 TEST_CASE("MultiRunner finish")
@@ -1448,6 +1519,38 @@ TEST_CASE("MultiRunner::waitUntilAnyDone added while running")
 
 	// ここでwaitUntilAnyDoneが完了
 	REQUIRE(runner.done() == true);
+}
+
+TEST_CASE("MultiRunner many runners")
+{
+	Co::MultiRunner mr;
+	Array<int32> values;
+	for (int32 i = 0; i < 10000; ++i)
+	{
+		ManyRunnersTest(i, &values).runAddTo(mr);
+	}
+	REQUIRE(values.empty() == true);
+	System::Update();
+	REQUIRE(values.size() == 10000);
+	REQUIRE(values[0] == 0);
+	REQUIRE(values[9999] == 9999);
+	values.clear();
+	mr.clear();
+
+	for (int32 i = 0; i < 10000; ++i)
+	{
+		ManyRunnersTest(10000 + i, &values).runAddTo(mr);
+	}
+	System::Update();
+	REQUIRE(values.size() == 10000);
+	REQUIRE(values[0] == 10000);
+	REQUIRE(values[9999] == 19999);
+
+	// すでに完了しているので何も起こらない
+	System::Update();
+	REQUIRE(values.size() == 10000);
+	REQUIRE(values[0] == 10000);
+	REQUIRE(values[9999] == 19999);
 }
 
 Co::Task<void> WaitForeverTest(int32* pValue)

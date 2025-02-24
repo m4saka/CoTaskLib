@@ -329,6 +329,7 @@
     <ClInclude Include="..\..\include\CoTaskLib\Core.hpp" />
     <ClInclude Include="..\..\include\CoTaskLib\Ease.hpp" />
     <ClInclude Include="..\..\include\CoTaskLib\LazyDeletionFlatMap.hpp" />
+    <ClInclude Include="..\..\include\CoTaskLib\License.hpp" />
     <ClInclude Include="..\..\include\CoTaskLib\S3dAsyncTask.hpp" />
     <ClInclude Include="..\..\include\CoTaskLib\Scene.hpp" />
     <ClInclude Include="..\..\include\CoTaskLib\ScreenFade.hpp" />

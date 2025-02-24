@@ -29,10 +29,12 @@
 #pragma once
 #include <Siv3D.hpp>
 #include <coroutine>
+#include "License.hpp"
 #include "LazyDeletionFlatMap.hpp"
 
 namespace cotasklib::Co
 {
+	using AddsLicenseYN = YesNo<struct AddsLicenseYN_tag>;
 	using ClearsInputYN = YesNo<struct ClearsInputYN_tag>;
 
 	class [[nodiscard]] ITask
@@ -1767,8 +1769,12 @@ namespace cotasklib::Co
 	template <typename TResult>
 	auto operator co_await(const Task<TResult>& rhs) = delete;
 
-	inline void Init()
+	inline void Init(AddsLicenseYN addsLicense = AddsLicenseYN::Yes)
 	{
+		if (addsLicense)
+		{
+			AddLicense();
+		}
 		detail::Backend::Init();
 	}
 

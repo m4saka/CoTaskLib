@@ -489,7 +489,7 @@ namespace cotasklib::Co
 				}
 				const TaskID id = s_pInstance->m_nextTaskID++;
 				std::function<void(const ITask*)> finishCallbackTypeErased =
-					[finishCallback = std::move(finishCallback), cancelCallback/*コピーキャプチャ*/, id](const ITask* task)
+					[finishCallback = std::move(finishCallback), cancelCallback/*コピーキャプチャ*/](const ITask* task)
 					{
 						auto fnGetResult = [task, cancelCallback]() -> TResult
 							{

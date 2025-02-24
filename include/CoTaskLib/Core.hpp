@@ -33,6 +33,8 @@
 
 namespace cotasklib::Co
 {
+	using ClearsInputYN = YesNo<struct ClearsInputYN_tag>;
+
 	class [[nodiscard]] ITask
 	{
 	public:
@@ -2073,15 +2075,55 @@ namespace cotasklib::Co
 		{
 			co_await NextFrame();
 		}
+		input.clearInput();
+	}
+
+	template <class TInput>
+	[[nodiscard]]
+	Task<void> WaitUntilDown(const TInput input, ClearsInputYN clearsInput)
+	{
+		while (!input.down())
+		{
+			co_await NextFrame();
+		}
+		if (clearsInput)
+		{
+			input.clearInput();
+		}
 	}
 
 	template <class TInput>
 	[[nodiscard]]
 	Task<void> WaitUntilUp(const TInput input)
 	{
+		if (input.cleared())
+		{
+			// clearInput実行直後もupがtrueになるが、それは無視
+			co_await NextFrame();
+		}
 		while (!input.up())
 		{
 			co_await NextFrame();
+		}
+		input.clearInput();
+	}
+
+	template <class TInput>
+	[[nodiscard]]
+	Task<void> WaitUntilUp(const TInput input, ClearsInputYN clearsInput)
+	{
+		if (input.cleared())
+		{
+			// clearInput実行直後もupがtrueになるが、それは無視
+			co_await NextFrame();
+		}
+		while (!input.up())
+		{
+			co_await NextFrame();
+		}
+		if (clearsInput)
+		{
+			input.clearInput();
 		}
 	}
 
@@ -2093,15 +2135,55 @@ namespace cotasklib::Co
 		{
 			co_await NextFrame();
 		}
+		MouseL.clearInput();
+	}
+
+	template <class TArea>
+	[[nodiscard]]
+	Task<void> WaitUntilLeftClicked(const TArea area, ClearsInputYN clearsInput)
+	{
+		while (!area.leftClicked())
+		{
+			co_await NextFrame();
+		}
+		if (clearsInput)
+		{
+			MouseL.clearInput();
+		}
 	}
 
 	template <class TArea>
 	[[nodiscard]]
 	Task<void> WaitUntilLeftReleased(const TArea area)
 	{
+		if (MouseL.cleared())
+		{
+			// clearInput実行直後もleftReleasedがtrueになるが、それは無視
+			co_await NextFrame();
+		}
 		while (!area.leftReleased())
 		{
 			co_await NextFrame();
+		}
+		MouseL.clearInput();
+	}
+
+	template <class TArea>
+	[[nodiscard]]
+	Task<void> WaitUntilLeftReleased(const TArea area, ClearsInputYN clearsInput)
+	{
+		if (MouseL.cleared())
+		{
+			// clearInput実行直後もleftReleasedがtrueになるが、それは無視
+			co_await NextFrame();
+		}
+		while (!area.leftReleased())
+		{
+			co_await NextFrame();
+		}
+		if (clearsInput)
+		{
+			MouseL.clearInput();
 		}
 	}
 
@@ -2113,13 +2195,36 @@ namespace cotasklib::Co
 		{
 			if (area.leftClicked())
 			{
-				const auto [releasedInArea, _] = co_await Any(WaitUntilLeftReleased(area), WaitUntilUp(MouseL));
+				const auto [releasedInArea, _] = co_await Any(WaitUntilLeftReleased(area, ClearsInputYN::No), WaitUntilUp(MouseL, ClearsInputYN::No));
 				if (releasedInArea.has_value())
 				{
 					break;
 				}
 			}
 			co_await NextFrame();
+		}
+		MouseL.clearInput();
+	}
+
+	template <class TArea>
+	[[nodiscard]]
+	Task<void> WaitUntilLeftClickedThenReleased(const TArea area, ClearsInputYN clearsInput)
+	{
+		while (true)
+		{
+			if (area.leftClicked())
+			{
+				const auto [releasedInArea, _] = co_await Any(WaitUntilLeftReleased(area, ClearsInputYN::No), WaitUntilUp(MouseL, ClearsInputYN::No));
+				if (releasedInArea.has_value())
+				{
+					break;
+				}
+			}
+			co_await NextFrame();
+		}
+		if (clearsInput)
+		{
+			MouseL.clearInput();
 		}
 	}
 
@@ -2131,15 +2236,55 @@ namespace cotasklib::Co
 		{
 			co_await NextFrame();
 		}
+		MouseR.clearInput();
+	}
+
+	template <class TArea>
+	[[nodiscard]]
+	Task<void> WaitUntilRightClicked(const TArea area, ClearsInputYN clearsInput)
+	{
+		while (!area.rightClicked())
+		{
+			co_await NextFrame();
+		}
+		if (clearsInput)
+		{
+			MouseR.clearInput();
+		}
 	}
 
 	template <class TArea>
 	[[nodiscard]]
 	Task<void> WaitUntilRightReleased(const TArea area)
 	{
+		if (MouseR.cleared())
+		{
+			// clearInput実行直後もrightReleasedがtrueになるが、それは無視
+			co_await NextFrame();
+		}
 		while (!area.rightReleased())
 		{
 			co_await NextFrame();
+		}
+		MouseR.clearInput();
+	}
+
+	template <class TArea>
+	[[nodiscard]]
+	Task<void> WaitUntilRightReleased(const TArea area, ClearsInputYN clearsInput)
+	{
+		if (MouseR.cleared())
+		{
+			// clearInput実行直後もrightReleasedがtrueになるが、それは無視
+			co_await NextFrame();
+		}
+		while (!area.rightReleased())
+		{
+			co_await NextFrame();
+		}
+		if (clearsInput)
+		{
+			MouseR.clearInput();
 		}
 	}
 
@@ -2151,13 +2296,36 @@ namespace cotasklib::Co
 		{
 			if (area.rightClicked())
 			{
-				const auto [releasedInArea, _] = co_await Any(WaitUntilRightReleased(area), WaitUntilUp(MouseR));
+				const auto [releasedInArea, _] = co_await Any(WaitUntilRightReleased(area, ClearsInputYN::No), WaitUntilUp(MouseR, ClearsInputYN::No));
 				if (releasedInArea.has_value())
 				{
 					break;
 				}
 			}
 			co_await NextFrame();
+		}
+		MouseR.clearInput();
+	}
+
+	template <class TArea>
+	[[nodiscard]]
+	Task<void> WaitUntilRightClickedThenReleased(const TArea area, ClearsInputYN clearsInput)
+	{
+		while (true)
+		{
+			if (area.rightClicked())
+			{
+				const auto [releasedInArea, _] = co_await Any(WaitUntilRightReleased(area, ClearsInputYN::No), WaitUntilUp(MouseR, ClearsInputYN::No));
+				if (releasedInArea.has_value())
+				{
+					break;
+				}
+			}
+			co_await NextFrame();
+		}
+		if (clearsInput)
+		{
+			MouseR.clearInput();
 		}
 	}
 

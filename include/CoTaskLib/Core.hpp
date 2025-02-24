@@ -115,10 +115,6 @@ namespace cotasklib::Co
 	template <typename TResult>
 	class Task;
 
-	class SceneBase;
-
-	using SceneFactory = std::function<std::unique_ptr<SceneBase>()>;
-
 	// レイヤー
 	// (将来的な拡張のために隙間を空けている)
 	enum class Layer : uint8
@@ -415,8 +411,6 @@ namespace cotasklib::Co
 			LazyDeletionFlatMap<TaskID, TaskEntry, true> m_taskEntries;
 
 			DrawExecutor m_drawExecutor;
-
-			SceneFactory m_currentSceneFactory;
 
 		public:
 			Backend()
@@ -2386,9 +2380,6 @@ namespace cotasklib::Co
 
 		template <typename TTask>
 		concept TaskConcept = std::is_same_v<TTask, Task<typename TTask::result_type>>;
-
-		template <typename TScene>
-		concept SceneConcept = std::derived_from<TScene, SceneBase>;
 	}
 
 	template <detail::TaskConcept... TTasks>

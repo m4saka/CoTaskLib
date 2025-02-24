@@ -32,6 +32,10 @@
 
 namespace cotasklib::Co
 {
+	class SceneBase;
+
+	using SceneFactory = std::function<std::unique_ptr<SceneBase>()>;
+
 	namespace detail
 	{
 		template <typename T>
@@ -39,6 +43,9 @@ namespace cotasklib::Co
 
 		template <typename T>
 		concept IsSpan = std::is_same_v<T, std::span<typename T::value_type>>;
+
+		template <typename TScene>
+		concept SceneConcept = std::derived_from<TScene, SceneBase>;
 	}
 
 	template <detail::SceneConcept TScene, typename... Args>

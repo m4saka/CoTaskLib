@@ -270,7 +270,7 @@ namespace cotasklib::Co
 				const auto it = findByID(id);
 				if (it == m_drawers.end())
 				{
-					throw Error{ U"DrawExecutor::remove: ID={} not found"_fmt(id) };
+					throw Error{ U"DrawExecutor::setDrawerLayer: ID={} not found"_fmt(id) };
 				}
 				const auto& key = it.key();
 				if (key.layer == layer)
@@ -296,7 +296,7 @@ namespace cotasklib::Co
 				const auto it = findByID(id);
 				if (it == m_drawers.end())
 				{
-					throw Error{ U"DrawExecutor::remove: ID={} not found"_fmt(id) };
+					throw Error{ U"DrawExecutor::setDrawerDrawIndex: ID={} not found"_fmt(id) };
 				}
 				const auto& key = it.key();
 				if (key.drawIndex == drawIndex)

@@ -2,7 +2,7 @@
 //
 //  CoTaskLib
 //
-//  Copyright (c) 2024 masaka
+//  Copyright (c) 2024-2025 masaka
 //
 //  Licensed under the MIT License.
 //

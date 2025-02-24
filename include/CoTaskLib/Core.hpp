@@ -29,7 +29,7 @@
 #pragma once
 #include <Siv3D.hpp>
 #include <coroutine>
-#include "FlatHiveMap.hpp"
+#include "LazyDeletionFlatMap.hpp"
 
 namespace cotasklib::Co
 {
@@ -200,7 +200,7 @@ namespace cotasklib::Co
 		{
 		private:
 			DrawerID m_nextID = 1;
-			FlatHiveMap<DrawerKey, IDrawerInternal*, false> m_drawers;
+			LazyDeletionFlatMap<DrawerKey, IDrawerInternal*, false> m_drawers;
 			std::unordered_map<DrawerID, DrawerKey> m_drawerKeyByID;
 			std::unordered_map<Layer, uint64> m_layerDrawerCount;
 
@@ -410,7 +410,7 @@ namespace cotasklib::Co
 
 			bool m_currentTaskRemovalNeeded = false;
 
-			FlatHiveMap<TaskID, TaskEntry, true> m_taskEntries;
+			LazyDeletionFlatMap<TaskID, TaskEntry, true> m_taskEntries;
 
 			DrawExecutor m_drawExecutor;
 

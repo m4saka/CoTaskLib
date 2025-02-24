@@ -842,7 +842,7 @@
     <ClInclude Include="..\..\include\CoTaskLib\Typewriter.hpp">
       <Filter>Header Files\CoTaskLib</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\..\..\source\repos\CoTaskLib\include\CoTaskLib\FlatHiveMap.hpp">
+    <ClInclude Include="..\..\include\CoTaskLib\LazyDeletionFlatMap.hpp">
       <Filter>Header Files\CoTaskLib</Filter>
     </ClInclude>
   </ItemGroup>

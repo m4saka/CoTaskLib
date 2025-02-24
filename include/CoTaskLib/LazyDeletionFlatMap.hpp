@@ -31,9 +31,9 @@
 
 namespace cotasklib::Co::detail
 {
-	// 削除の実行効率を重視したflat_map
+	// 遅延削除付きのflat_map
 	template <typename KeyType, typename T, bool IsMonotonic = false>
-	class FlatHiveMap
+	class LazyDeletionFlatMap
 	{
 	public:
 		using pair_type = std::pair<KeyType, std::optional<T>>;
@@ -56,8 +56,8 @@ namespace cotasklib::Co::detail
 				typename container_type::iterator>;
 
 			using ContainerPtr = std::conditional_t<IsConst,
-				const FlatHiveMap<KeyType, T, IsMonotonic>*,
-				FlatHiveMap<KeyType, T, IsMonotonic>*>;
+				const LazyDeletionFlatMap<KeyType, T, IsMonotonic>*,
+				LazyDeletionFlatMap<KeyType, T, IsMonotonic>*>;
 
 		private:
 			ContainerPtr m_containerPtr;
@@ -115,7 +115,7 @@ namespace cotasklib::Co::detail
 			{
 				if (m_containerPtr != other.m_containerPtr)
 				{
-					throw Error{ U"FlatHiveMap: Cannot compare iterators of different containers" };
+					throw Error{ U"LazyDeletionFlatMap: Cannot compare iterators of different containers" };
 				}
 				return m_index == other.m_index;
 			}
@@ -124,7 +124,7 @@ namespace cotasklib::Co::detail
 			{
 				if (m_containerPtr != other.m_containerPtr)
 				{
-					throw Error{ U"FlatHiveMap: Cannot compare iterators of different containers" };
+					throw Error{ U"LazyDeletionFlatMap: Cannot compare iterators of different containers" };
 				}
 				return m_index != other.m_index;
 			}
@@ -142,11 +142,11 @@ namespace cotasklib::Co::detail
 		using iterator = FilteredIterator<false>;
 		using const_iterator = FilteredIterator<true>;
 
-		FlatHiveMap() = default;
-		FlatHiveMap(const FlatHiveMap&) = default;
-		FlatHiveMap& operator=(const FlatHiveMap&) = default;
-		FlatHiveMap(FlatHiveMap&&) = default;
-		FlatHiveMap& operator=(FlatHiveMap&&) = default;
+		LazyDeletionFlatMap() = default;
+		LazyDeletionFlatMap(const LazyDeletionFlatMap&) = default;
+		LazyDeletionFlatMap& operator=(const LazyDeletionFlatMap&) = default;
+		LazyDeletionFlatMap(LazyDeletionFlatMap&&) = default;
+		LazyDeletionFlatMap& operator=(LazyDeletionFlatMap&&) = default;
 
 		T& at(const KeyType& key)
 		{
@@ -156,7 +156,7 @@ namespace cotasklib::Co::detail
 			{
 				return *(it->second);
 			}
-			throw Error{ U"FlatHiveMap: Key not found" };
+			throw Error{ U"LazyDeletionFlatMap: Key not found" };
 		}
 
 		const T& at(const KeyType& key) const
@@ -167,7 +167,7 @@ namespace cotasklib::Co::detail
 			{
 				return *(it->second);
 			}
-			throw Error{ U"FlatHiveMap: Key not found" };
+			throw Error{ U"LazyDeletionFlatMap: Key not found" };
 		}
 
 		void emplace(const KeyType& key, const T& value)
@@ -180,7 +180,7 @@ namespace cotasklib::Co::detail
 					if (lastKey >= key)
 					{
 						// キーが昇順で挿入されていない場合は例外を投げる
-						throw Error{ U"FlatHiveMap: Keys must be inserted in increasing order" };
+						throw Error{ U"LazyDeletionFlatMap: Keys must be inserted in increasing order" };
 					}
 				}
 				m_data.emplace_back(pair_type{ key, std::make_optional(value) });
@@ -214,7 +214,7 @@ namespace cotasklib::Co::detail
 					if (lastKey >= key)
 					{
 						// キーが昇順で挿入されていない場合は例外を投げる
-						throw Error{ U"FlatHiveMap: Keys must be inserted in increasing order" };
+						throw Error{ U"LazyDeletionFlatMap: Keys must be inserted in increasing order" };
 					}
 				}
 				m_data.emplace_back(pair_type{ key, std::make_optional(std::move(value)) });

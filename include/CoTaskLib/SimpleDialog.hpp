@@ -76,6 +76,14 @@ namespace cotasklib::Co
 
 			void update()
 			{
+				if (!m_interactable)
+				{
+					// 押下不可の場合は何もしない
+					m_isPressed = false;
+					m_isClicked = false;
+					return;
+				}
+
 				if (m_rect.mouseOver())
 				{
 					if (MouseL.down() && !m_isPressed)

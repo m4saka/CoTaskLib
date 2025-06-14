@@ -63,12 +63,12 @@ namespace cotasklib::Co
 	public:
 		explicit Tweener(Vec2 pivot = Scene::CenterF(), double defaultEaseFunc(double) = EaseOutQuad, ISteadyClock* pSteadyClock = nullptr)
 			: m_pivot(pivot)
-			, m_easeFuncPosition(defaultEaseFunc)
-			, m_easeFuncScale(defaultEaseFunc)
-			, m_easeFuncRotation(defaultEaseFunc)
-			, m_easeFuncColor(defaultEaseFunc)
-			, m_easeFuncColorAdd(defaultEaseFunc)
-			, m_easeFuncAlpha(defaultEaseFunc)
+			, m_easeFuncPosition(defaultEaseFunc ? defaultEaseFunc : EaseOutQuad)
+			, m_easeFuncScale(defaultEaseFunc ? defaultEaseFunc : EaseOutQuad)
+			, m_easeFuncRotation(defaultEaseFunc ? defaultEaseFunc : EaseOutQuad)
+			, m_easeFuncColor(defaultEaseFunc ? defaultEaseFunc : EaseOutQuad)
+			, m_easeFuncColorAdd(defaultEaseFunc ? defaultEaseFunc : EaseOutQuad)
+			, m_easeFuncAlpha(defaultEaseFunc ? defaultEaseFunc : EaseOutQuad)
 			, m_pSteadyClock(pSteadyClock)
 		{
 		}
@@ -117,7 +117,7 @@ namespace cotasklib::Co
 
 		void setPositionEase(double easeFunc(double))
 		{
-			m_easeFuncPosition = easeFunc;
+			m_easeFuncPosition = easeFunc ? easeFunc : EaseOutQuad;
 		}
 
 		EaseTaskBuilder<Vec2> tweenScale(Duration duration)
@@ -147,7 +147,7 @@ namespace cotasklib::Co
 
 		void setScaleEase(double easeFunc(double))
 		{
-			m_easeFuncScale = easeFunc;
+			m_easeFuncScale = easeFunc ? easeFunc : EaseOutQuad;
 		}
 
 		EaseTaskBuilder<double> tweenRotation(Duration duration)
@@ -167,7 +167,7 @@ namespace cotasklib::Co
 
 		void setRotationEase(double easeFunc(double))
 		{
-			m_easeFuncRotation = easeFunc;
+			m_easeFuncRotation = easeFunc ? easeFunc : EaseOutQuad;
 		}
 
 		EaseTaskBuilder<ColorF> tweenColor(Duration duration)
@@ -187,7 +187,7 @@ namespace cotasklib::Co
 
 		void setColorEase(double easeFunc(double))
 		{
-			m_easeFuncColor = easeFunc;
+			m_easeFuncColor = easeFunc ? easeFunc : EaseOutQuad;
 		}
 
 		EaseTaskBuilder<ColorF> tweenColorAdd(Duration duration)
@@ -207,7 +207,7 @@ namespace cotasklib::Co
 
 		void setColorAddEase(double easeFunc(double))
 		{
-			m_easeFuncColorAdd = easeFunc;
+			m_easeFuncColorAdd = easeFunc ? easeFunc : EaseOutQuad;
 		}
 
 		EaseTaskBuilder<double> tweenAlpha(Duration duration)
@@ -237,7 +237,7 @@ namespace cotasklib::Co
 
 		void setAlphaEase(double easeFunc(double))
 		{
-			m_easeFuncAlpha = easeFunc;
+			m_easeFuncAlpha = easeFunc ? easeFunc : EaseOutQuad;
 		}
 
 		ScopedTween applyScoped() const
@@ -267,7 +267,7 @@ namespace cotasklib::Co
 				mat = mat.translated(m_position);
 			}
 
-			if (hasTransform && mat != Mat3x2::Identity())
+			if (hasTransform)
 			{
 				scopedTween.transformer.emplace(mat);
 			}

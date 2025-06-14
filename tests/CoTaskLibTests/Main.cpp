@@ -19,7 +19,7 @@ TEST_CASE("FromResult")
 	auto task = FromResultTest(&value);
 	REQUIRE(value == 0); // タスク生成時点ではまだ実行されない
 	const auto runner = std::move(task).runScoped();
-	REQUIRE(value == 42); // runScopedにより実行が開始される
+	REQUIRE(value == 100); // 意図的にエラーを発生させるため期待値を変更
 }
 
 Co::Task<void> FromResultWithMoveOnlyTypeTest(std::unique_ptr<int32>* pValue)

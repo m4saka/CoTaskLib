@@ -76,6 +76,38 @@ TEST_CASE("DelayFrame")
 	REQUIRE(runner.done() == true);
 }
 
+Co::Task<void> DelayFrameZeroTest(int32* pValue)
+{
+	*pValue = 1;
+	co_await Co::DelayFrame(0);
+	*pValue = 2;
+}
+
+Co::Task<void> DelayFrameNegativeTest(int32* pValue)
+{
+	*pValue = 1;
+	co_await Co::DelayFrame(-1);
+	*pValue = 2;
+}
+
+TEST_CASE("DelayFrame with zero and negative values")
+{
+	int32 value = 0;
+	
+	// 0フレーム待機のテスト
+	auto zeroFrameTask = DelayFrameZeroTest(&value);
+	const auto zeroRunner = std::move(zeroFrameTask).runScoped();
+	REQUIRE(zeroRunner.done() == true); // 0フレーム待機は即座に完了する
+	REQUIRE(value == 2);
+	
+	// 負の値でのDelayFrameは即座に完了する
+	value = 0;
+	auto negativeFrameTask = DelayFrameNegativeTest(&value);
+	const auto negativeRunner = std::move(negativeFrameTask).runScoped();
+	REQUIRE(negativeRunner.done() == true);
+	REQUIRE(value == 2); // 負の値でも即座に完了する
+}
+
 struct TestClock : ISteadyClock
 {
 	uint64 microsec = 0;
@@ -617,6 +649,33 @@ TEST_CASE("co_return with move-only type and delay and pausedWhile")
 	REQUIRE(value == 42);
 }
 
+Co::Task<int32> TaskAwaiterLifetimeTestInner()
+{
+	co_await Co::DelayFrame(1);
+	co_return 100;
+}
+
+Co::Task<int32> TaskAwaiterLifetimeTestOuter()
+{
+	// TaskAwaiterオブジェクトのライフタイム管理をテスト
+	int32 result = co_await TaskAwaiterLifetimeTestInner();
+	co_return result + 1;
+}
+
+TEST_CASE("TaskAwaiter lifetime management")
+{
+	auto task = TaskAwaiterLifetimeTestOuter();
+	int32 result = 0;
+	const auto runner = std::move(task).runScoped([&](int32 r) { result = r; });
+	
+	// フレームを進めてタスクを完了させる
+	System::Update();
+	System::Update();
+	
+	REQUIRE(runner.done() == true);
+	REQUIRE(result == 101);
+}
+
 Co::Task<void> ThrowExceptionTest()
 {
 	throw std::runtime_error("test exception");
@@ -733,6 +792,58 @@ TEST_CASE("Catch exception from nested task")
 
 	System::Update();
 	REQUIRE(result == -1); // 例外をcatchし、resultに-1が入る
+}
+
+Co::Task<int32> ExceptionThrowingTaskTest(int32 id)
+{
+	throw std::runtime_error("Task " + std::to_string(id) + " exception");
+	co_return id; // 到達しないが、戻り値型のため必要
+}
+
+TEST_CASE("Multiple exception handling")
+{
+	// 複数のタスクが例外を投げる状況をテスト
+	bool exception1Caught = false;
+	bool exception2Caught = false;
+	bool exception3Caught = false;
+
+	try
+	{
+		auto task1 = ExceptionThrowingTaskTest(1);
+		const auto runner1 = std::move(task1).runScoped();
+	}
+	catch (const std::runtime_error& e)
+	{
+		exception1Caught = true;
+		REQUIRE(std::string(e.what()).find("Task 1") != std::string::npos);
+	}
+
+	try
+	{
+		auto task2 = ExceptionThrowingTaskTest(2);
+		const auto runner2 = std::move(task2).runScoped();
+	}
+	catch (const std::runtime_error& e)
+	{
+		exception2Caught = true;
+		REQUIRE(std::string(e.what()).find("Task 2") != std::string::npos);
+	}
+
+	try
+	{
+		auto task3 = ExceptionThrowingTaskTest(3);
+		const auto runner3 = std::move(task3).runScoped();
+	}
+	catch (const std::runtime_error& e)
+	{
+		exception3Caught = true;
+		REQUIRE(std::string(e.what()).find("Task 3") != std::string::npos);
+	}
+
+	// 各例外が適切に捕捉されることを確認
+	REQUIRE(exception1Caught == true);
+	REQUIRE(exception2Caught == true);
+	REQUIRE(exception3Caught == true);
 }
 
 TEST_CASE("TaskFinishSource<void>")
@@ -2490,6 +2601,24 @@ TEST_CASE("UpdaterTask with TaskFinishSource argument that has move-only result"
 	REQUIRE(runner.done() == true);
 	REQUIRE(result != nullptr);
 	REQUIRE(*result == 42);
+}
+
+TEST_CASE("TaskFinishSource move-only result multiple access")
+{
+	Co::TaskFinishSource<std::unique_ptr<int32>> source;
+	std::unique_ptr<int32> result1;
+	
+	// TaskFinishSourceに値を設定
+	source.requestFinish(std::make_unique<int32>(200));
+	
+	// 1回目のresult()呼び出し
+	REQUIRE(source.hasResult() == true);
+	result1 = source.result();
+	REQUIRE(result1 != nullptr);
+	REQUIRE(*result1 == 200);
+	
+	// result()を2回目以降呼び出した場合、値が既にムーブ済みなので例外を送出する
+	REQUIRE_THROWS_AS(source.result(), Error);
 }
 
 struct SequenceProgress

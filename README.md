@@ -1,6 +1,6 @@
 # CoTaskLib for Siv3D
 
-[![CI](https://github.com/m4saka/CoTaskLib/workflows/CI/badge.svg)](https://github.com/m4saka/CoTaskLib/actions)
+[![CI](https://github.com/m4saka/CoTaskLib/workflows/CI/badge.svg?branch=master)](https://github.com/m4saka/CoTaskLib/actions?query=branch%3Amaster)
 
 Siv3D用コルーチンタスクライブラリ。ヘッダオンリー。
 

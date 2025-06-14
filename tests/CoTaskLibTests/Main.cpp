@@ -4189,5 +4189,6 @@ void Main()
 	else
 	{
 		Console << U"Tests failed: " << numFailed;
+		System::Exit(1);
 	}
 }

@@ -3689,6 +3689,17 @@ TEST_CASE("Co::Typewriter with zero duration")
 	REQUIRE(value == U"TEST");
 }
 
+TEST_CASE("Co::Typewriter with empty string")
+{
+	// 空文字列でのTypewriterの動作を確認
+	String value = U"initial";
+	const auto runner = Co::Typewriter(&value, 0.1s, U"").playScoped();
+
+	// 空文字列の場合でも正しく動作することを確認
+	REQUIRE(runner.done() == true);
+	REQUIRE(value == U"");
+}
+
 TEST_CASE("Co::Typewriter with total duration")
 {
 	TestClock clock;

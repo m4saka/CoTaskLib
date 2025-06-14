@@ -67,7 +67,6 @@ jobs:
     - name: Run CoTaskLibTests
       working-directory: tests/CoTaskLibTests
       run: |
-        cd build
         export DISPLAY=:99
         sudo Xvfb :99 -screen 0 1280x720x24 > /dev/null 2>&1 &
         sleep 3

@@ -414,18 +414,40 @@ namespace cotasklib::Co
 
 			DrawExecutor m_drawExecutor;
 
+			Array<TaskID> m_tempTaskIDsToUpdate;
+
 		public:
 			Backend()
 			{
 				m_taskEntries.reserve(InitialCapacity);
+				m_tempTaskIDsToUpdate.reserve(InitialCapacity);
 			}
 
 			void update()
 			{
-				std::exception_ptr exceptionPtr;
-				for (auto it = m_taskEntries.begin(); it != m_taskEntries.end();)
+				// 各Taskのresume内で新規Taskが実行される場合がある
+				// そのため、resumeの重複やイテレータ破壊を避けるために一時的に作成したIDのリストを使う
+				m_tempTaskIDsToUpdate.clear();
+				if (m_tempTaskIDsToUpdate.capacity() < m_taskEntries.size())
 				{
-					m_currentTaskID = it.key();
+					m_tempTaskIDsToUpdate.reserve(m_taskEntries.size());
+				}
+				for (auto it = m_taskEntries.begin(); it != m_taskEntries.end(); ++it)
+				{
+					m_tempTaskIDsToUpdate.push_back(it.key());
+				}
+
+				std::exception_ptr exceptionPtr;
+				for (const TaskID taskID : m_tempTaskIDsToUpdate)
+				{
+					const auto it = m_taskEntries.find(taskID);
+					if (it == m_taskEntries.end())
+					{
+						// ループ中に他のTaskによって削除されたTaskのIDは無視
+						continue;
+					}
+
+					m_currentTaskID = taskID;
 
 					const auto& entry = *it;
 					entry.task->resume();
@@ -442,12 +464,8 @@ namespace cotasklib::Co
 								exceptionPtr = std::current_exception();
 							}
 						}
-						it = m_taskEntries.erase(it);
+						m_taskEntries.erase(it);
 						m_currentTaskRemovalNeeded = false;
-					}
-					else
-					{
-						++it;
 					}
 				}
 				m_currentTaskID.reset();

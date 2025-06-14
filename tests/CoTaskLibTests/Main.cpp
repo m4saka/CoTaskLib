@@ -2598,6 +2598,40 @@ TEST_CASE("Sequence")
 	REQUIRE(progress.isPostFadeOutFinished == true);
 }
 
+class TestSequenceWithLayer : public Co::SequenceBase<int32>
+{
+public:
+	// LayerとdrawIndexを指定
+	TestSequenceWithLayer()
+		: Co::SequenceBase<int32>(Co::Layer::Modal, 100)
+	{
+	}
+
+private:
+	Co::Task<int32> start() override
+	{
+		// LayerとdrawIndexが正しく設定されていることを確認
+		REQUIRE(layer() == Co::Layer::Modal);
+		REQUIRE(drawIndex() == 100);
+		co_return 42;
+	}
+
+	void draw() const override
+	{
+		// drawでも確認
+		REQUIRE(layer() == Co::Layer::Modal);
+		REQUIRE(drawIndex() == 100);
+	}
+};
+
+TEST_CASE("Sequence with custom layer and drawIndex")
+{
+	// SequenceBaseがレイヤーと描画インデックスを正しく受け取れることを確認
+	TestSequenceWithLayer sequence;
+	const auto runner = sequence.playScoped();
+	REQUIRE(runner.done() == true);
+}
+
 Co::Task<void> PlaySequenceCaller(int32 value, int32* pDest, SequenceProgress* pProgress)
 {
 	*pDest = co_await Co::Play<TestSequence>(value, pProgress);
@@ -2749,6 +2783,36 @@ TEST_CASE("UpdaterSequence")
 	REQUIRE(runner.done() == false);
 
 	System::Update();
+	REQUIRE(runner.done() == true);
+}
+
+class TestUpdaterSequenceWithLayer : public Co::UpdaterSequenceBase<void>
+{
+public:
+	// LayerとdrawIndexを指定できることを確認
+	TestUpdaterSequenceWithLayer()
+		: Co::UpdaterSequenceBase<void>(Co::Layer::Modal, 100)
+	{
+	}
+
+private:
+	void update() override
+	{
+		requestFinish();
+	}
+
+	void draw() const override
+	{
+		// LayerとdrawIndexが正しく設定されていることを内部で確認
+		REQUIRE(layer() == Co::Layer::Modal);
+		REQUIRE(drawIndex() == 100);
+	}
+};
+
+TEST_CASE("UpdaterSequence<void> with custom layer and drawIndex")
+{
+	// UpdaterSequenceBase<void>がレイヤーと描画インデックスを正しく受け取れることを確認
+	const auto runner = Co::Play<TestUpdaterSequenceWithLayer>().runScoped();
 	REQUIRE(runner.done() == true);
 }
 

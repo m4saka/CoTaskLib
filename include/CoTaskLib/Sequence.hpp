@@ -420,7 +420,10 @@ namespace cotasklib::Co
 		}
 
 	public:
-		UpdaterSequenceBase() = default;
+		explicit UpdaterSequenceBase(Layer layer = Layer::Default, int32 drawIndex = DrawIndex::Default)
+			: SequenceBase<void>(layer, drawIndex)
+		{
+		}
 	};
 
 #ifdef __cpp_deleted_function_with_reason

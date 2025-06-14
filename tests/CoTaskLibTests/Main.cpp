@@ -1044,6 +1044,50 @@ TEST_CASE("ScopedTaskRunner many runners")
 	REQUIRE(values[9999] == 19999);
 }
 
+TEST_CASE("ScopedTaskRunner::forget")
+{
+	// forgetを呼んでもタスクは実行され続けることを確認
+	int32 value = 0;
+	bool finished = false;
+	
+	auto task = [](int32* pValue, bool* pFinished) -> Co::Task<void>
+	{
+		*pValue = 1;
+		co_await Co::DelayFrame(2);
+		*pValue = 2;
+		co_await Co::DelayFrame(2);
+		*pValue = 3;
+		*pFinished = true;
+	};
+	
+	auto runner = task(&value, &finished).runScoped();
+	
+	// 初期状態
+	REQUIRE(value == 1);
+	REQUIRE(finished == false);
+	REQUIRE(runner.done() == false);
+	
+	// forgetを呼ぶ
+	runner.forget();
+	
+	// forgetを呼んだ後、done()は即座にtrueを返す
+	REQUIRE(runner.done() == true);
+	
+	// しかしタスクは実行され続ける
+	System::Update();
+	System::Update();
+	REQUIRE(value == 2);
+	REQUIRE(finished == false);
+	
+	System::Update();
+	System::Update();
+	REQUIRE(value == 3);
+	REQUIRE(finished == true);
+	
+	// 後のテストケースに影響しないよう、全フレーム消化
+	System::Update();
+}
+
 Co::Task<> ScopedDrawerTest(int32* pValue)
 {
 	Co::ScopedDrawer drawer{ [&] { ++(*pValue); } };

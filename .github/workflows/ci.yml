@@ -21,13 +21,13 @@ jobs:
       id: cache-siv3d
       uses: actions/cache@v3
       with:
-        path: |
-          /usr/local/include/Siv3D
-          /usr/local/include/ThirdParty
-          /usr/local/lib/libSiv3D.a
-          /usr/local/lib/cmake/Siv3D
-          /usr/local/share/Siv3D
+        path: siv3d-cache
         key: siv3d-v0.6.16-ubuntu-22.04-${{ hashFiles('.github/workflows/ci.yml') }}
+        
+    - name: Restore Siv3D from cache
+      if: steps.cache-siv3d.outputs.cache-hit == 'true'
+      run: |
+        sudo cp -r siv3d-cache/usr/local/* /usr/local/
         
     - name: Clone OpenSiv3D
       if: steps.cache-siv3d.outputs.cache-hit != 'true'
@@ -52,6 +52,16 @@ jobs:
       working-directory: OpenSiv3D/Linux
       run: |
         sudo cmake --install build
+        
+    - name: Save Siv3D to cache
+      if: steps.cache-siv3d.outputs.cache-hit != 'true'
+      run: |
+        mkdir -p siv3d-cache/usr/local
+        cp -r /usr/local/include/Siv3D siv3d-cache/usr/local/ || true
+        cp -r /usr/local/include/ThirdParty siv3d-cache/usr/local/ || true
+        cp /usr/local/lib/libSiv3D.a siv3d-cache/usr/local/ || true
+        cp -r /usr/local/lib/cmake/Siv3D siv3d-cache/usr/local/ || true
+        cp -r /usr/local/share/Siv3D siv3d-cache/usr/local/ || true
         
     - name: Configure CoTaskLibTests
       working-directory: tests/CoTaskLibTests

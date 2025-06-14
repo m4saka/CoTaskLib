@@ -3294,6 +3294,25 @@ TEST_CASE("Co::Ease with zero duration")
 	REQUIRE(value == 100.0);
 }
 
+TEST_CASE("Co::Ease callback count with zero duration")
+{
+	// duration = 0の場合のコールバック呼び出し回数を確認
+	int callCount = 0;
+	double lastValue = -1.0;
+	auto callback = [&](double v) { lastValue = v; ++callCount; };
+	
+	const auto runner = Co::Ease(std::function<void(double)>(callback), 0s)
+		.from(0.0)
+		.to(100.0)
+		.playScoped();
+
+	// 即座に終了
+	REQUIRE(runner.done() == true);
+	REQUIRE(lastValue == 100.0);
+	// コールバックは1回だけ呼ばれるべき
+	REQUIRE(callCount == 1);
+}
+
 TEST_CASE("Co::Ease and Co::Delay ends at the same time")
 {
 	TestClock clock;

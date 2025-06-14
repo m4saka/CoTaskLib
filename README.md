@@ -555,13 +555,13 @@ private:
     Co::Task<> fadeIn() override
     {
         // 必要に応じて、フェードイン処理をコルーチンで記述(updateと同時に実行される)
-        co_await Co::SimpleFadeIn(1s, Palette::Black);
+        co_await Co::ScreenFadeIn(1s, Palette::Black);
     }
 
     Co::Task<> fadeOut() override
     {
         // 必要に応じて、フェードアウト処理をコルーチンで記述(updateの完了後に実行される)
-        co_await Co::SimpleFadeOut(1s, Palette::Black);
+        co_await Co::ScreenFadeOut(1s, Palette::Black);
     }
 };
 ```
@@ -1090,7 +1090,7 @@ private:
     - 指定した値を即座に返すタスクを生成します。
 - `Co::UpdaterTask(std::function<void()>)` -> `Co::Task<>`
     - 指定された関数を毎フレーム実行し続けるタスクを生成します。
-- `Co::UpdaterTask<TResult>(std::function<void(TaskFinishSource<TResult>&)>)` -> `Co::Task<>`
+- `Co::UpdaterTask<TResult>(std::function<void(TaskFinishSource<TResult>&)>)` -> `Co::Task<TResult>`
     - 指定された関数を毎フレーム実行し続けるタスクを生成します。
     - 関数に与えられる`TaskFinishSource&`に対して`requestFinish`関数を呼ぶことで、タスクを完了できます。
         - `requestFinish`関数の第1引数には、`TResult`型の値を設定できます(`void`の場合は不要)。

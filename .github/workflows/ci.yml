@@ -56,12 +56,14 @@ jobs:
     - name: Save Siv3D to cache
       if: steps.cache-siv3d.outputs.cache-hit != 'true'
       run: |
-        mkdir -p siv3d-cache/usr/local
-        cp -r /usr/local/include/Siv3D siv3d-cache/usr/local/ || true
-        cp -r /usr/local/include/ThirdParty siv3d-cache/usr/local/ || true
-        cp /usr/local/lib/libSiv3D.a siv3d-cache/usr/local/ || true
-        cp -r /usr/local/lib/cmake/Siv3D siv3d-cache/usr/local/ || true
-        cp -r /usr/local/share/Siv3D siv3d-cache/usr/local/ || true
+        mkdir -p siv3d-cache/usr/local/include
+        mkdir -p siv3d-cache/usr/local/lib/cmake
+        mkdir -p siv3d-cache/usr/local/share
+        cp -r /usr/local/include/Siv3D siv3d-cache/usr/local/include/ || true
+        cp -r /usr/local/include/ThirdParty siv3d-cache/usr/local/include/ || true
+        cp /usr/local/lib/libSiv3D.a siv3d-cache/usr/local/lib/ || true
+        cp -r /usr/local/lib/cmake/Siv3D siv3d-cache/usr/local/lib/cmake/ || true
+        cp -r /usr/local/share/Siv3D siv3d-cache/usr/local/share/ || true
         
     - name: Configure CoTaskLibTests
       working-directory: tests/CoTaskLibTests

@@ -3,6 +3,10 @@
 #include <catch2/catch.hpp>
 #include <CoTaskLib.hpp>
 
+#ifdef __linux__
+SIV3D_SET(EngineOption::Renderer::Headless)
+#endif
+
 Co::Task<void> FromResultTest(int32* pValue)
 {
 	*pValue = co_await Co::FromResult(42);
@@ -4175,10 +4179,15 @@ void Main()
 {
 	Co::Init();
 
-	Console.open();
-	Catch::Session().run();
+	Catch::Session session;
 
-	while (System::Update())
+	int numFailed = session.run();
+	if (numFailed == 0)
 	{
+		Console << U"All tests passed!";
+	}
+	else
+	{
+		Console << U"Tests failed: " << numFailed;
 	}
 }

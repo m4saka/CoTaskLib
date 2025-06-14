@@ -3700,6 +3700,42 @@ TEST_CASE("Co::Typewriter with empty string")
 	REQUIRE(value == U"");
 }
 
+Co::Task<std::unique_ptr<int32>> TaskFinishSourceWaiter(Co::TaskFinishSource<std::unique_ptr<int32>>* pSource)
+{
+	co_return co_await pSource->waitForResult();
+}
+
+Co::Task<void> TaskFinishSourceSetter(Co::TaskFinishSource<std::unique_ptr<int32>>* pSource)
+{
+	co_await Co::DelayFrame(2);
+	pSource->requestFinish(std::make_unique<int32>(42));
+}
+
+TEST_CASE("TaskFinishSource waitForResult")
+{
+	// waitForResult()がムーブセマンティクスを正しく扱うことを確認
+	Co::TaskFinishSource<std::unique_ptr<int32>> source;
+	
+	auto waiterRunner = TaskFinishSourceWaiter(&source).runScoped();
+	auto setterRunner = TaskFinishSourceSetter(&source).runScoped();
+	
+	// 最初はまだ結果がない
+	REQUIRE(!source.hasResult());
+	REQUIRE(!waiterRunner.done());
+	
+	// 2フレーム待機
+	System::Update();
+	System::Update();
+	
+	// 結果が設定される
+	REQUIRE(source.hasResult());
+	REQUIRE(!waiterRunner.done());
+	
+	// もう1フレーム待機してwaiterが完了
+	System::Update();
+	REQUIRE(waiterRunner.done());
+}
+
 TEST_CASE("Co::Typewriter with total duration")
 {
 	TestClock clock;

@@ -1705,7 +1705,9 @@ namespace cotasklib::Co
 				co_await NextFrame();
 			}
 			m_resultConsumed = true;
-			co_return *m_result;
+			auto result = std::move(*m_result);
+			m_result.reset();
+			co_return result;
 		}
 
 		[[nodiscard]]

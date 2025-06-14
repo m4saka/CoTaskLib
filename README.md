@@ -1,4 +1,7 @@
 # CoTaskLib for Siv3D
+
+[![CI](https://github.com/m4saka/CoTaskLib/workflows/CI/badge.svg)](https://github.com/m4saka/CoTaskLib/actions)
+
 Siv3D用コルーチンタスクライブラリ。ヘッダオンリー。
 
 C++20の`co_await`/`co_return`キーワードを利用して、複数フレームにまたがる処理を見通しの良いシンプルなコードで実装できます。
@@ -1185,3 +1188,10 @@ Co::Task<> JSONAPITest()
     }
 }
 ```
+
+## 参考リンク
+
+- Siv3Dで「待つ」処理を簡単に書けるC++20コルーチンライブラリCoTaskLibの紹介
+    - https://qiita.com/m4saka/items/97aefbcf183b399e74de
+- Siv3D/OpenSiv3D
+    - https://github.com/Siv3D/OpenSiv3D

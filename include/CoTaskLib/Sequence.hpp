@@ -319,27 +319,28 @@ namespace cotasklib::Co
 	class [[nodiscard]] UpdaterSequenceBase : public SequenceBase<TResult>
 	{
 	private:
-		TaskFinishSource<TResult> m_taskFinishSource;
+		// UpdaterSequenceBase側の制御用に基底クラス側とは別に持つ
+		TaskFinishSource<TResult> m_taskFinishSourceForUpdater;
 
 		[[nodiscard]]
 		virtual Task<TResult> start() override final
 		{
 			// コンストラクタやpreStart内でrequestFinishが呼ばれた場合は即座に終了
-			if (m_taskFinishSource.hasResult())
+			if (m_taskFinishSourceForUpdater.hasResult())
 			{
-				co_return m_taskFinishSource.result();
+				co_return m_taskFinishSourceForUpdater.result();
 			}
 
 			while (true)
 			{
 				update();
-				if (m_taskFinishSource.hasResult())
+				if (m_taskFinishSourceForUpdater.hasResult())
 				{
 					break;
 				}
 				co_await NextFrame();
 			}
-			co_return m_taskFinishSource.result();
+			co_return m_taskFinishSourceForUpdater.result();
 		}
 
 	protected:
@@ -347,18 +348,18 @@ namespace cotasklib::Co
 
 		void requestFinish(const TResult& result)
 		{
-			m_taskFinishSource.requestFinish(result);
+			m_taskFinishSourceForUpdater.requestFinish(result);
 		}
 
 		void requestFinish(TResult&& result)
 		{
-			m_taskFinishSource.requestFinish(std::move(result));
+			m_taskFinishSourceForUpdater.requestFinish(std::move(result));
 		}
 
 		[[nodiscard]]
 		bool finishRequested() const
 		{
-			return m_taskFinishSource.done();
+			return m_taskFinishSourceForUpdater.done();
 		}
 
 	public:
@@ -383,12 +384,13 @@ namespace cotasklib::Co
 	class [[nodiscard]] UpdaterSequenceBase<void> : public SequenceBase<void>
 	{
 	private:
-		TaskFinishSource<void> m_taskFinishSource;
+		// UpdaterSequenceBase側の制御用に基底クラス側とは別に持つ
+		TaskFinishSource<void> m_taskFinishSourceForUpdater;
 
 		[[nodiscard]]
 		virtual Task<void> start() override final
 		{
-			if (m_taskFinishSource.done())
+			if (m_taskFinishSourceForUpdater.done())
 			{
 				// コンストラクタやpreStart内でrequestFinishが呼ばれた場合は即座に終了
 				co_return;
@@ -397,7 +399,7 @@ namespace cotasklib::Co
 			while (true)
 			{
 				update();
-				if (m_taskFinishSource.done())
+				if (m_taskFinishSourceForUpdater.done())
 				{
 					co_return;
 				}
@@ -410,13 +412,13 @@ namespace cotasklib::Co
 
 		void requestFinish()
 		{
-			m_taskFinishSource.requestFinish();
+			m_taskFinishSourceForUpdater.requestFinish();
 		}
 
 		[[nodiscard]]
 		bool finishRequested() const
 		{
-			return m_taskFinishSource.done();
+			return m_taskFinishSourceForUpdater.done();
 		}
 
 	public:

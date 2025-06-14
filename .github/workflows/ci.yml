@@ -17,22 +17,38 @@ jobs:
         sudo apt update
         sudo apt install -y ninja-build libasound2-dev libavcodec-dev libavformat-dev libavutil-dev libboost-dev libcurl4-openssl-dev libgtk-3-dev libgif-dev libglu1-mesa-dev libharfbuzz-dev libmpg123-dev libopencv-dev libopus-dev libopusfile-dev libsoundtouch-dev libswresample-dev libtiff-dev libturbojpeg0-dev libvorbis-dev libwebp-dev libxft-dev uuid-dev xorg-dev
     
+    - name: Cache Siv3D build
+      id: cache-siv3d
+      uses: actions/cache@v3
+      with:
+        path: |
+          /usr/local/include/Siv3D
+          /usr/local/include/ThirdParty
+          /usr/local/lib/libSiv3D.a
+          /usr/local/lib/cmake/Siv3D
+          /usr/local/share/Siv3D
+        key: siv3d-v0.6.16-ubuntu-22.04-${{ hashFiles('.github/workflows/ci.yml') }}
+        
     - name: Clone OpenSiv3D
+      if: steps.cache-siv3d.outputs.cache-hit != 'true'
       run: |
         git clone --depth 1 --branch v0.6.16 https://github.com/Siv3D/OpenSiv3D.git
         
     - name: Configure Siv3D
+      if: steps.cache-siv3d.outputs.cache-hit != 'true'
       working-directory: OpenSiv3D/Linux
       run: |
         mkdir build && cd build
         cmake -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
         
     - name: Build Siv3D
+      if: steps.cache-siv3d.outputs.cache-hit != 'true'
       working-directory: OpenSiv3D/Linux
       run: |
         cmake --build build
         
     - name: Install Siv3D
+      if: steps.cache-siv3d.outputs.cache-hit != 'true'
       working-directory: OpenSiv3D/Linux
       run: |
         sudo cmake --install build

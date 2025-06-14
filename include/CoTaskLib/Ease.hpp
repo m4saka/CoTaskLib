@@ -93,7 +93,7 @@ namespace cotasklib::Co
 		concept Vector2DConvertibleFrom = detail::IsVector2D<T>::value && std::is_convertible_v<U, typename T::value_type>;
 
 		template <typename T, typename U>
-		concept Vector3DConvertibleFrom = detail::IsVector2D<T>::value && std::is_convertible_v<U, typename T::value_type>;
+		concept Vector3DConvertibleFrom = detail::IsVector3D<T>::value && std::is_convertible_v<U, typename T::value_type>;
 
 		template <typename T, typename U>
 		concept VectorConvertibleFrom = (detail::IsVector2D<T>::value || detail::IsVector3D<T>::value) && std::is_convertible_v<U, typename T::value_type>;

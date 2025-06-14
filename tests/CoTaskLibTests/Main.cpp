@@ -3431,6 +3431,105 @@ TEST_CASE("Co::LinearEase and Co::Delay ends at the same time")
 	REQUIRE(value == 1.0);
 }
 
+TEST_CASE("Co::Ease with Vec2 from scalar")
+{
+	// Vec2に対してスカラー値からの構築が動作することを確認
+	Vec2 value{ 0, 0 };
+	
+	auto easeTask = Co::Ease(&value, 0s)
+		.from(0.0)
+		.to(1.0)
+		.play();
+	
+	const auto runner = std::move(easeTask).runScoped();
+	
+	REQUIRE(value.x == Approx(1.0));
+	REQUIRE(value.y == Approx(1.0));
+}
+
+TEST_CASE("Co::Ease with Vec2 from two values")
+{
+	// Vec2に対して2つの値からの構築が動作することを確認
+	Vec2 value{ 0, 0 };
+	
+	auto easeTask = Co::Ease(&value, 0s)
+		.from(1.0, 2.0)
+		.to(10.0, 20.0)
+		.play();
+	
+	const auto runner = std::move(easeTask).runScoped();
+	
+	REQUIRE(value.x == Approx(10.0));
+	REQUIRE(value.y == Approx(20.0));
+}
+
+TEST_CASE("Co::LinearEase with Vec2 mixed constructors")
+{
+	// Vec2でfromとtoで異なる構築方法を使用
+	Vec2 value{ -1, -1 };
+	
+	auto easeTask = Co::LinearEase(&value, 0s)
+		.from(Vec2{ 5.0, 10.0 })
+		.to(100.0)  // スカラー値
+		.play();
+	
+	const auto runner = std::move(easeTask).runScoped();
+	
+	REQUIRE(value.x == Approx(100.0));
+	REQUIRE(value.y == Approx(100.0));
+}
+
+TEST_CASE("Co::Ease with Vec3 from scalar")
+{
+	// Vec3に対してスカラー値からの構築が動作することを確認
+	Vec3 value{ 0, 0, 0 };
+	
+	auto easeTask = Co::Ease(&value, 0s)
+		.from(0.0)
+		.to(1.0)
+		.play();
+	
+	const auto runner = std::move(easeTask).runScoped();
+	
+	REQUIRE(value.x == Approx(1.0));
+	REQUIRE(value.y == Approx(1.0));
+	REQUIRE(value.z == Approx(1.0));
+}
+
+TEST_CASE("Co::Ease with Vec3 from three values")
+{
+	// Vec3に対して3つの値からの構築が動作することを確認
+	Vec3 value{ 0, 0, 0 };
+	
+	auto easeTask = Co::Ease(&value, 0s)
+		.from(1.0, 2.0, 3.0)
+		.to(10.0, 20.0, 30.0)
+		.play();
+	
+	const auto runner = std::move(easeTask).runScoped();
+	
+	REQUIRE(value.x == Approx(10.0));
+	REQUIRE(value.y == Approx(20.0));
+	REQUIRE(value.z == Approx(30.0));
+}
+
+TEST_CASE("Co::LinearEase with Vec3 mixed constructors")
+{
+	// Vec3でfromとtoで異なる構築方法を使用
+	Vec3 value{ -1, -1, -1 };
+	
+	auto easeTask = Co::LinearEase(&value, 0s)
+		.from(Vec3{ 5.0, 10.0, 15.0 })
+		.to(100.0)  // スカラー値
+		.play();
+	
+	const auto runner = std::move(easeTask).runScoped();
+	
+	REQUIRE(value.x == Approx(100.0));
+	REQUIRE(value.y == Approx(100.0));
+	REQUIRE(value.z == Approx(100.0));
+}
+
 TEST_CASE("Co::Ease with callback function")
 {
 	// コールバック関数の型が正しいことを確認

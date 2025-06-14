@@ -412,16 +412,33 @@ namespace cotasklib::Co
 
 			LazyDeletionFlatMap<TaskID, TaskEntry, true> m_taskEntries;
 
+			struct PendingTaskEntry
+			{
+				TaskID id;
+				TaskEntry entry;
+			};
+			Array<PendingTaskEntry> m_pendingTaskEntries;
+
 			DrawExecutor m_drawExecutor;
 
 		public:
 			Backend()
 			{
 				m_taskEntries.reserve(InitialCapacity);
+				m_pendingTaskEntries.reserve(InitialCapacity);
 			}
 
 			void update()
 			{
+				if (!m_pendingTaskEntries.empty())
+				{
+					for (auto& pendingTaskEntry : m_pendingTaskEntries)
+					{
+						m_taskEntries.emplace(pendingTaskEntry.id, std::move(pendingTaskEntry.entry));
+					}
+					m_pendingTaskEntries.clear();
+				}
+
 				std::exception_ptr exceptionPtr;
 				for (auto it = m_taskEntries.begin(); it != m_taskEntries.end();)
 				{
@@ -451,6 +468,16 @@ namespace cotasklib::Co
 					}
 				}
 				m_currentTaskID.reset();
+
+				if (!m_pendingTaskEntries.empty())
+				{
+					for (auto& pendingTaskEntry : m_pendingTaskEntries)
+					{
+						m_taskEntries.emplace(pendingTaskEntry.id, std::move(pendingTaskEntry.entry));
+					}
+					m_pendingTaskEntries.clear();
+				}
+
 				if (exceptionPtr)
 				{
 					std::rethrow_exception(exceptionPtr);
@@ -525,12 +552,16 @@ namespace cotasklib::Co
 							}
 						}
 					};
-				s_pInstance->m_taskEntries.emplace(id,
-					TaskEntry
+				s_pInstance->m_pendingTaskEntries.push_back(
+					PendingTaskEntry
 					{
-						.task = std::move(task),
-						.finishCallback = std::move(finishCallbackTypeErased),
-						.cancelCallback = std::move(cancelCallback),
+						.id = id,
+						.entry = TaskEntry
+						{
+							.task = std::move(task),
+							.finishCallback = std::move(finishCallbackTypeErased),
+							.cancelCallback = std::move(cancelCallback),
+						}
 					});
 				return id;
 			}
@@ -541,6 +572,18 @@ namespace cotasklib::Co
 				{
 					// Note: ユーザーがインスタンスをstaticで持ってしまった場合にAddon解放後に呼ばれるケースが起こりうるので、ここでは例外を出さない
 					return false;
+				}
+				if (!s_pInstance->m_pendingTaskEntries.empty())
+				{
+					// まだ登録されていないタスクの削除は、PendingTaskEntryから削除する
+					const auto it = std::find_if(s_pInstance->m_pendingTaskEntries.begin(), s_pInstance->m_pendingTaskEntries.end(),
+						[id](const PendingTaskEntry& pending) { return pending.id == id; });
+					if (it != s_pInstance->m_pendingTaskEntries.end())
+					{
+						it->entry.callEndCallback();
+						s_pInstance->m_pendingTaskEntries.erase(it);
+						return true;
+					}
 				}
 				if (id == s_pInstance->m_currentTaskID)
 				{
@@ -569,6 +612,16 @@ namespace cotasklib::Co
 				if (!s_pInstance)
 				{
 					throw Error{ U"Backend is not initialized" };
+				}
+				if (!s_pInstance->m_pendingTaskEntries.empty())
+				{
+					// まだ登録されていないタスクの完了状態は、PendingTaskEntryから取得する
+					const auto it = std::find_if(s_pInstance->m_pendingTaskEntries.begin(), s_pInstance->m_pendingTaskEntries.end(),
+						[id](const PendingTaskEntry& pending) { return pending.id == id; });
+					if (it != s_pInstance->m_pendingTaskEntries.end())
+					{
+						return it->entry.task->done();
+					}
 				}
 				const auto it = s_pInstance->m_taskEntries.find(id);
 				if (it != s_pInstance->m_taskEntries.end())

@@ -3644,6 +3644,98 @@ TEST_CASE("s3d::AsyncTask with move-only result")
 	REQUIRE(*result == 420);
 }
 
+namespace AddTaskDuringUpdateTest
+{
+	struct LogContext
+	{
+		Array<String> logs;
+	};
+
+	Co::Task<> ChildTask(LogContext* pContext)
+	{
+		pContext->logs.push_back(U"ChildTask: Frame 1");
+		co_await Co::NextFrame();
+		pContext->logs.push_back(U"ChildTask: Frame 2");
+	}
+
+	Co::Task<> ParentTask(LogContext* pContext)
+	{
+		pContext->logs.push_back(U"ParentTask: Frame 1");
+		co_await Co::NextFrame();
+
+		pContext->logs.push_back(U"ParentTask: Frame 2, creating ChildTask");
+		Co::ScopedTaskRunner childRunner = ChildTask(pContext).runScoped();
+
+		co_await childRunner.waitUntilDone();
+
+		pContext->logs.push_back(U"ParentTask: Frame 3, after ChildTask finished");
+	}
+}
+
+TEST_CASE("Adding task during Backend::update loop")
+{
+	using namespace AddTaskDuringUpdateTest;
+	LogContext context;
+
+	// ParentTaskの1フレーム目が即時実行される
+	const auto runner = ParentTask(&context).runScoped();
+	REQUIRE(context.logs == Array<String>{U"ParentTask: Frame 1"});
+
+	// 1回目のUpdate: ParentTaskがChildTaskを生成し、ChildTaskの1フレーム目が実行される
+	System::Update();
+	REQUIRE(context.logs == Array<String>{U"ParentTask: Frame 1", U"ParentTask: Frame 2, creating ChildTask", U"ChildTask: Frame 1"});
+
+	// 2回目のUpdate: ChildTaskの2フレーム目が実行され、完了する
+	System::Update();
+	REQUIRE(context.logs == Array<String>{U"ParentTask: Frame 1", U"ParentTask: Frame 2, creating ChildTask", U"ChildTask: Frame 1", U"ChildTask: Frame 2"});
+
+	// 3回目のUpdate: ChildTaskの完了を受けてParentTaskの3フレーム目が実行され、完了する
+	System::Update();
+	REQUIRE(context.logs == Array<String>{U"ParentTask: Frame 1", U"ParentTask: Frame 2, creating ChildTask", U"ChildTask: Frame 1", U"ChildTask: Frame 2", U"ParentTask: Frame 3, after ChildTask finished"});
+
+	REQUIRE(runner.done());
+}
+
+namespace SelfCancelTest
+{
+	struct TestContext
+	{
+		// コルーチン内で寿命を切れさせる必要があるため、ポインタで持つ
+		Optional<Co::ScopedTaskRunner>* pRunner;
+
+		bool isAfterReset;
+	};
+
+	Co::Task<> SelfCancelingTask(TestContext* pContext)
+	{
+		co_await Co::NextFrame();
+		// 実行中に自分自身をリセット(ScopedTaskRunnerのデストラクタが呼ばれる)
+		pContext->pRunner->reset();
+		pContext->isAfterReset = true;
+		co_await Co::NextFrame();
+	}
+}
+
+TEST_CASE("Task cancels itself during execution")
+{
+	using namespace SelfCancelTest;
+	Optional<Co::ScopedTaskRunner> runner;
+	TestContext context{ &runner, false };
+
+	runner.emplace(
+		SelfCancelingTask(&context),
+		nullptr,
+		[&]()
+		{
+			// 自分自身を実行キャンセルした場合、実際のキャンセル発生は次のsuspend地点まで遅延される
+			// (Backend::m_currentTaskRemovalNeededがtrueになり、resumeの完了後にそれをもとにキャンセルされる)
+			REQUIRE(context.isAfterReset == true);
+		});
+
+	REQUIRE_NOTHROW(System::Update());
+	REQUIRE(runner.has_value() == false);
+}
+
 void Main()
 {
 	Co::Init();

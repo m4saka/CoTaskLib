@@ -3431,6 +3431,39 @@ TEST_CASE("Co::LinearEase and Co::Delay ends at the same time")
 	REQUIRE(value == 1.0);
 }
 
+TEST_CASE("Co::Ease with callback function")
+{
+	// コールバック関数の型が正しいことを確認
+	double receivedValue = -1.0;
+	auto callback = [&receivedValue](double v) { receivedValue = v; };
+	
+	auto easeTask = Co::Ease(std::function<void(double)>(callback), 0s)
+		.from(0.0)
+		.to(100.0)
+		.play();
+	
+	const auto runner = std::move(easeTask).runScoped();
+	
+	REQUIRE(receivedValue == Approx(100.0));
+}
+
+TEST_CASE("Co::LinearEase with callback function")
+{
+	// LinearEaseでも同様の確認
+	Vec2 receivedValue{ -1.0, -1.0 };
+	auto callback = [&receivedValue](Vec2 v) { receivedValue = v; };
+	
+	auto easeTask = Co::LinearEase(std::function<void(Vec2)>(callback), 0s)
+		.from(Vec2{ 0.0, 0.0 })
+		.to(Vec2{ 100.0, 200.0 })
+		.play();
+	
+	const auto runner = std::move(easeTask).runScoped();
+	
+	REQUIRE(receivedValue.x == Approx(100.0));
+	REQUIRE(receivedValue.y == Approx(200.0));
+}
+
 TEST_CASE("Co::Typewriter")
 {
 	TestClock clock;

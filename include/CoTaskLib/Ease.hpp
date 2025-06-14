@@ -234,7 +234,7 @@ namespace cotasklib::Co
 
 	template <detail::Lerpable T>
 	[[nodiscard]]
-	EaseTaskBuilder<T> Ease(std::function<T> callback, Duration duration = 0s, double easeFunc(double) = EaseOutQuad, ISteadyClock* pSteadyClock = nullptr)
+	EaseTaskBuilder<T> Ease(std::function<void(T)> callback, Duration duration = 0s, double easeFunc(double) = EaseOutQuad, ISteadyClock* pSteadyClock = nullptr)
 	{
 		return EaseTaskBuilder<T>(std::move(callback), duration, T{}, T{}, easeFunc, pSteadyClock);
 	}
@@ -248,7 +248,7 @@ namespace cotasklib::Co
 
 	template <detail::Lerpable T>
 	[[nodiscard]]
-	EaseTaskBuilder<T> LinearEase(std::function<T> callback, Duration duration = 0s, ISteadyClock* pSteadyClock = nullptr)
+	EaseTaskBuilder<T> LinearEase(std::function<void(T)> callback, Duration duration = 0s, ISteadyClock* pSteadyClock = nullptr)
 	{
 		return EaseTaskBuilder<T>(std::move(callback), duration, T{}, T{}, Easing::Linear, pSteadyClock);
 	}

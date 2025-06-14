@@ -4189,6 +4189,6 @@ void Main()
 	else
 	{
 		Console << U"Tests failed: " << numFailed;
-		System::Exit(1);
+		std::exit(1);
 	}
 }

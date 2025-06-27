@@ -1,6 +1,6 @@
 ﻿#include <compare>
 #define CATCH_CONFIG_RUNNER
-#include <catch2/catch.hpp>
+#include <Siv3D/ThirdParty/Catch2/catch.hpp>
 #include <CoTaskLib.hpp>
 
 Co::Task<void> FromResultTest(int32* pValue)
@@ -2280,6 +2280,166 @@ TEST_CASE("Co::Any with non-copyable result")
 	const auto runner = AnyWithNonCopyableResult().runScoped();
 	REQUIRE(runner.done() == false);
 	System::Update();
+	REQUIRE(runner.done() == true);
+}
+
+TEST_CASE("Co::Any with Array")
+{
+	int32 counter1 = 0;
+	int32 counter2 = 0;
+	int32 counter3 = 0;
+
+	Array<Co::Task<void>> tasks;
+	tasks.push_back(
+		[]() -> Co::Task<void>
+		{
+			co_await Co::Delay(1s);
+		}());
+	tasks.push_back(
+		[&counter1]() -> Co::Task<void>
+		{
+			co_await Co::Delay(0.5s);
+			counter1 = 1;
+		}());
+	tasks.push_back(
+		[&counter2]() -> Co::Task<void>
+		{
+			co_await Co::Delay(2s);
+			counter2 = 1;
+		}());
+	tasks.push_back(
+		[&counter3]() -> Co::Task<void>
+		{
+			co_await Co::Delay(3s);
+			counter3 = 1;
+		}());
+
+	const auto runner = Co::Any(std::move(tasks)).runScoped();
+
+	REQUIRE(runner.done() == false);
+	REQUIRE(counter1 == 0);
+	REQUIRE(counter2 == 0);
+	REQUIRE(counter3 == 0);
+
+	// 0.5秒後に2番目のタスクが完了
+	for (int32 i = 0; i < 30; ++i)
+	{
+		System::Update();
+	}
+	REQUIRE(runner.done() == true);
+	REQUIRE(counter1 == 1);
+	REQUIRE(counter2 == 0);
+	REQUIRE(counter3 == 0);
+}
+
+TEST_CASE("Co::Any with empty Array")
+{
+	Array<Co::Task<void>> tasks;
+	const auto runner = Co::Any(std::move(tasks)).runScoped();
+
+	// 空のArrayの場合は即座に完了
+	REQUIRE(runner.done() == true);
+}
+
+TEST_CASE("Co::Any with Array immediate task")
+{
+	Array<Co::Task<void>> tasks;
+	tasks.push_back([]() -> Co::Task<void> { co_return; }());
+	tasks.push_back(
+		[]() -> Co::Task<void>
+		{
+			co_await Co::Delay(1s);
+		}());
+
+	const auto runner = Co::Any(std::move(tasks)).runScoped();
+
+	// 最初のタスクが即座に完了するのでAnyも即座に完了
+	REQUIRE(runner.done() == true);
+}
+
+TEST_CASE("Co::All with Array")
+{
+	int32 counter1 = 0;
+	int32 counter2 = 0;
+	int32 counter3 = 0;
+
+	Array<Co::Task<void>> tasks;
+	tasks.push_back(
+		[&counter1]() -> Co::Task<void>
+		{
+			co_await Co::Delay(0.5s);
+			counter1 = 1;
+		}());
+	tasks.push_back(
+		[&counter2]() -> Co::Task<void>
+		{
+			co_await Co::Delay(1s);
+			counter2 = 1;
+		}());
+	tasks.push_back(
+		[&counter3]() -> Co::Task<void>
+		{
+			co_await Co::Delay(1.5s);
+			counter3 = 1;
+		}());
+
+	const auto runner = Co::All(std::move(tasks)).runScoped();
+
+	REQUIRE(runner.done() == false);
+	REQUIRE(counter1 == 0);
+	REQUIRE(counter2 == 0);
+	REQUIRE(counter3 == 0);
+
+	// 0.5秒後に最初のタスクが完了
+	for (int32 i = 0; i < 30; ++i)
+	{
+		System::Update();
+	}
+	REQUIRE(runner.done() == false);
+	REQUIRE(counter1 == 1);
+	REQUIRE(counter2 == 0);
+	REQUIRE(counter3 == 0);
+
+	// 1秒後に2番目のタスクが完了
+	for (int32 i = 0; i < 30; ++i)
+	{
+		System::Update();
+	}
+	REQUIRE(runner.done() == false);
+	REQUIRE(counter1 == 1);
+	REQUIRE(counter2 == 1);
+	REQUIRE(counter3 == 0);
+
+	// 1.5秒後に3番目のタスクが完了してAllも完了
+	for (int32 i = 0; i < 30; ++i)
+	{
+		System::Update();
+	}
+	REQUIRE(runner.done() == true);
+	REQUIRE(counter1 == 1);
+	REQUIRE(counter2 == 1);
+	REQUIRE(counter3 == 1);
+}
+
+TEST_CASE("Co::All with empty Array")
+{
+	Array<Co::Task<void>> tasks;
+	const auto runner = Co::All(std::move(tasks)).runScoped();
+
+	// 空のArrayの場合は即座に完了
+	REQUIRE(runner.done() == true);
+}
+
+TEST_CASE("Co::All with Array immediate tasks")
+{
+	Array<Co::Task<void>> tasks;
+	tasks.push_back([]() -> Co::Task<void> { co_return; }());
+	tasks.push_back([]() -> Co::Task<void> { co_return; }());
+	tasks.push_back([]() -> Co::Task<void> { co_return; }());
+
+	const auto runner = Co::All(std::move(tasks)).runScoped();
+
+	// すべてのタスクが即座に完了するのでAllも即座に完了
 	REQUIRE(runner.done() == true);
 }
 

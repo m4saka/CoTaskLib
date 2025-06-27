@@ -2429,6 +2429,60 @@ namespace cotasklib::Co
 			co_await NextFrame();
 		}
 	}
+
+	[[nodiscard]]
+	inline Task<void> Any(Array<Task<void>> tasks)
+	{
+		if (tasks.empty())
+		{
+			co_return;
+		}
+
+		if (std::any_of(tasks.begin(), tasks.end(), [](const Task<void>& task) { return task.done(); }))
+		{
+			co_return;
+		}
+
+		while (true)
+		{
+			for (auto& task : tasks)
+			{
+				task.resume();
+			}
+			if (std::any_of(tasks.begin(), tasks.end(), [](const Task<void>& task) { return task.done(); }))
+			{
+				co_return;
+			}
+			co_await NextFrame();
+		}
+	}
+
+	[[nodiscard]]
+	inline Task<void> All(Array<Task<void>> tasks)
+	{
+		if (tasks.empty())
+		{
+			co_return;
+		}
+
+		if (std::all_of(tasks.begin(), tasks.end(), [](const Task<void>& task) { return task.done(); }))
+		{
+			co_return;
+		}
+
+		while (true)
+		{
+			for (auto& task : tasks)
+			{
+				task.resume();
+			}
+			if (std::all_of(tasks.begin(), tasks.end(), [](const Task<void>& task) { return task.done(); }))
+			{
+				co_return;
+			}
+			co_await NextFrame();
+		}
+	}
 }
 
 #ifndef NO_COTASKLIB_USING

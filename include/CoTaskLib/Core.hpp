@@ -580,8 +580,10 @@ namespace cotasklib::Co
 						[id](const PendingTaskEntry& pending) { return pending.id == id; });
 					if (it != s_pInstance->m_pendingTaskEntries.end())
 					{
-						it->entry.callEndCallback();
+						// 終了コールバック内やタスク破棄時にAdd・Removeが呼ばれてもイテレータが無効にならないよう、先に配列から取り出してからコールバックの呼び出しと破棄を行う
+						PendingTaskEntry removed = std::move(*it);
 						s_pInstance->m_pendingTaskEntries.erase(it);
+						removed.entry.callEndCallback();
 						return true;
 					}
 				}

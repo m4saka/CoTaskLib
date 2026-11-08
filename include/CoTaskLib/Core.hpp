@@ -1309,19 +1309,20 @@ namespace cotasklib::Co
 		{
 			return [](Task<TResult> task) -> Task<void>
 				{
-					if (task.done())
+					if (!task.done())
 					{
-						co_return;
-					}
-					while (true)
-					{
-						task.resume();
-						if (task.done())
+						while (true)
 						{
-							break;
+							task.resume();
+							if (task.done())
+							{
+								break;
+							}
+							co_await NextFrame();
 						}
-						co_await NextFrame();
 					}
+
+					(void)task.value(); // 例外伝搬のために戻り値を捨てる場合でも呼び出す
 				}(std::move(*this));
 		}
 

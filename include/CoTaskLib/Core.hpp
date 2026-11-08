@@ -601,8 +601,10 @@ namespace cotasklib::Co
 				const auto it = s_pInstance->m_taskEntries.find(id);
 				if (it != s_pInstance->m_taskEntries.end())
 				{
-					it->callEndCallback();
+					// 終了コールバック内やタスク破棄時にAdd・Removeが呼ばれてもイテレータが無効にならないよう、先に取り出してからコールバックの呼び出しと破棄を行う
+					TaskEntry removed = std::move(*it);
 					s_pInstance->m_taskEntries.erase(it);
+					removed.callEndCallback();
 					return true;
 				}
 				return false;
